@@ -92,7 +92,7 @@ export default function Dashboard() {
   const [selectedMood, setSelectedMood] = useState<string | null>(null);
   const [moodResponse, setMoodResponse] = useState<string | null>(null);
   const chatEndRef = useRef<HTMLDivElement>(null);
-  const [chatOpen, setChatOpen] = useState(true);
+  const [chatOpen, setChatOpen] = useState(false);
   const [isRecording, setIsRecording] = useState(false);
   const [speechSupported, setSpeechSupported] = useState(false);
   const recognitionRef = useRef<SpeechRecognition | null>(null);
