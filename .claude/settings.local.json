@@ -1,0 +1,20 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(npm run:*)",
+      "Bash(open http://localhost:3000)",
+      "Bash(curl -s -X POST http://localhost:3000/api/chat -H \"Content-Type: application/json\" -d '{\"messages\":[{\"role\":\"user\",\"content\":\"Hello JARVIS, are you online?\"}]}')",
+      "Bash(curl -s -o /dev/null -w \"%{http_code}\" http://localhost:3000)",
+      "Bash(curl -s -o /dev/null -w \"%{http_code}\" http://localhost:3000/ideas/proj-1)",
+      "Bash(curl -s -o /dev/null -w \"%{http_code}\" http://localhost:3000/goals/goal-1)",
+      "Bash(curl -s -X POST http://localhost:3000/api/chat -H \"Content-Type: application/json\" -d '{\"messages\":[{\"role\":\"user\",\"content\":\"Status check\"}],\"context\":{\"type\":\"project\",\"project\":{\"title\":\"AI Lead Nurture\",\"status\":\"Planning\",\"grade\":\"A\",\"description\":\"test\",\"category\":\"AI Business\",\"revenue_goal\":\"$5k\",\"progress\":15}}}')",
+      "Bash(pkill -f \"next dev\")",
+      "Bash(curl -s -o /dev/null -w \"%{http_code}\" http://localhost:3000/api/spotify/now-playing)",
+      "Bash(curl -s http://localhost:3000/api/spotify/now-playing)",
+      "Bash(curl -s -o /dev/null -w \"%{redirect_url}\" http://127.0.0.1:3000/api/spotify/login)",
+      "Bash(curl -s http://127.0.0.1:3000/api/spotify/now-playing)",
+      "Bash(curl -s http://127.0.0.1:3000/api/lindy/update)",
+      "Bash(python3 -m json.tool)"
+    ]
+  }
+}

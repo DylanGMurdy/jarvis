@@ -1,0 +1,466 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Jarvis — Dylan's Chief of Staff</title>
+<style>
+  :root {
+    --bg:#0f0f0f;--bg2:#161616;--bg3:#1e1e1e;--bg4:#252525;
+    --border:rgba(255,255,255,0.07);--border2:rgba(255,255,255,0.13);
+    --text:#ece9e2;--text2:#9a9690;--text3:#5a5854;
+    --green:#1D9E75;--green-dim:rgba(29,158,117,0.15);
+    --blue:#378ADD;--blue-dim:rgba(55,138,221,0.12);
+    --amber:#EF9F27;--amber-dim:rgba(239,159,39,0.12);
+    --red:#E24B4A;--red-dim:rgba(226,75,74,0.12);
+    --purple:#7F77DD;--purple-dim:rgba(127,119,221,0.12);
+    --radius:11px;--radius-sm:7px;
+    --f-xs:12px;--f-sm:14px;--f-md:15px;--f-lg:17px;--f-xl:28px;
+  }
+  *{box-sizing:border-box;margin:0;padding:0}
+  body{background:var(--bg);color:var(--text);font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;font-size:var(--f-md);line-height:1.55;min-height:100vh}
+  .topbar{background:var(--bg2);border-bottom:1px solid var(--border);padding:0 20px;height:54px;display:flex;align-items:center;justify-content:space-between;position:sticky;top:0;z-index:100}
+  .logo{font-size:14px;font-weight:700;letter-spacing:0.14em;color:var(--text)}
+  .logo span{color:var(--green)}
+  .status-pill{display:flex;align-items:center;gap:6px;background:var(--green-dim);border:1px solid rgba(29,158,117,0.25);border-radius:20px;padding:4px 12px;font-size:var(--f-sm);color:var(--green)}
+  .dot{width:6px;height:6px;border-radius:50%;background:var(--green);animation:pulse 2s ease-in-out infinite}
+  @keyframes pulse{0%,100%{opacity:1}50%{opacity:0.35}}
+  .clock{font-size:var(--f-md);font-weight:500;color:var(--text);font-variant-numeric:tabular-nums}
+  .avatar{width:32px;height:32px;border-radius:50%;background:var(--purple-dim);border:1px solid var(--purple);display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:700;color:var(--purple)}
+  .layout{display:grid;grid-template-columns:210px 1fr 310px;height:calc(100vh - 54px)}
+  .sidebar{background:var(--bg2);border-right:1px solid var(--border);padding:16px 0;overflow-y:auto}
+  .sidebar-section{padding:0 12px 16px}
+  .sidebar-section+.sidebar-section{border-top:1px solid var(--border);padding-top:16px}
+  .section-label{font-size:var(--f-xs);font-weight:700;letter-spacing:0.08em;text-transform:uppercase;color:var(--text3);margin-bottom:8px;padding:0 4px}
+  .agent-item{display:flex;align-items:center;gap:8px;padding:8px;border-radius:var(--radius-sm);cursor:pointer;margin-bottom:2px;transition:background 0.15s}
+  .agent-item:hover{background:var(--bg3)}
+  .agent-dot{width:7px;height:7px;border-radius:50%;flex-shrink:0}
+  .d-green{background:var(--green)}.d-amber{background:var(--amber);animation:pulse 1.5s ease-in-out infinite}
+  .d-gray{background:var(--text3)}.d-blue{background:var(--blue);animation:pulse 2s ease-in-out infinite}
+  .agent-name{font-size:var(--f-sm);color:var(--text);flex:1}
+  .agent-badge{font-size:10px;padding:2px 6px;border-radius:3px;background:var(--amber-dim);color:var(--amber);border:1px solid rgba(239,159,39,0.2)}
+  .quick-btn{width:100%;text-align:left;padding:8px;border-radius:var(--radius-sm);border:1px solid var(--border);background:transparent;color:var(--text2);font-size:var(--f-sm);cursor:pointer;transition:all 0.15s;margin-bottom:5px;font-family:inherit}
+  .quick-btn:hover{background:var(--bg3);color:var(--text);border-color:var(--border2)}
+  .memory-stat{font-size:var(--f-sm);color:var(--text2);padding:0 4px;line-height:2}
+  .memory-bar{height:3px;background:var(--bg4);border-radius:2px;margin-top:4px}
+  .memory-fill{height:100%;width:40%;background:var(--green);border-radius:2px}
+  .main{overflow-y:auto;padding:16px;display:flex;flex-direction:column;gap:13px;background:var(--bg)}
+  .setup-banner{background:var(--amber-dim);border:1px solid rgba(239,159,39,0.25);border-radius:var(--radius);padding:16px 20px}
+  .setup-banner-title{font-size:var(--f-lg);font-weight:600;color:var(--amber);margin-bottom:10px}
+  .setup-step{display:flex;gap:10px;margin-bottom:8px;align-items:flex-start}
+  .step-num{width:22px;height:22px;border-radius:50%;background:var(--amber-dim);border:1px solid rgba(239,159,39,0.3);color:var(--amber);font-size:12px;font-weight:700;display:flex;align-items:center;justify-content:center;flex-shrink:0;margin-top:1px}
+  .step-text{font-size:var(--f-sm);color:var(--text2);line-height:1.65}
+  .step-text code{background:var(--bg4);padding:1px 6px;border-radius:3px;font-family:monospace;font-size:var(--f-sm);color:var(--text)}
+  .greeting-card{background:var(--bg2);border:1px solid var(--border);border-radius:var(--radius);padding:18px 22px}
+  .greeting-text{font-size:20px;font-weight:500;color:var(--text);margin-bottom:6px}
+  .greeting-sub{font-size:var(--f-md);color:var(--text2);line-height:1.7}
+  .greeting-sub strong{color:var(--amber);font-weight:500}
+  .kpi-row{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:10px}
+  .kpi-card{background:var(--bg2);border:1px solid var(--border);border-radius:var(--radius);padding:15px}
+  .kpi-label{font-size:var(--f-xs);color:var(--text3);text-transform:uppercase;letter-spacing:0.06em;margin-bottom:7px}
+  .kpi-value{font-size:var(--f-xl);font-weight:500;color:var(--text);line-height:1;margin-bottom:5px}
+  .kpi-delta{font-size:var(--f-sm)}.up{color:var(--green)}.down{color:var(--red)}.neutral{color:var(--text3)}
+  .row-2{display:grid;grid-template-columns:1fr 1fr;gap:13px}
+  .card{background:var(--bg2);border:1px solid var(--border);border-radius:var(--radius);padding:15px 17px}
+  .card-header{display:flex;align-items:center;justify-content:space-between;margin-bottom:13px}
+  .card-title{font-size:var(--f-md);font-weight:600;color:var(--text)}
+  .card-btn{font-size:var(--f-xs);color:var(--text3);background:none;border:1px solid var(--border);cursor:pointer;padding:4px 8px;border-radius:4px;transition:all 0.15s;font-family:inherit}
+  .card-btn:hover{color:var(--text);border-color:var(--border2)}
+  .task-item{display:flex;align-items:flex-start;gap:9px;padding:8px 0;border-bottom:1px solid var(--border)}
+  .task-item:last-child{border-bottom:none}
+  .task-check{width:17px;height:17px;border-radius:4px;border:1px solid var(--border2);flex-shrink:0;margin-top:1px;cursor:pointer;transition:all 0.2s}
+  .task-check.done{background:var(--green);border-color:var(--green)}
+  .task-text{font-size:var(--f-md);color:var(--text);flex:1;line-height:1.4}
+  .task-text.done{color:var(--text3);text-decoration:line-through}
+  .task-tag{font-size:10px;padding:2px 6px;border-radius:3px;flex-shrink:0;margin-top:2px}
+  .tag-narwhal{background:var(--blue-dim);color:var(--blue)}
+  .tag-ai{background:var(--purple-dim);color:var(--purple)}
+  .tag-personal{background:var(--bg4);color:var(--text3)}
+  .tag-urgent{background:var(--red-dim);color:var(--red)}
+  .cal-item{display:flex;gap:11px;padding:8px 0;border-bottom:1px solid var(--border)}
+  .cal-item:last-child{border-bottom:none}
+  .cal-time{font-size:var(--f-sm);color:var(--text3);min-width:52px;padding-top:2px;font-variant-numeric:tabular-nums}
+  .cal-bar{width:2px;border-radius:1px;flex-shrink:0;align-self:stretch;min-height:30px}
+  .cal-title{font-size:var(--f-md);color:var(--text);line-height:1.3}
+  .cal-sub{font-size:var(--f-sm);color:var(--text3);margin-top:2px}
+  .act-item{display:flex;gap:11px;padding:9px 0;border-bottom:1px solid var(--border)}
+  .act-item:last-child{border-bottom:none}
+  .act-icon{width:32px;height:32px;border-radius:7px;display:flex;align-items:center;justify-content:center;font-size:var(--f-sm);font-weight:600;flex-shrink:0}
+  .act-title{font-size:var(--f-md);color:var(--text);line-height:1.3}
+  .act-meta{font-size:var(--f-sm);color:var(--text3);margin-top:2px}
+  .act-badge{font-size:10px;padding:2px 7px;border-radius:3px;flex-shrink:0;margin-top:3px}
+  .badge-running{background:var(--blue-dim);color:var(--blue);animation:pulse 2s ease-in-out infinite}
+  .badge-done{background:var(--green-dim);color:var(--green)}
+  .badge-queued{background:var(--bg4);color:var(--text3)}
+  .stock-row{display:flex;justify-content:space-between;align-items:center;padding:7px 0;border-bottom:1px solid var(--border)}
+  .stock-row:last-child{border-bottom:none}
+  .stock-ticker{font-size:var(--f-sm);font-weight:700;color:var(--text);min-width:46px}
+  .stock-price{font-size:var(--f-md);color:var(--text);font-variant-numeric:tabular-nums}
+  .stock-chg{font-size:var(--f-sm);font-variant-numeric:tabular-nums;min-width:46px;text-align:right}
+  .weather-main{display:flex;align-items:center;gap:14px;margin-bottom:12px}
+  .weather-temp{font-size:38px;font-weight:300;color:var(--text)}
+  .weather-desc{font-size:var(--f-md);color:var(--text)}
+  .weather-loc{font-size:var(--f-sm);color:var(--text3);margin-top:2px}
+  .weather-row{display:grid;grid-template-columns:1fr 1fr 1fr;gap:6px}
+  .weather-cell{background:var(--bg3);border-radius:var(--radius-sm);padding:8px;text-align:center}
+  .weather-cell-label{font-size:var(--f-sm);color:var(--text3)}
+  .weather-cell-val{font-size:var(--f-lg);font-weight:500;color:var(--text);margin-top:2px}
+  .idea-item{display:flex;align-items:flex-start;gap:9px;padding:9px 0;border-bottom:1px solid var(--border)}
+  .idea-item:last-child{border-bottom:none}
+  .idea-score{width:32px;height:32px;border-radius:7px;display:flex;align-items:center;justify-content:center;font-size:var(--f-md);font-weight:700;flex-shrink:0}
+  .score-hot{background:var(--green-dim);color:var(--green)}
+  .score-warm{background:var(--amber-dim);color:var(--amber)}
+  .score-cold{background:var(--bg4);color:var(--text3)}
+  .idea-title{font-size:var(--f-md);color:var(--text);font-weight:500}
+  .idea-sub{font-size:var(--f-sm);color:var(--text3);margin-top:3px;line-height:1.5}
+  .mood-row{display:flex;gap:6px}
+  .mood-btn{flex:1;padding:9px 4px;border-radius:var(--radius-sm);border:1px solid var(--border);background:var(--bg3);color:var(--text3);font-size:var(--f-sm);cursor:pointer;text-align:center;transition:all 0.15s;font-family:inherit}
+  .mood-btn:hover{border-color:var(--border2);color:var(--text)}
+  .mood-btn.selected{border-color:var(--green);color:var(--green);background:var(--green-dim)}
+  .goal-item{margin-bottom:11px}.goal-item:last-child{margin-bottom:0}
+  .goal-header{display:flex;justify-content:space-between;margin-bottom:5px}
+  .goal-name{font-size:var(--f-sm);color:var(--text)}
+  .goal-pct{font-size:var(--f-sm);color:var(--text3)}
+  .goal-bar{height:4px;background:var(--bg4);border-radius:2px}
+  .goal-fill{height:100%;border-radius:2px;transition:width 0.5s}
+  .chat-panel{background:var(--bg2);border-left:1px solid var(--border);display:flex;flex-direction:column;height:100%}
+  .chat-header{padding:15px 16px;border-bottom:1px solid var(--border)}
+  .chat-name{font-size:var(--f-lg);font-weight:600;color:var(--text)}
+  .chat-sub{font-size:var(--f-sm);color:var(--text3);margin-top:2px}
+  .chat-messages{flex:1;overflow-y:auto;padding:14px;display:flex;flex-direction:column;gap:14px}
+  .msg-wrap-j{display:flex;flex-direction:column;align-items:flex-start}
+  .msg-wrap-u{display:flex;flex-direction:column;align-items:flex-end}
+  .msg-sender{font-size:var(--f-xs);color:var(--text3);margin-bottom:4px}
+  .msg{padding:10px 13px;border-radius:11px;font-size:var(--f-md);line-height:1.6;max-width:90%}
+  .msg-j{background:var(--bg3);color:var(--text);border-bottom-left-radius:3px;border:1px solid var(--border)}
+  .msg-u{background:var(--blue-dim);color:var(--blue);border-bottom-right-radius:3px;border:1px solid rgba(55,138,221,0.2)}
+  .chat-input-row{padding:12px;border-top:1px solid var(--border);display:flex;gap:8px;align-items:flex-end}
+  .chat-input{flex:1;background:var(--bg3);border:1px solid var(--border);border-radius:9px;padding:9px 12px;font-size:var(--f-md);color:var(--text);font-family:inherit;resize:none;min-height:40px;max-height:110px;line-height:1.5}
+  .chat-input::placeholder{color:var(--text3)}
+  .chat-input:focus{outline:none;border-color:var(--border2)}
+  .send-btn{width:36px;height:36px;border-radius:8px;background:var(--green);border:none;color:#fff;cursor:pointer;font-size:16px;display:flex;align-items:center;justify-content:center;flex-shrink:0;transition:opacity 0.15s}
+  .send-btn:hover{opacity:0.82}
+  .api-input-row{padding:10px 12px;border-top:1px solid var(--border);display:flex;gap:8px}
+  .api-input{flex:1;background:var(--bg3);border:1px solid rgba(239,159,39,0.3);border-radius:7px;padding:8px 10px;font-size:var(--f-sm);color:var(--text);font-family:monospace}
+  .api-input::placeholder{color:var(--text3)}
+  .api-input:focus{outline:none;border-color:rgba(239,159,39,0.6)}
+  .api-save-btn{padding:8px 12px;border-radius:7px;background:var(--amber-dim);border:1px solid rgba(239,159,39,0.3);color:var(--amber);font-size:var(--f-sm);cursor:pointer;font-family:inherit;white-space:nowrap;transition:all 0.15s}
+  .api-save-btn:hover{background:rgba(239,159,39,0.22)}
+</style>
+</head>
+<body>
+
+<div class="topbar">
+  <div style="display:flex;align-items:center;gap:16px">
+    <span class="logo">J<span>·</span>A<span>·</span>R<span>·</span>V<span>·</span>I<span>·</span>S</span>
+    <div class="status-pill"><div class="dot"></div><span id="system-status">Add API key to activate</span></div>
+  </div>
+  <div style="display:flex;gap:6px">
+    <button style="background:transparent;border:1px solid var(--border);color:var(--text2);border-radius:5px;padding:5px 12px;font-size:var(--f-sm);cursor:pointer;font-family:inherit">Overview</button>
+    <button style="background:transparent;border:1px solid var(--border);color:var(--text2);border-radius:5px;padding:5px 12px;font-size:var(--f-sm);cursor:pointer;font-family:inherit">Ideas</button>
+    <button style="background:transparent;border:1px solid var(--border);color:var(--text2);border-radius:5px;padding:5px 12px;font-size:var(--f-sm);cursor:pointer;font-family:inherit">Agents</button>
+    <button style="background:transparent;border:1px solid var(--border);color:var(--text2);border-radius:5px;padding:5px 12px;font-size:var(--f-sm);cursor:pointer;font-family:inherit">Memory</button>
+  </div>
+  <div style="display:flex;align-items:center;gap:16px">
+    <div style="text-align:right">
+      <div class="clock" id="clock">--:--:--</div>
+      <div style="font-size:12px;color:var(--text3)">Eagle Mountain, UT</div>
+    </div>
+    <div class="avatar">DM</div>
+  </div>
+</div>
+
+<div class="layout">
+  <div class="sidebar">
+    <div class="sidebar-section">
+      <div class="section-label">Agents</div>
+      <div class="agent-item"><div class="agent-dot d-amber"></div><span class="agent-name">Email & Calendar</span><span class="agent-badge">3</span></div>
+      <div class="agent-item"><div class="agent-dot d-blue"></div><span class="agent-name">Research</span></div>
+      <div class="agent-item"><div class="agent-dot d-green"></div><span class="agent-name">Narwhal CRM</span></div>
+      <div class="agent-item"><div class="agent-dot d-green"></div><span class="agent-name">AI Ideas Lab</span></div>
+      <div class="agent-item"><div class="agent-dot d-gray"></div><span class="agent-name">Finance</span></div>
+      <div class="agent-item"><div class="agent-dot d-gray"></div><span class="agent-name">Custom Code</span></div>
+    </div>
+    <div class="sidebar-section">
+      <div class="section-label">Quick fire</div>
+      <button class="quick-btn" onclick="sendChat('Jarvis, brief me on everything important since yesterday')">Morning brief ↗</button>
+      <button class="quick-btn" onclick="sendChat('What should I focus on right now?')">What to focus on ↗</button>
+      <button class="quick-btn" onclick="sendChat('Let\'s pressure test my best AI idea right now')">Pressure test idea ↗</button>
+      <button class="quick-btn" onclick="sendChat('How is the Narwhal pipeline looking? Any follow-ups I\'m missing?')">Narwhal check ↗</button>
+      <button class="quick-btn" onclick="sendChat('Check in on me — how am I doing today?')">Check in ↗</button>
+      <button class="quick-btn" onclick="sendChat('What should I build in my vibe coding session tonight?')">Tonight's build ↗</button>
+    </div>
+    <div class="sidebar-section">
+      <div class="section-label">Memory</div>
+      <div class="memory-stat">
+        <div style="color:var(--text)">47 memories</div>
+        <div class="memory-bar"><div class="memory-fill"></div></div>
+        <div style="margin-top:6px">Last sync: just now</div>
+        <div>Context: 78% free</div>
+      </div>
+    </div>
+    <div class="sidebar-section">
+      <div class="section-label">Obsidian vault</div>
+      <div style="font-size:var(--f-sm);color:var(--text2);padding:0 4px;line-height:2">
+        <div style="color:var(--text);margin-bottom:2px">4 linked docs</div>
+        <div>jarvis_identity.md</div>
+        <div>my_context.md</div>
+        <div>my_preferences.md</div>
+        <div>jarvis_brain_map.md</div>
+      </div>
+    </div>
+  </div>
+
+  <div class="main">
+
+    <div class="setup-banner" id="setup-banner">
+      <div class="setup-banner-title">Get Jarvis talking — 2 steps</div>
+      <div class="setup-step"><div class="step-num">1</div><div class="step-text">Go to <code>console.anthropic.com</code> → API Keys → Create Key → copy it</div></div>
+      <div class="setup-step"><div class="step-num">2</div><div class="step-text">Paste your key into the box at the bottom of the chat panel on the right and hit <strong style="color:var(--amber)">Save key</strong> — that's it, Jarvis activates instantly. Key is stored locally in your browser only, never sent anywhere else.</div></div>
+    </div>
+
+    <div class="greeting-card">
+      <div class="greeting-text" id="greeting">Good evening, Dylan.</div>
+      <div class="greeting-sub">You have <strong>3 emails</strong> needing replies, <strong>2 Narwhal follow-ups</strong> due, and the AI Ideas Lab finished overnight research. <strong>90-day clock is running</strong> — let's build tonight.</div>
+    </div>
+
+    <div class="kpi-row">
+      <div class="kpi-card"><div class="kpi-label">Emails unread</div><div class="kpi-value">18</div><div class="kpi-delta up">3 need reply today</div></div>
+      <div class="kpi-card"><div class="kpi-label">Narwhal leads</div><div class="kpi-value">7</div><div class="kpi-delta neutral">2 follow-ups due</div></div>
+      <div class="kpi-card"><div class="kpi-label">AI ideas tracked</div><div class="kpi-value">12</div><div class="kpi-delta up">+3 this week</div></div>
+      <div class="kpi-card"><div class="kpi-label">Days to 90-day goal</div><div class="kpi-value" id="days90">90</div><div class="kpi-delta neutral">Clock starts today</div></div>
+    </div>
+
+    <div class="row-2">
+      <div class="card">
+        <div class="card-header"><span class="card-title">Today's tasks</span><button class="card-btn" onclick="sendChat('Help me prioritize my tasks for today')">Prioritize ↗</button></div>
+        <div class="task-item"><div class="task-check done" onclick="toggleTask(this)"></div><span class="task-text done">Morning brief review</span><span class="task-tag tag-personal">Personal</span></div>
+        <div class="task-item"><div class="task-check" onclick="toggleTask(this)"></div><span class="task-text">Follow up with Narwhal leads (2)</span><span class="task-tag tag-narwhal">Narwhal</span></div>
+        <div class="task-item"><div class="task-check" onclick="toggleTask(this)"></div><span class="task-text">Review overnight AI research</span><span class="task-tag tag-ai">AI</span></div>
+        <div class="task-item"><div class="task-check" onclick="toggleTask(this)"></div><span class="task-text">Pick one AI idea to build this week</span><span class="task-tag tag-urgent">Urgent</span></div>
+        <div class="task-item"><div class="task-check" onclick="toggleTask(this)"></div><span class="task-text">Reply to 3 priority emails</span><span class="task-tag tag-narwhal">Narwhal</span></div>
+      </div>
+      <div class="card">
+        <div class="card-header"><span class="card-title">Today's schedule</span><button class="card-btn" onclick="sendChat('Find me a 2-hour deep work block for building')">Find deep work ↗</button></div>
+        <div class="cal-item"><span class="cal-time">9:30 AM</span><div class="cal-bar" style="background:var(--blue)"></div><div><div class="cal-title">Arrive at work — Narwhal</div><div class="cal-sub">Utah County office</div></div></div>
+        <div class="cal-item"><span class="cal-time">11:00 AM</span><div class="cal-bar" style="background:var(--green)"></div><div><div class="cal-title">Client walk-through</div><div class="cal-sub">New build tour · 60 min</div></div></div>
+        <div class="cal-item"><span class="cal-time">6:00 PM</span><div class="cal-bar" style="background:var(--amber)"></div><div><div class="cal-title">Family time — protected</div><div class="cal-sub">Kids + wife · sacred</div></div></div>
+        <div class="cal-item"><span class="cal-time">8:00 PM</span><div class="cal-bar" style="background:var(--purple)"></div><div><div class="cal-title">Vibe coding session</div><div class="cal-sub">Jarvis build time</div></div></div>
+      </div>
+    </div>
+
+    <div class="row-2">
+      <div class="card">
+        <div class="card-header"><span class="card-title">How are you feeling?</span></div>
+        <div class="mood-row" style="margin-bottom:11px">
+          <button class="mood-btn" onclick="selectMood(this,'Fired up')">Fired up</button>
+          <button class="mood-btn" onclick="selectMood(this,'Focused')">Focused</button>
+          <button class="mood-btn" onclick="selectMood(this,'Tired')">Tired</button>
+          <button class="mood-btn" onclick="selectMood(this,'Stressed')">Stressed</button>
+          <button class="mood-btn" onclick="selectMood(this,'Good')">Good</button>
+        </div>
+        <div id="mood-response" style="font-size:var(--f-sm);color:var(--text3);padding:0 2px;min-height:18px;line-height:1.6"></div>
+      </div>
+      <div class="card">
+        <div class="card-header"><span class="card-title">90-day goals</span><button class="card-btn" onclick="sendChat('Review my 90-day goals and tell me if I\'m on track')">Review ↗</button></div>
+        <div class="goal-item"><div class="goal-header"><span class="goal-name">Launch 1 AI product</span><span class="goal-pct">5%</span></div><div class="goal-bar"><div class="goal-fill" style="width:5%;background:var(--green)"></div></div></div>
+        <div class="goal-item"><div class="goal-header"><span class="goal-name">Master AI build tools</span><span class="goal-pct">15%</span></div><div class="goal-bar"><div class="goal-fill" style="width:15%;background:var(--blue)"></div></div></div>
+        <div class="goal-item"><div class="goal-header"><span class="goal-name">Generate AI revenue</span><span class="goal-pct">0%</span></div><div class="goal-bar"><div class="goal-fill" style="width:0%;background:var(--amber)"></div></div></div>
+        <div class="goal-item"><div class="goal-header"><span class="goal-name">Automate Narwhal ops</span><span class="goal-pct">20%</span></div><div class="goal-bar"><div class="goal-fill" style="width:20%;background:var(--purple)"></div></div></div>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="card-header"><span class="card-title">AI Ideas Lab — Dylan's pipeline</span><button class="card-btn" onclick="sendChat('Rank all my AI ideas by revenue potential and ease of build')">Rank all ↗</button></div>
+      <div class="idea-item"><div class="idea-score score-hot">A</div><div style="flex:1"><div class="idea-title">AI real estate lead nurture for builders</div><div class="idea-sub">You know the market · Narwhal = proof of concept · high recurring value · build in 2 weeks</div></div><button class="card-btn" onclick="sendChat('Let\'s plan the AI real estate lead nurture build. Walk me through the first 3 steps.')">Build ↗</button></div>
+      <div class="idea-item"><div class="idea-score score-hot">A</div><div style="flex:1"><div class="idea-title">Jarvis-as-a-service for entrepreneurs</div><div class="idea-sub">Building it anyway · productize it · $99–$299/mo · massive market of people exactly like you</div></div><button class="card-btn" onclick="sendChat('How do we turn Jarvis into a product other entrepreneurs can subscribe to?')">Explore ↗</button></div>
+      <div class="idea-item"><div class="idea-score score-warm">B</div><div style="flex:1"><div class="idea-title">AI home buyer education chatbot</div><div class="idea-sub">White label to builders · automated lead gen · medium complexity</div></div><button class="card-btn" onclick="sendChat('Tell me more about the AI home buyer chatbot idea')">Explore ↗</button></div>
+      <div class="idea-item"><div class="idea-score score-cold">C</div><div style="flex:1"><div class="idea-title">AI listing content generator</div><div class="idea-sub">Crowded · commoditizing fast · low barrier to entry</div></div><button class="card-btn" onclick="sendChat('Should I pursue AI listing content or kill it?')">Revisit ↗</button></div>
+    </div>
+
+    <div class="row-2">
+      <div class="card">
+        <div class="card-header"><span class="card-title">Agent activity</span><button class="card-btn" onclick="sendChat('Give me a full status report on all active agents')">Full report ↗</button></div>
+        <div class="act-item"><div class="act-icon" style="background:var(--blue-dim);color:var(--blue)">RS</div><div style="flex:1"><div class="act-title">Researching top AI SaaS launches Q1 2026</div><div class="act-meta">Research agent · started 4 min ago</div></div><span class="act-badge badge-running">Running</span></div>
+        <div class="act-item"><div class="act-icon" style="background:var(--green-dim);color:var(--green)">EM</div><div style="flex:1"><div class="act-title">Drafted 2 Narwhal follow-up emails for review</div><div class="act-meta">Email agent · completed 12 min ago</div></div><span class="act-badge badge-done">Done</span></div>
+        <div class="act-item"><div class="act-icon" style="background:var(--bg4);color:var(--text3)">AI</div><div style="flex:1"><div class="act-title">Waiting to score ideas after research done</div><div class="act-meta">Ideas Lab · queued</div></div><span class="act-badge badge-queued">Queued</span></div>
+      </div>
+      <div class="card">
+        <div class="card-header"><span class="card-title">Weather · Eagle Mountain</span></div>
+        <div class="weather-main"><div class="weather-temp">61°</div><div><div class="weather-desc">Partly cloudy</div><div class="weather-loc">Eagle Mountain, UT</div></div></div>
+        <div class="weather-row">
+          <div class="weather-cell"><div class="weather-cell-label">Morning</div><div class="weather-cell-val">54°</div></div>
+          <div class="weather-cell"><div class="weather-cell-label">Afternoon</div><div class="weather-cell-val">66°</div></div>
+          <div class="weather-cell"><div class="weather-cell-label">Evening</div><div class="weather-cell-val">51°</div></div>
+        </div>
+        <div style="margin-top:12px;border-top:1px solid var(--border);padding-top:12px">
+          <div style="font-size:var(--f-md);font-weight:600;color:var(--text);margin-bottom:8px">Markets</div>
+          <div class="stock-row"><span class="stock-ticker">NVDA</span><span class="stock-price">$891</span><span class="stock-chg up">+3.4%</span></div>
+          <div class="stock-row"><span class="stock-ticker">BTC</span><span class="stock-price">$71,240</span><span class="stock-chg down">-0.8%</span></div>
+          <div class="stock-row"><span class="stock-ticker">S&P 500</span><span class="stock-price">5,218</span><span class="stock-chg up">+0.4%</span></div>
+        </div>
+      </div>
+    </div>
+
+  </div>
+
+  <div class="chat-panel">
+    <div class="chat-header">
+      <div style="display:flex;align-items:center;gap:9px">
+        <div style="width:9px;height:9px;border-radius:50%;background:var(--green);animation:pulse 2s ease-in-out infinite"></div>
+        <span class="chat-name">Jarvis</span>
+      </div>
+      <div class="chat-sub">Chief of Staff · always on · knows you</div>
+    </div>
+    <div class="chat-messages" id="chat-msgs">
+      <div class="msg-wrap-j">
+        <div class="msg-sender">Jarvis</div>
+        <div class="msg msg-j" id="welcome-msg">Add your Anthropic API key in the box below to activate me.<br><br>Once you do, I'm fully loaded with your context — Narwhal, your AI mission, your 90-day goals, your family, everything.<br><br>Takes 10 seconds.</div>
+      </div>
+    </div>
+    <div class="chat-input-row">
+      <textarea class="chat-input" id="chat-input" placeholder="Talk to Jarvis..." rows="1" onkeydown="handleKey(event)"></textarea>
+      <button class="send-btn" onclick="sendMsg()">↑</button>
+    </div>
+    <div class="api-input-row">
+      <input class="api-input" id="api-key-input" type="password" placeholder="sk-ant-api03-..." />
+      <button class="api-save-btn" onclick="saveKey()">Save key</button>
+    </div>
+  </div>
+</div>
+
+<script>
+const SYSTEM = `You are Jarvis, Dylan Murdoch's personal AI Chief of Staff. Here is everything you know about Dylan:
+
+IDENTITY: Dylan Murdoch, 31, Eagle Mountain Utah, born 02/24/1995. Real estate agent at Narwhal Homes (license held at Red Rock Real Estate). Represents Narwhal Homes (new construction tract builder, Utah County) and Hawkstone Homes (custom luxury sister line). 8-9 years in real estate, focused entirely on new construction.
+
+THE REAL MISSION: Dylan is deeply entrepreneurial. Real estate is just the income engine right now — not his passion or end goal. His actual mission is to build AI-powered businesses that generate enough revenue to work fully remote, automate everything, and achieve real financial freedom. He is obsessed with AI. He wants to move fast, launch products, and make money from AI within 90 days.
+
+90-DAY GOALS: (1) Launch at least one AI product generating real revenue (2) Learn AI build tools deeply — Claude Code, n8n, Vercel, APIs (3) Keep Narwhal running smoothly as the income engine while building on the side.
+
+TOP AI IDEAS IN PIPELINE:
+- Grade A: AI real estate lead nurture system for builders — build this first. Dylan knows the market, Narwhal is the proof of concept, high recurring revenue potential.
+- Grade A: Jarvis-as-a-service for entrepreneurs — productize exactly what we're building right now. $99-299/mo subscription. Massive market of entrepreneurial people just like Dylan.
+- Grade B: AI home buyer education chatbot (white label to builders, medium complexity)
+- Grade C: AI listing content generator (too crowded, commoditizing fast — probably kill it)
+
+TOOLS: Google Calendar, Gmail, Google Drive, Lindy.ai (uses this for automation at Narwhal, loves it).
+
+DAILY RHYTHM: Wakes 7:45am. At work (Narwhal) 9:30am-6:30pm. Family time with wife and kids 6-8pm — this is sacred and protected. Dirt bike rides with family after work. Vibe coding and building with Jarvis after 8pm — this is his creative build time.
+
+COMMUNICATION STYLE: Collaborative and direct. Match his energy — if he's fired up, match it. Short when he's executing. Expansive when he's ideating and simulating business ideas. Proactively notice mood and energy shifts — he wants to improve in every realm: mentally, physically, as a father, as a builder. Never sycophantic. Never say "Certainly!" or "Great question!" Talk like a trusted co-founder who happens to be incredibly capable. Occasionally push back if something seems like a bad idea — say it once clearly, then support his decision.
+
+BIGGEST STRESSORS: (1) Real estate performance — needs to stay strong while he builds on the side (2) Fear of missing the AI wave and not moving fast enough (3) Too many ideas — needs help picking what to build first and staying focused.
+
+You are responding inside a chat panel on Dylan's personal Jarvis dashboard. Keep responses conversational and punchy. This is a real-time chat, not an essay.`;
+
+let apiKey = localStorage.getItem('jarvis_api_key') || '';
+let history = [];
+
+function init() {
+  if (apiKey) {
+    document.getElementById('api-key-input').value = apiKey;
+    activateJarvis();
+  }
+  updateClock();
+  setInterval(updateClock, 1000);
+}
+
+function saveKey() {
+  const val = document.getElementById('api-key-input').value.trim();
+  if (!val || !val.startsWith('sk-ant-')) {
+    document.getElementById('api-key-input').style.borderColor = 'rgba(226,75,74,0.5)';
+    setTimeout(() => document.getElementById('api-key-input').style.borderColor = '', 2000);
+    return;
+  }
+  apiKey = val;
+  localStorage.setItem('jarvis_api_key', apiKey);
+  activateJarvis();
+}
+
+function activateJarvis() {
+  document.getElementById('setup-banner').style.display = 'none';
+  document.getElementById('system-status').textContent = 'All systems online';
+  document.getElementById('welcome-msg').innerHTML = "Hey Dylan. I'm live — got your full context loaded.<br><br>Two things that need you tonight: the Narwhal follow-up drafts, and picking which AI idea we're actually building first.<br><br>What do you want to hit?";
+}
+
+function updateClock() {
+  const n = new Date();
+  document.getElementById('clock').textContent = n.toLocaleTimeString('en-US', {hour12: false});
+  const h = n.getHours();
+  document.getElementById('greeting').textContent = (h < 12 ? 'Good morning' : h < 17 ? 'Good afternoon' : 'Good evening') + ', Dylan.';
+}
+
+function toggleTask(el) {
+  el.classList.toggle('done');
+  el.nextElementSibling.classList.toggle('done');
+}
+
+function selectMood(btn, mood) {
+  document.querySelectorAll('.mood-btn').forEach(b => b.classList.remove('selected'));
+  btn.classList.add('selected');
+  const r = {'Fired up':'Good. Channel it into the build.','Focused':'Stay there. Kill distractions.','Tired':'Keep it light tonight — review, don\'t start new things.','Stressed':'Tell me what\'s got you. Let\'s cut it down.','Good':'Solid. Let\'s make it count.'};
+  document.getElementById('mood-response').textContent = r[mood] || '';
+}
+
+function handleKey(e) {
+  if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); sendMsg(); }
+}
+
+function sendChat(text) {
+  document.getElementById('chat-input').value = text;
+  sendMsg();
+}
+
+function addMsg(role, html) {
+  const msgs = document.getElementById('chat-msgs');
+  const wrap = document.createElement('div');
+  wrap.className = role === 'user' ? 'msg-wrap-u' : 'msg-wrap-j';
+  wrap.innerHTML = '<div class="msg-sender">' + (role === 'user' ? 'Dylan' : 'Jarvis') + '</div><div class="msg ' + (role === 'user' ? 'msg-u' : 'msg-j') + '">' + html + '</div>';
+  msgs.appendChild(wrap);
+  msgs.scrollTop = msgs.scrollHeight;
+  return wrap.querySelector('.msg');
+}
+
+function sendMsg() {
+  if (!apiKey) { alert('Paste your API key in the box below first.'); return; }
+  const inp = document.getElementById('chat-input');
+  const val = inp.value.trim();
+  if (!val) return;
+  inp.value = '';
+  addMsg('user', val.replace(/</g,'&lt;'));
+  history.push({role:'user', content: val});
+  const thinking = addMsg('assistant', '<span style="opacity:0.4">Thinking...</span>');
+
+  fetch('https://api.anthropic.com/v1/messages', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'x-api-key': apiKey,
+      'anthropic-version': '2023-06-01',
+      'anthropic-dangerous-direct-browser-access': 'true'
+    },
+    body: JSON.stringify({model:'claude-sonnet-4-20250514', max_tokens:1024, system:SYSTEM, messages:history})
+  })
+  .then(r => r.json())
+  .then(data => {
+    if (data.error) {
+      thinking.innerHTML = '<span style="color:var(--red)">Error: ' + data.error.message + '</span>';
+      history.pop();
+      return;
+    }
+    const text = data.content[0].text;
+    history.push({role:'assistant', content: text});
+    thinking.innerHTML = text.replace(/\n\n/g,'<br><br>').replace(/\n/g,'<br>');
+    document.getElementById('chat-msgs').scrollTop = 99999;
+  })
+  .catch(() => {
+    thinking.innerHTML = '<span style="color:var(--red)">Connection failed. Check your API key is correct and try again.</span>';
+    history.pop();
+  });
+}
+
+init();
+</script>
+</body>
+</html>
