@@ -30,11 +30,11 @@ export interface Goal {
   title: string;
   category: string;
   progress: number;
-  target: string;
-  target_date: string;
+  target: number | string;
+  target_date?: string;
   milestones: Milestone[];
-  weekly_breakdown: string[];
-  progress_snapshots: ProgressSnapshot[];
+  weekly_breakdown?: string[];
+  progress_snapshots?: ProgressSnapshot[];
   created_at: string;
 }
 

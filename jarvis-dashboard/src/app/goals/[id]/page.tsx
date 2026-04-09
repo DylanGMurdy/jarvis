@@ -144,9 +144,9 @@ export default function GoalDetailPage({ params }: { params: Promise<{ id: strin
   const currentWeek = getCurrentWeek(goal.created_at);
 
   const chartData = {
-    labels: goal.progress_snapshots.map((s) => `Week ${s.week}`),
+    labels: (goal.progress_snapshots || []).map((s) => `Week ${s.week}`),
     datasets: [{
-      data: goal.progress_snapshots.map((s) => s.progress),
+      data: (goal.progress_snapshots || []).map((s) => s.progress),
       borderColor: "#6366f1",
       backgroundColor: "rgba(99,102,241,0.1)",
       fill: true, tension: 0.4, pointBackgroundColor: "#6366f1", pointBorderColor: "#6366f1", pointRadius: 4,
@@ -176,7 +176,7 @@ export default function GoalDetailPage({ params }: { params: Promise<{ id: strin
             <div>
               <h1 className="text-3xl font-bold mb-2">{goal.title}</h1>
               <div className="flex items-center gap-3">
-                <span className="text-sm text-[#64748b]">Target: {formatDate(goal.target_date)}</span>
+                {goal.target_date && <span className="text-sm text-[#64748b]">Target: {formatDate(goal.target_date)}</span>}
                 <span className="px-2.5 py-0.5 rounded-full text-xs font-medium bg-[#6366f1]/20 text-[#818cf8] border border-[#6366f1]/30">{goal.category}</span>
               </div>
             </div>
@@ -204,7 +204,7 @@ export default function GoalDetailPage({ params }: { params: Promise<{ id: strin
           </div>
         </section>
 
-        <section className="mb-10">
+        {goal.weekly_breakdown && goal.weekly_breakdown.length > 0 && <section className="mb-10">
           <h2 className="text-xl font-semibold mb-4">Weekly Game Plan</h2>
           <div className="space-y-2">
             {goal.weekly_breakdown.map((week, i) => {
@@ -219,14 +219,14 @@ export default function GoalDetailPage({ params }: { params: Promise<{ id: strin
               );
             })}
           </div>
-        </section>
+        </section>}
 
-        <section className="mb-10">
+        {(goal.progress_snapshots || []).length > 0 && <section className="mb-10">
           <h2 className="text-xl font-semibold mb-4">Progress Over Time</h2>
           <div className="bg-[#12121a] border border-[#1e1e2e] rounded-xl p-6">
             <div style={{ height: 250 }}><Line data={chartData} options={chartOptions} /></div>
           </div>
-        </section>
+        </section>}
 
         <section className="mb-10">
           <h2 className="text-xl font-semibold mb-4">Journal <span className="text-[#64748b] text-base font-normal">({journal.length})</span></h2>
