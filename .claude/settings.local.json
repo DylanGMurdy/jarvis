@@ -14,7 +14,13 @@
       "Bash(curl -s -o /dev/null -w \"%{redirect_url}\" http://127.0.0.1:3000/api/spotify/login)",
       "Bash(curl -s http://127.0.0.1:3000/api/spotify/now-playing)",
       "Bash(curl -s http://127.0.0.1:3000/api/lindy/update)",
-      "Bash(python3 -m json.tool)"
+      "Bash(python3 -m json.tool)",
+      "Bash(rm -rf jarvis-dashboard/.git)",
+      "Bash(git rm:*)",
+      "Bash(git add:*)",
+      "Bash(git commit -m ':*)",
+      "Bash(gh repo:*)",
+      "Bash(brew install:*)"
     ]
   }
 }
