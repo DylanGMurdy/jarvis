@@ -1,0 +1,10 @@
+{
+  "name": "jarvis",
+  "version": "1.0.0",
+  "private": true,
+  "scripts": {
+    "build": "cd jarvis-dashboard && npm install && npm run build",
+    "dev": "cd jarvis-dashboard && npm run dev",
+    "start": "cd jarvis-dashboard && npm start"
+  }
+}
