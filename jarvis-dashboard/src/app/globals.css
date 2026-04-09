@@ -44,3 +44,15 @@ body {
   background: rgba(0, 0, 0, 0.7);
   backdrop-filter: blur(4px);
 }
+
+/* Hide scrollbar for mobile horizontal scroll */
+.no-scrollbar::-webkit-scrollbar { display: none; }
+.no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
+
+/* iPhone safe area padding */
+.safe-area-bottom { padding-bottom: env(safe-area-inset-bottom, 0px); }
+
+/* Mobile touch targets */
+@media (max-width: 768px) {
+  html { -webkit-tap-highlight-color: transparent; }
+}

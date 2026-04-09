@@ -551,17 +551,25 @@ export default function Dashboard() {
     { key: "memory", label: "Memory", icon: "🧠" },
   ];
 
+  const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+
   return (
     <div className="flex h-screen overflow-hidden">
-      {/* Sidebar */}
-      <aside className={`${sidebarCollapsed ? "w-16" : "w-56"} bg-jarvis-card border-r border-jarvis-border flex flex-col transition-all flex-shrink-0`}>
+      {/* Mobile sidebar overlay */}
+      {mobileMenuOpen && (
+        <div className="fixed inset-0 z-40 md:hidden" onClick={() => setMobileMenuOpen(false)}>
+          <div className="absolute inset-0 bg-black/60" />
+        </div>
+      )}
+
+      {/* Sidebar — hidden on mobile, slide-in when menu open */}
+      <aside className={`${sidebarCollapsed ? "w-16" : "w-56"} bg-jarvis-card border-r border-jarvis-border flex-col transition-all flex-shrink-0 hidden md:flex`}>
         <div className="p-4 border-b border-jarvis-border">
           <button onClick={() => setSidebarCollapsed(!sidebarCollapsed)} className="flex items-center gap-2 w-full">
             <div className="w-8 h-8 bg-jarvis-accent rounded-lg flex items-center justify-center text-white font-bold text-sm flex-shrink-0">J</div>
             {!sidebarCollapsed && <span className="font-bold text-white">JARVIS</span>}
           </button>
         </div>
-
         <div className="p-3 border-b border-jarvis-border">
           {!sidebarCollapsed && <div className="text-xs text-jarvis-muted mb-2 font-semibold">AGENTS</div>}
           <div className="space-y-2">
@@ -573,7 +581,6 @@ export default function Dashboard() {
             ))}
           </div>
         </div>
-
         {!sidebarCollapsed && (
           <div className="p-3 border-b border-jarvis-border">
             <div className="text-xs text-jarvis-muted mb-2 font-semibold">QUICK ACTIONS</div>
@@ -591,7 +598,6 @@ export default function Dashboard() {
             </div>
           </div>
         )}
-
         {!sidebarCollapsed && (
           <div className="p-3 mt-auto border-t border-jarvis-border">
             <div className="text-xs text-jarvis-muted mb-2 font-semibold">MEMORY</div>
@@ -605,36 +611,90 @@ export default function Dashboard() {
         )}
       </aside>
 
-      {/* Main Content */}
-      <div className="flex-1 flex flex-col overflow-hidden">
-        <nav className="bg-jarvis-card border-b border-jarvis-border px-4 flex items-center justify-between flex-shrink-0">
-          <div className="flex">
-            {TAB_LIST.map((tab) => (
-              <button key={tab.key} onClick={() => setActiveTab(tab.key)} className={`px-4 py-3 text-sm font-medium transition-colors relative ${activeTab === tab.key ? "text-jarvis-accent" : "text-jarvis-muted hover:text-jarvis-text"}`}>
-                <span className="mr-1.5">{tab.icon}</span>
-                {tab.label}
-                {activeTab === tab.key && <span className="absolute bottom-0 left-0 right-0 h-0.5 bg-jarvis-accent" />}
+      {/* Mobile sidebar (slide-in) */}
+      <aside className={`fixed inset-y-0 left-0 z-50 w-64 bg-jarvis-card border-r border-jarvis-border flex flex-col transition-transform duration-300 md:hidden ${mobileMenuOpen ? "translate-x-0" : "-translate-x-full"}`}>
+        <div className="p-4 border-b border-jarvis-border flex items-center justify-between">
+          <div className="flex items-center gap-2">
+            <div className="w-8 h-8 bg-jarvis-accent rounded-lg flex items-center justify-center text-white font-bold text-sm">J</div>
+            <span className="font-bold text-white">JARVIS</span>
+          </div>
+          <button onClick={() => setMobileMenuOpen(false)} className="text-jarvis-muted hover:text-white text-xl p-1">×</button>
+        </div>
+        <div className="p-3 border-b border-jarvis-border">
+          <div className="text-xs text-jarvis-muted mb-2 font-semibold">AGENTS</div>
+          <div className="space-y-2">
+            {AGENTS.map((a, i) => (
+              <button key={i} onClick={() => { setActiveTab("agents"); setMobileMenuOpen(false); }} className="flex items-center gap-2 w-full text-left hover:bg-jarvis-border/50 p-1.5 rounded transition-colors">
+                <StatusDot status={a.status} />
+                <span className="text-sm text-jarvis-text truncate">{a.name}</span>
               </button>
             ))}
           </div>
-          <button onClick={() => setChatOpen(!chatOpen)} className="text-sm text-jarvis-muted hover:text-jarvis-accent transition-colors px-3 py-1 rounded-lg hover:bg-jarvis-border/50">
+        </div>
+        <div className="p-3 border-b border-jarvis-border">
+          <div className="text-xs text-jarvis-muted mb-2 font-semibold">QUICK ACTIONS</div>
+          <div className="space-y-1">
+            {[
+              { label: "Status Report", action: () => sendChat("Give me a full status report on all agents and goals") },
+              { label: "Top Priority", action: () => sendChat("What's my #1 priority right now?") },
+              { label: "Builder Leads", action: () => sendChat("Analyze my builder lead pipeline and suggest next steps") },
+              { label: "Vibe Plan", action: () => sendChat("Help me plan tonight's vibe coding session") },
+            ].map((btn, i) => (
+              <button key={i} onClick={() => { btn.action(); setMobileMenuOpen(false); setChatOpen(true); }} className="w-full text-left text-sm px-2 py-2 rounded hover:bg-jarvis-accent/20 text-jarvis-text hover:text-jarvis-accent transition-colors">
+                → {btn.label}
+              </button>
+            ))}
+          </div>
+        </div>
+        <div className="p-3 mt-auto border-t border-jarvis-border">
+          <div className="text-xs text-jarvis-muted mb-2 font-semibold">MEMORY</div>
+          <div className="space-y-1 text-xs">
+            <div className="flex justify-between text-jarvis-text"><span>Projects</span><span className="text-jarvis-accent">{projects.length}</span></div>
+            <div className="flex justify-between text-jarvis-text"><span>Goals</span><span className="text-jarvis-accent">{goals.length}</span></div>
+            <div className="flex justify-between text-jarvis-text"><span>Chat</span><span className="text-jarvis-accent">{chatMessages.length}</span></div>
+          </div>
+        </div>
+      </aside>
+
+      {/* Main Content */}
+      <div className="flex-1 flex flex-col overflow-hidden">
+        {/* Top nav bar */}
+        <nav className="bg-jarvis-card border-b border-jarvis-border px-2 md:px-4 flex items-center justify-between flex-shrink-0">
+          <div className="flex items-center">
+            {/* Hamburger menu — mobile only */}
+            <button onClick={() => setMobileMenuOpen(true)} className="md:hidden p-2 mr-1 text-jarvis-muted hover:text-white">
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M3 12h18M3 6h18M3 18h18" /></svg>
+            </button>
+            {/* Tabs — scrollable on mobile */}
+            <div className="flex overflow-x-auto no-scrollbar">
+              {TAB_LIST.map((tab) => (
+                <button key={tab.key} onClick={() => setActiveTab(tab.key)} className={`px-3 md:px-4 py-3 text-xs md:text-sm font-medium transition-colors relative whitespace-nowrap ${activeTab === tab.key ? "text-jarvis-accent" : "text-jarvis-muted hover:text-jarvis-text"}`}>
+                  <span className="mr-1">{tab.icon}</span>
+                  <span className="hidden sm:inline">{tab.label}</span>
+                  {activeTab === tab.key && <span className="absolute bottom-0 left-0 right-0 h-0.5 bg-jarvis-accent" />}
+                </button>
+              ))}
+            </div>
+          </div>
+          {/* Show/Hide chat — desktop only */}
+          <button onClick={() => setChatOpen(!chatOpen)} className="hidden md:block text-sm text-jarvis-muted hover:text-jarvis-accent transition-colors px-3 py-1 rounded-lg hover:bg-jarvis-border/50">
             {chatOpen ? "Hide Chat" : "Show Chat"}
           </button>
         </nav>
 
         <div className="flex-1 flex overflow-hidden">
-          <main className="flex-1 overflow-y-auto p-6">
+          <main className="flex-1 overflow-y-auto p-4 md:p-6">
             {tabContent[activeTab]()}
           </main>
 
+          {/* Chat panel — desktop sidebar */}
           {chatOpen && (
-            <aside className="w-96 bg-jarvis-card border-l border-jarvis-border flex flex-col flex-shrink-0">
+            <aside className="hidden md:flex w-96 bg-jarvis-card border-l border-jarvis-border flex-col flex-shrink-0">
               <div className="p-3 border-b border-jarvis-border flex items-center gap-2">
                 <div className="w-6 h-6 bg-jarvis-accent rounded-full flex items-center justify-center text-white text-xs font-bold">J</div>
                 <span className="text-sm font-semibold text-white">JARVIS Chat</span>
                 <StatusDot status="active" />
               </div>
-
               <div className="flex-1 overflow-y-auto p-3 space-y-3">
                 {chatMessages.length === 0 && (
                   <div className="text-center py-8">
@@ -656,40 +716,22 @@ export default function Dashboard() {
                 )}
                 <div ref={chatEndRef} />
               </div>
-
               <div className="px-3 py-2 border-t border-jarvis-border">
                 <div className="flex flex-wrap gap-1.5">
                   {getSuggestedPrompts().map((p, i) => (
-                    <button key={i} onClick={() => sendChat(p)} className="text-xs px-2 py-1 rounded-lg bg-jarvis-border text-jarvis-muted hover:text-jarvis-accent hover:bg-jarvis-accent/10 transition-colors">
-                      {p}
-                    </button>
+                    <button key={i} onClick={() => sendChat(p)} className="text-xs px-2 py-1 rounded-lg bg-jarvis-border text-jarvis-muted hover:text-jarvis-accent hover:bg-jarvis-accent/10 transition-colors">{p}</button>
                   ))}
                 </div>
               </div>
-
               <div className="p-3 border-t border-jarvis-border">
                 <div className="flex gap-2">
-                  <input
-                    type="text"
-                    value={chatInput}
-                    onChange={(e) => setChatInput(e.target.value)}
-                    onKeyDown={(e) => e.key === "Enter" && !e.shiftKey && sendChat()}
-                    placeholder="Ask JARVIS..."
-                    className="flex-1 bg-jarvis-bg border border-jarvis-border rounded-lg px-3 py-2 text-sm text-jarvis-text placeholder:text-jarvis-muted focus:outline-none focus:border-jarvis-accent"
-                  />
+                  <input type="text" value={chatInput} onChange={(e) => setChatInput(e.target.value)} onKeyDown={(e) => e.key === "Enter" && !e.shiftKey && sendChat()} placeholder="Ask JARVIS..." className="flex-1 bg-jarvis-bg border border-jarvis-border rounded-lg px-3 py-2 text-sm text-jarvis-text placeholder:text-jarvis-muted focus:outline-none focus:border-jarvis-accent" />
                   {speechSupported && (
                     <button onClick={toggleRecording} disabled={chatLoading} className={`px-3 py-2 rounded-lg text-sm transition-all disabled:opacity-50 ${isRecording ? "bg-jarvis-red text-white animate-[pulse-dot_1s_ease-in-out_infinite]" : "bg-jarvis-border text-jarvis-muted hover:text-white hover:bg-jarvis-accent/30"}`} title={isRecording ? "Stop recording" : "Voice input"}>
-                      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                        <path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z" />
-                        <path d="M19 10v2a7 7 0 0 1-14 0v-2" />
-                        <line x1="12" y1="19" x2="12" y2="23" />
-                        <line x1="8" y1="23" x2="16" y2="23" />
-                      </svg>
+                      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z" /><path d="M19 10v2a7 7 0 0 1-14 0v-2" /><line x1="12" y1="19" x2="12" y2="23" /><line x1="8" y1="23" x2="16" y2="23" /></svg>
                     </button>
                   )}
-                  <button onClick={() => sendChat()} disabled={chatLoading} className="px-3 py-2 bg-jarvis-accent text-white rounded-lg text-sm hover:bg-jarvis-accent-hover transition-colors disabled:opacity-50">
-                    Send
-                  </button>
+                  <button onClick={() => sendChat()} disabled={chatLoading} className="px-3 py-2 bg-jarvis-accent text-white rounded-lg text-sm hover:bg-jarvis-accent-hover transition-colors disabled:opacity-50">Send</button>
                 </div>
               </div>
             </aside>
@@ -697,21 +739,102 @@ export default function Dashboard() {
         </div>
       </div>
 
+      {/* Mobile chat — full screen overlay */}
+      {chatOpen && (
+        <div className="fixed inset-0 z-50 bg-jarvis-bg flex flex-col md:hidden">
+          {/* Mobile chat header */}
+          <div className="p-3 border-b border-jarvis-border flex items-center justify-between flex-shrink-0 bg-jarvis-card">
+            <div className="flex items-center gap-2">
+              <div className="w-7 h-7 bg-jarvis-accent rounded-full flex items-center justify-center text-white text-xs font-bold">J</div>
+              <span className="text-sm font-semibold text-white">JARVIS</span>
+              <StatusDot status="active" />
+            </div>
+            <button onClick={() => setChatOpen(false)} className="text-jarvis-muted hover:text-white p-1 text-lg">×</button>
+          </div>
+
+          {/* Messages */}
+          <div className="flex-1 overflow-y-auto p-3 space-y-3">
+            {chatMessages.length === 0 && (
+              <div className="text-center py-12">
+                <div className="text-4xl mb-3">🤖</div>
+                <p className="text-base text-jarvis-muted mb-4">How can I help, sir?</p>
+                <div className="flex flex-wrap gap-2 justify-center px-4">
+                  {getSuggestedPrompts().map((p, i) => (
+                    <button key={i} onClick={() => sendChat(p)} className="text-sm px-3 py-2 rounded-xl bg-jarvis-card border border-jarvis-border text-jarvis-muted hover:text-jarvis-accent hover:border-jarvis-accent/50 transition-colors">{p}</button>
+                  ))}
+                </div>
+              </div>
+            )}
+            {chatMessages.map((msg, i) => (
+              <div key={i} className={`flex ${msg.role === "user" ? "justify-end" : "justify-start"}`}>
+                <div className={`max-w-[85%] rounded-2xl px-4 py-2.5 text-sm whitespace-pre-wrap ${msg.role === "user" ? "bg-jarvis-accent text-white" : "bg-jarvis-card border border-jarvis-border text-jarvis-text"}`}>
+                  {msg.content}
+                </div>
+              </div>
+            ))}
+            {chatLoading && (
+              <div className="flex justify-start">
+                <div className="bg-jarvis-card border border-jarvis-border rounded-2xl px-4 py-2.5 text-sm text-jarvis-muted">Thinking...</div>
+              </div>
+            )}
+            <div ref={chatEndRef} />
+          </div>
+
+          {/* Mobile suggested prompts — shown when there are messages */}
+          {chatMessages.length > 0 && (
+            <div className="px-3 py-2 border-t border-jarvis-border flex-shrink-0 overflow-x-auto">
+              <div className="flex gap-2 no-scrollbar">
+                {getSuggestedPrompts().map((p, i) => (
+                  <button key={i} onClick={() => sendChat(p)} className="text-xs px-3 py-1.5 rounded-full bg-jarvis-card border border-jarvis-border text-jarvis-muted hover:text-jarvis-accent whitespace-nowrap flex-shrink-0">{p}</button>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {/* Mobile chat input */}
+          <div className="p-3 border-t border-jarvis-border flex-shrink-0 bg-jarvis-card safe-area-bottom">
+            <div className="flex gap-2">
+              <input
+                type="text"
+                value={chatInput}
+                onChange={(e) => setChatInput(e.target.value)}
+                onKeyDown={(e) => e.key === "Enter" && !e.shiftKey && sendChat()}
+                placeholder="Ask JARVIS..."
+                className="flex-1 bg-jarvis-bg border border-jarvis-border rounded-xl px-4 py-3 text-base text-jarvis-text placeholder:text-jarvis-muted focus:outline-none focus:border-jarvis-accent"
+              />
+              {speechSupported && (
+                <button onClick={toggleRecording} disabled={chatLoading} className={`px-4 py-3 rounded-xl text-sm transition-all disabled:opacity-50 ${isRecording ? "bg-jarvis-red text-white animate-[pulse-dot_1s_ease-in-out_infinite]" : "bg-jarvis-border text-jarvis-muted"}`}>
+                  <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z" /><path d="M19 10v2a7 7 0 0 1-14 0v-2" /><line x1="12" y1="19" x2="12" y2="23" /><line x1="8" y1="23" x2="16" y2="23" /></svg>
+                </button>
+              )}
+              <button onClick={() => sendChat()} disabled={chatLoading || !chatInput.trim()} className="px-4 py-3 bg-jarvis-accent text-white rounded-xl text-sm font-semibold hover:bg-jarvis-accent-hover transition-colors disabled:opacity-50">
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><line x1="22" y1="2" x2="11" y2="13" /><polygon points="22 2 15 22 11 13 2 9 22 2" /></svg>
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Floating chat button — mobile only, hidden when chat is open */}
+      {!chatOpen && (
+        <button onClick={() => setChatOpen(true)} className="md:hidden fixed bottom-5 right-5 z-40 w-14 h-14 bg-jarvis-accent rounded-full flex items-center justify-center shadow-lg shadow-jarvis-accent/30 active:scale-95 transition-transform">
+          <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" /></svg>
+        </button>
+      )}
+
       {/* Modal */}
       {modal && (
         <div className="fixed inset-0 modal-backdrop z-50 flex items-center justify-center p-4" onClick={closeModal}>
-          <div onClick={(e) => e.stopPropagation()} className="bg-jarvis-card border border-jarvis-border rounded-xl p-6 max-w-lg w-full animate-[slideUp_0.3s_ease-out] max-h-[80vh] overflow-y-auto">
+          <div onClick={(e) => e.stopPropagation()} className="bg-jarvis-card border border-jarvis-border rounded-xl p-5 md:p-6 max-w-lg w-full animate-[slideUp_0.3s_ease-out] max-h-[80vh] overflow-y-auto">
             <div className="flex items-center justify-between mb-4">
               <h2 className="text-lg font-bold text-white">{modal.title}</h2>
-              <button onClick={closeModal} className="text-jarvis-muted hover:text-white text-xl">×</button>
+              <button onClick={closeModal} className="text-jarvis-muted hover:text-white text-xl p-1">×</button>
             </div>
             <div className="text-sm text-jarvis-text whitespace-pre-wrap mb-4">{modal.body}</div>
             {modal.actions && (
               <div className="flex flex-wrap gap-2">
                 {modal.actions.map((a, i) => (
-                  <button key={i} onClick={a.onClick} className={`px-4 py-2 rounded-lg text-sm transition-colors ${i === 0 ? "bg-jarvis-accent text-white hover:bg-jarvis-accent-hover" : "bg-jarvis-border text-jarvis-text hover:bg-jarvis-accent/20"}`}>
-                    {a.label}
-                  </button>
+                  <button key={i} onClick={a.onClick} className={`px-4 py-2.5 rounded-lg text-sm transition-colors ${i === 0 ? "bg-jarvis-accent text-white hover:bg-jarvis-accent-hover" : "bg-jarvis-border text-jarvis-text hover:bg-jarvis-accent/20"}`}>{a.label}</button>
                 ))}
               </div>
             )}
