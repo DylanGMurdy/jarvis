@@ -102,7 +102,7 @@ const INITIAL_NODES: Node<OrgNodeData>[] = [
     type: "orgNode",
     position: { x: 350, y: 0 },
     data: {
-      label: "Dylan Murdoch",
+      label: "Dylan Murdock",
       role: "CEO / Founder",
       status: "active",
       roleType: "ceo",

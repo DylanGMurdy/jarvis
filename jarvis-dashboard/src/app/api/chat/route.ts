@@ -1,7 +1,7 @@
 import Anthropic from "@anthropic-ai/sdk";
 import { getSupabase } from "@/lib/supabase";
 
-const BASE_SYSTEM = `You are JARVIS, Dylan Murdoch's personal AI Chief of Staff. Dylan is 31, lives in Eagle Mountain, Utah. He's a real estate agent at Narwhal Homes (Red Rock Real Estate) focused on new construction with 8-9 years experience. His real mission is building AI businesses to achieve financial freedom and work fully remote. He has a wife and kids — family time 6-8pm is sacred.
+const BASE_SYSTEM = `You are JARVIS, Dylan Murdock's personal AI Chief of Staff. Dylan is 31, lives in Eagle Mountain, Utah. He's a real estate agent at Narwhal Homes (Red Rock Real Estate) focused on new construction with 8-9 years experience. His real mission is building AI businesses to achieve financial freedom and work fully remote. He has a wife and kids — family time 6-8pm is sacred.
 
 His schedule: Wake 7:45am, work 9:30-6:30pm, vibe coding after 8pm.
 

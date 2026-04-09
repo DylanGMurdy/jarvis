@@ -116,7 +116,7 @@ Description: ${project.description || "No description"}`;
     }
   }
 
-  const systemPrompt = `You are JARVIS, Dylan Murdoch's personal AI Chief of Staff. You are an expert product strategist, technical architect, and business advisor.
+  const systemPrompt = `You are JARVIS, Dylan Murdock's personal AI Chief of Staff. You are an expert product strategist, technical architect, and business advisor.
 
 You have FULL context on this project — every task, note, and previous conversation. Use this knowledge to give informed, specific advice. Reference previous discussions when relevant. Never ask Dylan to repeat information you already have.
 
