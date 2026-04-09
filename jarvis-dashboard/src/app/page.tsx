@@ -22,6 +22,7 @@ import JarvisBrain from "@/components/JarvisBrain";
 import type { MemoryForBrain } from "@/components/JarvisBrain";
 import SpotifyWidget from "@/components/SpotifyWidget";
 import LindyChat from "@/components/LindyChat";
+import VoiceChatInput from "@/components/VoiceChatInput";
 
 ChartJS.register(
   CategoryScale, LinearScale, BarElement, PointElement, LineElement, ArcElement,
@@ -97,9 +98,6 @@ export default function Dashboard() {
   const [moodResponse, setMoodResponse] = useState<string | null>(null);
   const chatEndRef = useRef<HTMLDivElement>(null);
   const [chatOpen, setChatOpen] = useState(false);
-  const [isRecording, setIsRecording] = useState(false);
-  const [speechSupported, setSpeechSupported] = useState(false);
-  const recognitionRef = useRef<SpeechRecognition | null>(null);
 
   // DB-backed state
   const [projects, setProjects] = useState<Project[]>([]);
@@ -145,11 +143,6 @@ export default function Dashboard() {
     }
     loadData();
   }, [fetchMemories]);
-
-  useEffect(() => {
-    const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
-    setSpeechSupported(!!SR);
-  }, []);
 
   useEffect(() => {
     chatEndRef.current?.scrollIntoView({ behavior: "smooth" });
@@ -234,30 +227,6 @@ export default function Dashboard() {
   const toggleTask = (id: number) => {
     setTasks((prev) => prev.map((t) => (t.id === id ? { ...t, done: !t.done } : t)));
   };
-
-  const toggleRecording = useCallback(() => {
-    if (isRecording && recognitionRef.current) {
-      recognitionRef.current.stop();
-      setIsRecording(false);
-      return;
-    }
-    const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
-    if (!SR) return;
-    const recognition = new SR();
-    recognition.lang = "en-US";
-    recognition.interimResults = false;
-    recognition.continuous = false;
-    recognitionRef.current = recognition;
-    recognition.onresult = (event: SpeechRecognitionEvent) => {
-      const transcript = event.results[0][0].transcript;
-      if (transcript.trim()) sendChat(transcript.trim());
-      setIsRecording(false);
-    };
-    recognition.onerror = () => setIsRecording(false);
-    recognition.onend = () => setIsRecording(false);
-    recognition.start();
-    setIsRecording(true);
-  }, [isRecording, sendChat]);
 
   const openModal = (data: ModalData) => setModal(data);
   const closeModal = () => setModal(null);
@@ -953,15 +922,13 @@ export default function Dashboard() {
                 </div>
               </div>
               <div className="p-3 border-t border-jarvis-border">
-                <div className="flex gap-2">
-                  <input type="text" value={chatInput} onChange={(e) => setChatInput(e.target.value)} onKeyDown={(e) => e.key === "Enter" && !e.shiftKey && sendChat()} placeholder="Ask JARVIS..." className="flex-1 bg-jarvis-bg border border-jarvis-border rounded-lg px-3 py-2 text-sm text-jarvis-text placeholder:text-jarvis-muted focus:outline-none focus:border-jarvis-accent" />
-                  {speechSupported && (
-                    <button onClick={toggleRecording} disabled={chatLoading} className={`px-3 py-2 rounded-lg text-sm transition-all disabled:opacity-50 ${isRecording ? "bg-jarvis-red text-white animate-[pulse-dot_1s_ease-in-out_infinite]" : "bg-jarvis-border text-jarvis-muted hover:text-white hover:bg-jarvis-accent/30"}`} title={isRecording ? "Stop recording" : "Voice input"}>
-                      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z" /><path d="M19 10v2a7 7 0 0 1-14 0v-2" /><line x1="12" y1="19" x2="12" y2="23" /><line x1="8" y1="23" x2="16" y2="23" /></svg>
-                    </button>
-                  )}
-                  <button onClick={() => sendChat()} disabled={chatLoading} className="px-3 py-2 bg-jarvis-accent text-white rounded-lg text-sm hover:bg-jarvis-accent-hover transition-colors disabled:opacity-50">Send</button>
-                </div>
+                <VoiceChatInput
+                  value={chatInput}
+                  onChange={setChatInput}
+                  onSend={() => sendChat()}
+                  disabled={chatLoading}
+                  variant="panel"
+                />
               </div>
             </aside>
           )}
@@ -1050,35 +1017,13 @@ export default function Dashboard() {
         )}
 
         <div className="p-3 border-t border-jarvis-border flex-shrink-0 bg-jarvis-card safe-area-bottom">
-          <div className="flex gap-2 items-end">
-            <input
-              type="text"
-              value={chatInput}
-              onChange={(e) => setChatInput(e.target.value)}
-              onKeyDown={(e) => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); sendChat(); } }}
-              placeholder="Ask JARVIS..."
-              autoComplete="off"
-              className="flex-1 bg-jarvis-bg border border-jarvis-border rounded-xl px-4 py-3 text-base text-jarvis-text placeholder:text-jarvis-muted focus:outline-none focus:border-jarvis-accent"
-            />
-            {speechSupported && (
-              <button
-                onTouchEnd={(e) => { e.preventDefault(); toggleRecording(); }}
-                onClick={toggleRecording}
-                disabled={chatLoading}
-                className={`w-12 h-12 rounded-xl flex items-center justify-center flex-shrink-0 transition-all disabled:opacity-50 ${isRecording ? "bg-jarvis-red text-white animate-[pulse-dot_1s_ease-in-out_infinite]" : "bg-jarvis-border text-jarvis-muted"}`}
-              >
-                <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z" /><path d="M19 10v2a7 7 0 0 1-14 0v-2" /><line x1="12" y1="19" x2="12" y2="23" /><line x1="8" y1="23" x2="16" y2="23" /></svg>
-              </button>
-            )}
-            <button
-              onTouchEnd={(e) => { e.preventDefault(); sendChat(); }}
-              onClick={() => sendChat()}
-              disabled={chatLoading || !chatInput.trim()}
-              className="w-12 h-12 bg-jarvis-accent text-white rounded-xl flex items-center justify-center flex-shrink-0 active:bg-jarvis-accent-hover transition-colors disabled:opacity-50"
-            >
-              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><line x1="22" y1="2" x2="11" y2="13" /><polygon points="22 2 15 22 11 13 2 9 22 2" /></svg>
-            </button>
-          </div>
+          <VoiceChatInput
+            value={chatInput}
+            onChange={setChatInput}
+            onSend={() => sendChat()}
+            disabled={chatLoading}
+            variant="full"
+          />
         </div>
       </div>
     )}
@@ -1151,19 +1096,9 @@ export default function Dashboard() {
       </div>
     )}
 
-    {/* Floating buttons — mobile only, outside overflow container */}
+    {/* Floating chat button — mobile only */}
     {!chatOpen && (
-      <div className="md:hidden fixed bottom-5 right-5 z-[55] flex flex-col gap-3">
-        {/* Voice button */}
-        {speechSupported && (
-          <button
-            onTouchEnd={(e) => { e.preventDefault(); if (!chatOpen) { setChatOpen(true); setTimeout(toggleRecording, 300); } }}
-            className="w-14 h-14 bg-jarvis-card border border-jarvis-border rounded-full flex items-center justify-center shadow-lg active:scale-95 transition-transform"
-          >
-            <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#6366f1" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z" /><path d="M19 10v2a7 7 0 0 1-14 0v-2" /><line x1="12" y1="19" x2="12" y2="23" /><line x1="8" y1="23" x2="16" y2="23" /></svg>
-          </button>
-        )}
-        {/* Chat button */}
+      <div className="md:hidden fixed bottom-5 right-5 z-[55]">
         <button
           onTouchEnd={(e) => { e.preventDefault(); setChatOpen(true); }}
           className="w-14 h-14 bg-jarvis-accent rounded-full flex items-center justify-center shadow-lg shadow-jarvis-accent/30 active:scale-95 transition-transform"

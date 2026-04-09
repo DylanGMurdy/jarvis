@@ -14,6 +14,7 @@ import {
 import { Line } from "react-chartjs-2";
 import { api } from "@/lib/api";
 import type { Goal, GoalJournal, ChatMessage } from "@/lib/types";
+import VoiceChatInput from "@/components/VoiceChatInput";
 
 ChartJS.register(CategoryScale, LinearScale, PointElement, LineElement, Filler, Tooltip);
 
@@ -266,11 +267,14 @@ export default function GoalDetailPage({ params }: { params: Promise<{ id: strin
                 ))}
               </div>
             )}
-            <div className="border-t border-[#1e1e2e] p-3 flex gap-2">
-              <input type="text" value={chatInput} onChange={(e) => setChatInput(e.target.value)} onKeyDown={(e) => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); sendChat(); } }} placeholder="Ask JARVIS..." className="flex-1 bg-[#0a0a0f] border border-[#1e1e2e] text-[#e2e8f0] placeholder-[#64748b] px-4 py-2.5 rounded-lg outline-none focus:border-[#6366f1]/50 transition-colors" />
-              <button onClick={() => sendChat()} disabled={!chatInput.trim() || chatLoading} className="px-4 py-2.5 bg-[#6366f1] text-white rounded-lg hover:bg-[#5558e6] disabled:opacity-40 disabled:cursor-not-allowed transition-colors cursor-pointer">
-                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 19V5m0 0l-7 7m7-7l7 7" /></svg>
-              </button>
+            <div className="border-t border-[#1e1e2e] p-3">
+              <VoiceChatInput
+                value={chatInput}
+                onChange={setChatInput}
+                onSend={() => sendChat()}
+                disabled={chatLoading}
+                variant="full"
+              />
             </div>
           </div>
         </section>

@@ -4,6 +4,7 @@ import { use, useState, useEffect, useRef, useCallback } from "react";
 import Link from "next/link";
 import { api } from "@/lib/api";
 import type { Project, ProjectTask, ProjectNote, ChatMessage } from "@/lib/types";
+import VoiceChatInput from "@/components/VoiceChatInput";
 
 const STATUSES: Project["status"][] = ["Idea", "Planning", "Building", "Launched", "Revenue"];
 const TABS = ["Overview", "Tasks", "Notes", "Chat"] as const;
@@ -464,9 +465,15 @@ curl -X POST ${typeof window !== "undefined" ? window.location.origin : ""}/api/
                 )}
                 <div ref={chatEndRef} />
               </div>
-              <div className="flex gap-2 pt-4 border-t border-[#1e1e2e]">
-                <input type="text" value={chatInput} onChange={(e) => setChatInput(e.target.value)} onKeyDown={(e) => e.key === "Enter" && !e.shiftKey && handleSendChat()} placeholder="Ask JARVIS about this project..." className="flex-1 bg-[#12121a] border border-[#1e1e2e] rounded-lg px-4 py-2.5 text-sm text-[#e2e8f0] placeholder-[#64748b] focus:outline-none focus:border-[#6366f1]" disabled={chatLoading} />
-                <button onClick={() => handleSendChat()} disabled={chatLoading || !chatInput.trim()} className="px-4 py-2.5 bg-[#6366f1] hover:bg-[#5558e6] disabled:opacity-50 text-white text-sm font-medium rounded-lg">Send</button>
+              <div className="pt-4 border-t border-[#1e1e2e]">
+                <VoiceChatInput
+                  value={chatInput}
+                  onChange={setChatInput}
+                  onSend={() => handleSendChat()}
+                  disabled={chatLoading}
+                  placeholder="Ask JARVIS about this project..."
+                  variant="full"
+                />
               </div>
             </div>
           )}
