@@ -12,6 +12,7 @@
     "@anthropic-ai/sdk": "^0.86.1",
     "@notionhq/client": "^5.17.0",
     "@supabase/supabase-js": "^2.103.0",
+    "@xyflow/react": "^12.10.2",
     "chart.js": "^4.5.1",
     "next": "16.2.3",
     "pg": "^8.20.0",
