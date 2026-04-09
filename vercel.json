@@ -2,5 +2,6 @@
   "buildCommand": "cd jarvis-dashboard && npm install && npm run build",
   "outputDirectory": "jarvis-dashboard/.next",
   "installCommand": "cd jarvis-dashboard && npm install",
-  "framework": "nextjs"
+  "framework": "nextjs",
+  "rootDirectory": "jarvis-dashboard"
 }

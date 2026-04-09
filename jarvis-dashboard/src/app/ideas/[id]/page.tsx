@@ -1,8 +1,8 @@
 "use client";
 
-import { use, useState, useEffect, useRef } from "react";
+import { use, useState, useEffect, useRef, useCallback } from "react";
 import Link from "next/link";
-import { db } from "@/lib/db";
+import { api } from "@/lib/api";
 import type { Project, ProjectTask, ProjectNote, ChatMessage } from "@/lib/types";
 
 // ─── Constants ───────────────────────────────────────────
@@ -57,66 +57,69 @@ export default function ProjectDetailPage({
   const chatEndRef = useRef<HTMLDivElement>(null);
 
   // ─── Load Data ───────────────────────────────────────────
-  function loadData() {
-    const p = db.projects.get(id);
+  const loadData = useCallback(async () => {
+    const [p, t, n] = await Promise.all([
+      api.projects.get(id),
+      api.projectTasks.list(id),
+      api.projectNotes.list(id),
+    ]);
     if (p) {
       setProject(p);
       setEditDesc(p.description);
       setProgressInput(String(p.progress));
-      setTasks(db.projectTasks.list(id));
-      setNotes(db.projectNotes.list(id));
+      setTasks(t);
+      setNotes(n);
     } else {
       setProject(null);
     }
     setLoading(false);
-  }
+  }, [id]);
 
   useEffect(() => {
     loadData();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [id]);
+  }, [loadData]);
 
   useEffect(() => {
     chatEndRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [chatMessages]);
 
   // ─── Handlers ────────────────────────────────────────────
-  function handleStatusChange(status: Project["status"]) {
-    db.projects.update(id, { status });
+  async function handleStatusChange(status: Project["status"]) {
+    await api.projects.update(id, { status });
     loadData();
   }
 
-  function handleDescSave() {
+  async function handleDescSave() {
     if (project && editDesc !== project.description) {
-      db.projects.update(id, { description: editDesc });
+      await api.projects.update(id, { description: editDesc });
       loadData();
     }
   }
 
-  function handleProgressSave() {
+  async function handleProgressSave() {
     const val = Math.min(100, Math.max(0, parseInt(progressInput) || 0));
-    db.projects.update(id, { progress: val });
+    await api.projects.update(id, { progress: val });
     setEditingProgress(false);
     loadData();
   }
 
-  function handleAddTask() {
+  async function handleAddTask() {
     const title = newTaskTitle.trim();
     if (!title) return;
-    db.projectTasks.create({ project_id: id, title, done: false });
+    await api.projectTasks.create(id, title);
     setNewTaskTitle("");
     loadData();
   }
 
-  function handleToggleTask(taskId: string, done: boolean) {
-    db.projectTasks.update(taskId, { done: !done });
+  async function handleToggleTask(taskId: string, done: boolean) {
+    await api.projectTasks.update(id, taskId, { done: !done });
     loadData();
   }
 
-  function handleSaveNote() {
+  async function handleSaveNote() {
     const content = newNoteContent.trim();
     if (!content) return;
-    db.projectNotes.create({ project_id: id, content });
+    await api.projectNotes.create(id, content);
     setNewNoteContent("");
     loadData();
   }
@@ -248,13 +251,11 @@ export default function ProjectDetailPage({
         {/* ── Status Pipeline ────────────────────────────── */}
         <div className="mb-8 px-4">
           <div className="flex items-center justify-between relative">
-            {/* Connecting line */}
             <div className="absolute top-4 left-0 right-0 h-0.5 bg-[#1e1e2e]" />
             <div
               className="absolute top-4 left-0 h-0.5 bg-[#6366f1] transition-all duration-500"
               style={{ width: `${(statusIdx / (STATUSES.length - 1)) * 100}%` }}
             />
-
             {STATUSES.map((s, i) => (
               <div key={s} className="flex flex-col items-center relative z-10">
                 <div
@@ -297,11 +298,9 @@ export default function ProjectDetailPage({
 
         {/* ── Tab Content ────────────────────────────────── */}
         <div className="min-h-[500px]">
-          {/* ── Overview Tab ─────────────────────────────── */}
           {activeTab === "Overview" && (
             <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
               <div className="lg:col-span-2 space-y-6">
-                {/* Description */}
                 <div className="bg-[#12121a] rounded-xl border border-[#1e1e2e] p-6">
                   <h3 className="text-sm font-medium text-[#64748b] mb-3">Description</h3>
                   <textarea
@@ -312,54 +311,26 @@ export default function ProjectDetailPage({
                     className="w-full bg-[#0a0a0f] border border-[#1e1e2e] rounded-lg p-3 text-[#e2e8f0] text-sm resize-none focus:outline-none focus:border-[#6366f1] transition-colors"
                   />
                 </div>
-
-                {/* Revenue Goal */}
                 <div className="bg-[#12121a] rounded-xl border border-[#1e1e2e] p-6">
                   <h3 className="text-sm font-medium text-[#64748b] mb-2">Revenue Goal</h3>
                   <p className="text-lg font-semibold text-[#e2e8f0]">{project.revenue_goal}</p>
                 </div>
-
-                {/* Progress */}
                 <div className="bg-[#12121a] rounded-xl border border-[#1e1e2e] p-6">
                   <div className="flex items-center justify-between mb-3">
                     <h3 className="text-sm font-medium text-[#64748b]">Progress</h3>
                     {editingProgress ? (
                       <div className="flex items-center gap-2">
-                        <input
-                          type="number"
-                          min={0}
-                          max={100}
-                          value={progressInput}
-                          onChange={(e) => setProgressInput(e.target.value)}
-                          onKeyDown={(e) => e.key === "Enter" && handleProgressSave()}
-                          className="w-16 bg-[#0a0a0f] border border-[#1e1e2e] rounded px-2 py-1 text-sm text-[#e2e8f0] focus:outline-none focus:border-[#6366f1]"
-                          autoFocus
-                        />
-                        <button
-                          onClick={handleProgressSave}
-                          className="text-xs text-[#6366f1] hover:text-[#818cf8] transition-colors"
-                        >
-                          Save
-                        </button>
+                        <input type="number" min={0} max={100} value={progressInput} onChange={(e) => setProgressInput(e.target.value)} onKeyDown={(e) => e.key === "Enter" && handleProgressSave()} className="w-16 bg-[#0a0a0f] border border-[#1e1e2e] rounded px-2 py-1 text-sm text-[#e2e8f0] focus:outline-none focus:border-[#6366f1]" autoFocus />
+                        <button onClick={handleProgressSave} className="text-xs text-[#6366f1] hover:text-[#818cf8] transition-colors">Save</button>
                       </div>
                     ) : (
-                      <button
-                        onClick={() => setEditingProgress(true)}
-                        className="text-sm text-[#6366f1] hover:text-[#818cf8] transition-colors"
-                      >
-                        {project.progress}%
-                      </button>
+                      <button onClick={() => setEditingProgress(true)} className="text-sm text-[#6366f1] hover:text-[#818cf8] transition-colors">{project.progress}%</button>
                     )}
                   </div>
                   <div className="w-full h-3 bg-[#1e1e2e] rounded-full overflow-hidden">
-                    <div
-                      className="h-full bg-[#6366f1] rounded-full transition-all duration-500"
-                      style={{ width: `${project.progress}%` }}
-                    />
+                    <div className="h-full bg-[#6366f1] rounded-full transition-all duration-500" style={{ width: `${project.progress}%` }} />
                   </div>
                 </div>
-
-                {/* Next 3 Actions */}
                 <div className="bg-[#12121a] rounded-xl border border-[#1e1e2e] p-6">
                   <h3 className="text-sm font-medium text-[#64748b] mb-3">Next 3 Actions</h3>
                   {nextActions.length === 0 ? (
@@ -368,9 +339,7 @@ export default function ProjectDetailPage({
                     <ul className="space-y-2">
                       {nextActions.map((t, i) => (
                         <li key={t.id} className="flex items-center gap-3 text-sm">
-                          <span className="w-5 h-5 rounded-full bg-[#6366f1]/20 text-[#6366f1] flex items-center justify-center text-xs font-bold">
-                            {i + 1}
-                          </span>
+                          <span className="w-5 h-5 rounded-full bg-[#6366f1]/20 text-[#6366f1] flex items-center justify-center text-xs font-bold">{i + 1}</span>
                           <span>{t.title}</span>
                         </li>
                       ))}
@@ -378,94 +347,39 @@ export default function ProjectDetailPage({
                   )}
                 </div>
               </div>
-
-              {/* Key Metrics */}
               <div className="space-y-6">
                 <div className="bg-[#12121a] rounded-xl border border-[#1e1e2e] p-6">
                   <h3 className="text-sm font-medium text-[#64748b] mb-4">Key Metrics</h3>
                   <div className="space-y-4">
-                    <div>
-                      <span className="text-xs text-[#64748b]">Status</span>
-                      <p className="text-sm font-medium">{project.status}</p>
-                    </div>
-                    <div>
-                      <span className="text-xs text-[#64748b]">Grade</span>
-                      <p className="text-sm font-medium">{project.grade}</p>
-                    </div>
-                    <div>
-                      <span className="text-xs text-[#64748b]">Days Since Created</span>
-                      <p className="text-sm font-medium">{daysSinceCreated}</p>
-                    </div>
-                    <div>
-                      <span className="text-xs text-[#64748b]">Tasks Completed</span>
-                      <p className="text-sm font-medium">
-                        {doneTasks} / {tasks.length}
-                      </p>
-                    </div>
+                    <div><span className="text-xs text-[#64748b]">Status</span><p className="text-sm font-medium">{project.status}</p></div>
+                    <div><span className="text-xs text-[#64748b]">Grade</span><p className="text-sm font-medium">{project.grade}</p></div>
+                    <div><span className="text-xs text-[#64748b]">Days Since Created</span><p className="text-sm font-medium">{daysSinceCreated}</p></div>
+                    <div><span className="text-xs text-[#64748b]">Tasks Completed</span><p className="text-sm font-medium">{doneTasks} / {tasks.length}</p></div>
                   </div>
                 </div>
               </div>
             </div>
           )}
 
-          {/* ── Tasks Tab ────────────────────────────────── */}
           {activeTab === "Tasks" && (
             <div className="space-y-4">
               <div className="flex items-center justify-between">
-                <p className="text-sm text-[#64748b]">
-                  {doneTasks} / {tasks.length} completed
-                </p>
+                <p className="text-sm text-[#64748b]">{doneTasks} / {tasks.length} completed</p>
               </div>
-
-              {/* Add Task */}
               <div className="flex gap-2">
-                <input
-                  type="text"
-                  value={newTaskTitle}
-                  onChange={(e) => setNewTaskTitle(e.target.value)}
-                  onKeyDown={(e) => e.key === "Enter" && handleAddTask()}
-                  placeholder="Add a new task..."
-                  className="flex-1 bg-[#12121a] border border-[#1e1e2e] rounded-lg px-4 py-2.5 text-sm text-[#e2e8f0] placeholder-[#64748b] focus:outline-none focus:border-[#6366f1] transition-colors"
-                />
-                <button
-                  onClick={handleAddTask}
-                  className="px-4 py-2.5 bg-[#6366f1] hover:bg-[#5558e6] text-white text-sm font-medium rounded-lg transition-colors"
-                >
-                  Add Task
-                </button>
+                <input type="text" value={newTaskTitle} onChange={(e) => setNewTaskTitle(e.target.value)} onKeyDown={(e) => e.key === "Enter" && handleAddTask()} placeholder="Add a new task..." className="flex-1 bg-[#12121a] border border-[#1e1e2e] rounded-lg px-4 py-2.5 text-sm text-[#e2e8f0] placeholder-[#64748b] focus:outline-none focus:border-[#6366f1] transition-colors" />
+                <button onClick={handleAddTask} className="px-4 py-2.5 bg-[#6366f1] hover:bg-[#5558e6] text-white text-sm font-medium rounded-lg transition-colors">Add Task</button>
               </div>
-
-              {/* Task List */}
               <div className="space-y-2">
                 {tasks.length === 0 ? (
                   <p className="text-[#64748b] text-sm text-center py-8">No tasks yet. Add your first task above.</p>
                 ) : (
                   tasks.map((task) => (
-                    <div
-                      key={task.id}
-                      onClick={() => handleToggleTask(task.id, task.done)}
-                      className="flex items-center gap-3 bg-[#12121a] border border-[#1e1e2e] rounded-lg px-4 py-3 cursor-pointer hover:border-[#6366f1]/30 transition-colors"
-                    >
-                      <div
-                        className={`w-5 h-5 rounded border-2 flex items-center justify-center transition-colors ${
-                          task.done
-                            ? "bg-[#6366f1] border-[#6366f1]"
-                            : "border-[#64748b] hover:border-[#6366f1]"
-                        }`}
-                      >
-                        {task.done && (
-                          <svg width="12" height="12" viewBox="0 0 12 12" fill="none">
-                            <path d="M2 6l3 3 5-5" stroke="white" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
-                          </svg>
-                        )}
+                    <div key={task.id} onClick={() => handleToggleTask(task.id, task.done)} className="flex items-center gap-3 bg-[#12121a] border border-[#1e1e2e] rounded-lg px-4 py-3 cursor-pointer hover:border-[#6366f1]/30 transition-colors">
+                      <div className={`w-5 h-5 rounded border-2 flex items-center justify-center transition-colors ${task.done ? "bg-[#6366f1] border-[#6366f1]" : "border-[#64748b] hover:border-[#6366f1]"}`}>
+                        {task.done && <svg width="12" height="12" viewBox="0 0 12 12" fill="none"><path d="M2 6l3 3 5-5" stroke="white" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" /></svg>}
                       </div>
-                      <span
-                        className={`text-sm transition-colors ${
-                          task.done ? "line-through text-[#64748b]" : "text-[#e2e8f0]"
-                        }`}
-                      >
-                        {task.title}
-                      </span>
+                      <span className={`text-sm transition-colors ${task.done ? "line-through text-[#64748b]" : "text-[#e2e8f0]"}`}>{task.title}</span>
                     </div>
                   ))
                 )}
@@ -473,121 +387,51 @@ export default function ProjectDetailPage({
             </div>
           )}
 
-          {/* ── Notes Tab ────────────────────────────────── */}
           {activeTab === "Notes" && (
             <div className="space-y-4">
-              {/* Add Note */}
               <div className="bg-[#12121a] rounded-xl border border-[#1e1e2e] p-4">
-                <textarea
-                  value={newNoteContent}
-                  onChange={(e) => setNewNoteContent(e.target.value)}
-                  placeholder="Write a note..."
-                  rows={3}
-                  className="w-full bg-[#0a0a0f] border border-[#1e1e2e] rounded-lg p-3 text-sm text-[#e2e8f0] placeholder-[#64748b] resize-none focus:outline-none focus:border-[#6366f1] transition-colors mb-3"
-                />
-                <button
-                  onClick={handleSaveNote}
-                  className="px-4 py-2 bg-[#6366f1] hover:bg-[#5558e6] text-white text-sm font-medium rounded-lg transition-colors"
-                >
-                  Save Note
-                </button>
+                <textarea value={newNoteContent} onChange={(e) => setNewNoteContent(e.target.value)} placeholder="Write a note..." rows={3} className="w-full bg-[#0a0a0f] border border-[#1e1e2e] rounded-lg p-3 text-sm text-[#e2e8f0] placeholder-[#64748b] resize-none focus:outline-none focus:border-[#6366f1] transition-colors mb-3" />
+                <button onClick={handleSaveNote} className="px-4 py-2 bg-[#6366f1] hover:bg-[#5558e6] text-white text-sm font-medium rounded-lg transition-colors">Save Note</button>
               </div>
-
-              {/* Notes List */}
               {sortedNotes.length === 0 ? (
                 <p className="text-[#64748b] text-sm text-center py-8">No notes yet. Write your first note above.</p>
               ) : (
                 sortedNotes.map((note) => (
-                  <div
-                    key={note.id}
-                    className="bg-[#12121a] rounded-xl border border-[#1e1e2e] p-4"
-                  >
+                  <div key={note.id} className="bg-[#12121a] rounded-xl border border-[#1e1e2e] p-4">
                     <p className="text-sm text-[#e2e8f0] whitespace-pre-wrap">{note.content}</p>
-                    <p className="text-xs text-[#64748b] mt-3">
-                      {new Date(note.created_at).toLocaleDateString("en-US", {
-                        month: "short",
-                        day: "numeric",
-                        year: "numeric",
-                        hour: "numeric",
-                        minute: "2-digit",
-                      })}
-                    </p>
+                    <p className="text-xs text-[#64748b] mt-3">{new Date(note.created_at).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric", hour: "numeric", minute: "2-digit" })}</p>
                   </div>
                 ))
               )}
             </div>
           )}
 
-          {/* ── Chat Tab ─────────────────────────────────── */}
           {activeTab === "Chat" && (
             <div className="flex flex-col h-[600px]">
-              {/* Messages */}
               <div className="flex-1 overflow-y-auto space-y-4 mb-4 pr-2">
                 {chatMessages.length === 0 && (
                   <div className="space-y-3">
-                    <p className="text-sm text-[#64748b] mb-4">
-                      Chat with AI about this project. Try a prompt:
-                    </p>
+                    <p className="text-sm text-[#64748b] mb-4">Chat with AI about this project. Try a prompt:</p>
                     <div className="flex flex-wrap gap-2">
                       {SUGGESTED_PROMPTS.map((prompt) => (
-                        <button
-                          key={prompt}
-                          onClick={() => handleSendChat(prompt)}
-                          className="px-3 py-2 bg-[#12121a] border border-[#1e1e2e] rounded-lg text-sm text-[#e2e8f0] hover:border-[#6366f1]/50 hover:bg-[#6366f1]/5 transition-colors"
-                        >
-                          {prompt}
-                        </button>
+                        <button key={prompt} onClick={() => handleSendChat(prompt)} className="px-3 py-2 bg-[#12121a] border border-[#1e1e2e] rounded-lg text-sm text-[#e2e8f0] hover:border-[#6366f1]/50 hover:bg-[#6366f1]/5 transition-colors">{prompt}</button>
                       ))}
                     </div>
                   </div>
                 )}
-
                 {chatMessages.map((msg, i) => (
-                  <div
-                    key={i}
-                    className={`flex ${msg.role === "user" ? "justify-end" : "justify-start"}`}
-                  >
-                    <div
-                      className={`max-w-[80%] rounded-xl px-4 py-3 text-sm whitespace-pre-wrap ${
-                        msg.role === "user"
-                          ? "bg-[#6366f1] text-white"
-                          : "bg-[#1e1e2e] text-[#e2e8f0]"
-                      }`}
-                    >
-                      {msg.content}
-                    </div>
+                  <div key={i} className={`flex ${msg.role === "user" ? "justify-end" : "justify-start"}`}>
+                    <div className={`max-w-[80%] rounded-xl px-4 py-3 text-sm whitespace-pre-wrap ${msg.role === "user" ? "bg-[#6366f1] text-white" : "bg-[#1e1e2e] text-[#e2e8f0]"}`}>{msg.content}</div>
                   </div>
                 ))}
-
                 {chatLoading && (
-                  <div className="flex justify-start">
-                    <div className="bg-[#1e1e2e] rounded-xl px-4 py-3 text-sm text-[#64748b]">
-                      Thinking...
-                    </div>
-                  </div>
+                  <div className="flex justify-start"><div className="bg-[#1e1e2e] rounded-xl px-4 py-3 text-sm text-[#64748b]">Thinking...</div></div>
                 )}
-
                 <div ref={chatEndRef} />
               </div>
-
-              {/* Chat Input */}
               <div className="flex gap-2 pt-4 border-t border-[#1e1e2e]">
-                <input
-                  type="text"
-                  value={chatInput}
-                  onChange={(e) => setChatInput(e.target.value)}
-                  onKeyDown={(e) => e.key === "Enter" && !e.shiftKey && handleSendChat()}
-                  placeholder="Ask about this project..."
-                  className="flex-1 bg-[#12121a] border border-[#1e1e2e] rounded-lg px-4 py-2.5 text-sm text-[#e2e8f0] placeholder-[#64748b] focus:outline-none focus:border-[#6366f1] transition-colors"
-                  disabled={chatLoading}
-                />
-                <button
-                  onClick={() => handleSendChat()}
-                  disabled={chatLoading || !chatInput.trim()}
-                  className="px-4 py-2.5 bg-[#6366f1] hover:bg-[#5558e6] disabled:opacity-50 disabled:cursor-not-allowed text-white text-sm font-medium rounded-lg transition-colors"
-                >
-                  Send
-                </button>
+                <input type="text" value={chatInput} onChange={(e) => setChatInput(e.target.value)} onKeyDown={(e) => e.key === "Enter" && !e.shiftKey && handleSendChat()} placeholder="Ask about this project..." className="flex-1 bg-[#12121a] border border-[#1e1e2e] rounded-lg px-4 py-2.5 text-sm text-[#e2e8f0] placeholder-[#64748b] focus:outline-none focus:border-[#6366f1] transition-colors" disabled={chatLoading} />
+                <button onClick={() => handleSendChat()} disabled={chatLoading || !chatInput.trim()} className="px-4 py-2.5 bg-[#6366f1] hover:bg-[#5558e6] disabled:opacity-50 disabled:cursor-not-allowed text-white text-sm font-medium rounded-lg transition-colors">Send</button>
               </div>
             </div>
           )}

@@ -57,10 +57,21 @@ export interface GoalJournal {
   created_at: string;
 }
 
+export type MemoryCategory =
+  | "personal"
+  | "business"
+  | "health"
+  | "goals"
+  | "relationships"
+  | "preferences"
+  | "ideas";
+
 export interface Memory {
   id: string;
-  content: string;
-  tags: string[];
+  fact: string;
+  category: MemoryCategory;
+  source: string;
+  confidence: number;
   created_at: string;
 }
 

@@ -1,23 +1,12 @@
-interface LindyUpdate {
-  id: string;
-  summary: string;
-  emails_handled: number;
-  tasks_completed: number;
-  flags: string[];
-  raw_payload: Record<string, unknown>;
-  created_at: string;
-}
-
-// In-memory store — persists across requests within the same serverless instance.
-// For durable storage, replace with a database (Vercel KV, Supabase, etc.)
-const updates: LindyUpdate[] = [];
+import { getSupabase } from "@/lib/supabase";
 
 export async function POST(request: Request) {
+  const sb = getSupabase();
+
   try {
     const body = await request.json();
 
-    const update: LindyUpdate = {
-      id: crypto.randomUUID(),
+    const update = {
       summary: body.summary || "",
       emails_handled: body.emails_handled || 0,
       tasks_completed: body.tasks_completed || 0,
@@ -26,10 +15,23 @@ export async function POST(request: Request) {
       created_at: new Date().toISOString(),
     };
 
-    updates.push(update);
-    console.log("[Lindy update] Saved:", update.summary.slice(0, 80));
+    if (sb) {
+      const { data, error } = await sb
+        .from("lindy_updates")
+        .insert(update)
+        .select()
+        .single();
 
-    return Response.json({ ok: true, id: update.id });
+      if (error) {
+        console.log("[Lindy update] Supabase error:", error.message);
+        return Response.json({ error: error.message }, { status: 500 });
+      }
+
+      return Response.json({ ok: true, id: data.id });
+    }
+
+    // Fallback if Supabase not configured
+    return Response.json({ ok: true, id: crypto.randomUUID(), warning: "Supabase not configured — update not persisted" });
   } catch (err) {
     console.log("[Lindy update] Error:", err);
     return Response.json({ error: "Invalid payload" }, { status: 400 });
@@ -37,6 +39,26 @@ export async function POST(request: Request) {
 }
 
 export async function GET() {
-  const latest = updates.length > 0 ? updates[updates.length - 1] : null;
-  return Response.json({ latest, total: updates.length });
+  const sb = getSupabase();
+
+  if (sb) {
+    const { data, error } = await sb
+      .from("lindy_updates")
+      .select("*")
+      .order("created_at", { ascending: false })
+      .limit(1);
+
+    const { count } = await sb
+      .from("lindy_updates")
+      .select("*", { count: "exact", head: true });
+
+    if (error) return Response.json({ latest: null, total: 0 });
+
+    return Response.json({
+      latest: data && data.length > 0 ? data[0] : null,
+      total: count || 0,
+    });
+  }
+
+  return Response.json({ latest: null, total: 0 });
 }

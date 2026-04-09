@@ -1,12 +1,11 @@
 "use client";
 
-import { useRef, useEffect, useCallback } from "react";
+import { useRef, useEffect, useCallback, useMemo } from "react";
 
 interface BrainNode {
   id: string;
   label: string;
-  type: "projects" | "goals" | "people" | "tools" | "concepts";
-  projectId?: string;
+  type: "personal" | "business" | "health" | "goals" | "relationships" | "preferences" | "ideas" | "core";
   x: number;
   y: number;
   vx: number;
@@ -17,6 +16,8 @@ interface BrainNode {
   freqY: number;
   baseX: number;
   baseY: number;
+  isNew?: boolean;
+  spawnTime?: number;
 }
 
 interface FiringEdge {
@@ -27,89 +28,35 @@ interface FiringEdge {
   color: string;
 }
 
+export interface MemoryForBrain {
+  id: string;
+  fact: string;
+  category: string;
+  created_at: string;
+}
+
 const CATEGORY_COLORS: Record<string, string> = {
-  projects: "#22c55e",
+  personal: "#3b82f6",
+  business: "#22c55e",
+  health: "#ef4444",
   goals: "#eab308",
-  people: "#3b82f6",
-  tools: "#a855f7",
-  concepts: "#06b6d4",
+  relationships: "#ec4899",
+  preferences: "#a855f7",
+  ideas: "#06b6d4",
+  core: "#6366f1",
 };
 
-const NODE_DATA: Omit<BrainNode, "x" | "y" | "vx" | "vy" | "phase" | "freqX" | "freqY" | "baseX" | "baseY">[] = [
-  // projects
-  { id: "ai-lead-nurture", label: "AI Lead Nurture", type: "projects", projectId: "proj-1", radius: 22 },
-  { id: "jarvis-saas", label: "Jarvis SaaS", type: "projects", projectId: "proj-2", radius: 22 },
-  { id: "buyer-chatbot", label: "Buyer Chatbot", type: "projects", projectId: "proj-3", radius: 22 },
-  { id: "narwhal-ops", label: "Narwhal Ops", type: "projects", projectId: "proj-4", radius: 22 },
-  { id: "listing-gen", label: "Listing Gen", type: "projects", projectId: "proj-5", radius: 22 },
-  // goals
-  { id: "launch-product", label: "Launch Product", type: "goals", radius: 20 },
-  { id: "master-tools", label: "Master Tools", type: "goals", radius: 20 },
-  { id: "1k-revenue", label: "$1k/mo Revenue", type: "goals", radius: 20 },
-  { id: "automate-ops", label: "Automate Ops", type: "goals", radius: 20 },
-  // people
-  { id: "narwhal-team", label: "Narwhal Team", type: "people", radius: 18 },
-  { id: "family", label: "Family", type: "people", radius: 18 },
-  // tools
-  { id: "claude", label: "Claude", type: "tools", radius: 18 },
-  { id: "gmail", label: "Gmail", type: "tools", radius: 18 },
-  { id: "lindy", label: "Lindy", type: "tools", radius: 18 },
-  { id: "nextjs", label: "Next.js", type: "tools", radius: 18 },
-  // concepts
-  { id: "ai", label: "AI", type: "concepts", radius: 24 },
-  { id: "real-estate", label: "Real Estate", type: "concepts", radius: 22 },
-  { id: "financial-freedom", label: "Financial Freedom", type: "concepts", radius: 22 },
-  { id: "remote-work", label: "Remote Work", type: "concepts", radius: 20 },
-];
-
-const EDGES: [string, string][] = [
-  // AI Lead Nurture
-  ["ai-lead-nurture", "ai"],
-  ["ai-lead-nurture", "real-estate"],
-  ["ai-lead-nurture", "claude"],
-  ["ai-lead-nurture", "launch-product"],
-  ["ai-lead-nurture", "1k-revenue"],
-  // Jarvis SaaS
-  ["jarvis-saas", "ai"],
-  ["jarvis-saas", "claude"],
-  ["jarvis-saas", "1k-revenue"],
-  ["jarvis-saas", "financial-freedom"],
-  // Buyer Chatbot
-  ["buyer-chatbot", "ai"],
-  ["buyer-chatbot", "real-estate"],
-  ["buyer-chatbot", "claude"],
-  // Narwhal Ops
-  ["narwhal-ops", "real-estate"],
-  ["narwhal-ops", "narwhal-team"],
-  ["narwhal-ops", "automate-ops"],
-  ["narwhal-ops", "gmail"],
-  ["narwhal-ops", "lindy"],
-  // Listing Gen
-  ["listing-gen", "ai"],
-  ["listing-gen", "real-estate"],
-  ["listing-gen", "claude"],
-  // Launch Product
-  ["launch-product", "1k-revenue"],
-  ["launch-product", "financial-freedom"],
-  ["launch-product", "ai"],
-  // Master Tools
-  ["master-tools", "claude"],
-  ["master-tools", "nextjs"],
-  ["master-tools", "ai"],
-  // $1k/mo Revenue
-  ["1k-revenue", "financial-freedom"],
-  ["1k-revenue", "remote-work"],
-  // Automate Ops
-  ["automate-ops", "narwhal-team"],
-  ["automate-ops", "gmail"],
-  ["automate-ops", "lindy"],
-  // Family
-  ["family", "remote-work"],
-  ["family", "financial-freedom"],
+// Core nodes that always exist (the brain's foundation)
+const CORE_NODES: { id: string; label: string; type: "core" }[] = [
+  { id: "core-dylan", label: "Dylan", type: "core" },
+  { id: "core-jarvis", label: "JARVIS", type: "core" },
+  { id: "core-ai", label: "AI", type: "core" },
+  { id: "core-re", label: "Real Estate", type: "core" },
 ];
 
 interface JarvisBrainProps {
-  onNodeClick?: (node: { id: string; type: string; projectId?: string }) => void;
+  memories?: MemoryForBrain[];
+  onNodeClick?: (node: { id: string; type: string }) => void;
 }
 
 function hexToRgb(hex: string): { r: number; g: number; b: number } {
@@ -119,34 +66,180 @@ function hexToRgb(hex: string): { r: number; g: number; b: number } {
     : { r: 255, g: 255, b: 255 };
 }
 
-export default function JarvisBrain({ onNodeClick }: JarvisBrainProps) {
+function truncateLabel(text: string, maxLen: number = 18): string {
+  if (text.length <= maxLen) return text;
+  return text.slice(0, maxLen - 1) + "\u2026";
+}
+
+export default function JarvisBrain({ memories = [], onNodeClick }: JarvisBrainProps) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
   const nodesRef = useRef<BrainNode[]>([]);
+  const edgesRef = useRef<[number, number][]>([]);
   const hoveredNodeRef = useRef<number>(-1);
-  const mousePosRef = useRef<{ x: number; y: number }>({ x: 0, y: 0 });
   const firingsRef = useRef<FiringEdge[]>([]);
   const lastFireTimeRef = useRef<number>(0);
   const nextFireDelayRef = useRef<number>(2000);
   const animFrameRef = useRef<number>(0);
   const sizeRef = useRef<{ w: number; h: number }>({ w: 800, h: 400 });
   const dprRef = useRef<number>(1);
-  const initializedRef = useRef(false);
+  const prevMemoryCountRef = useRef<number>(0);
 
-  const initNodes = useCallback((w: number, h: number) => {
+  // Build nodes from memories + core nodes
+  const nodeData = useMemo(() => {
+    const nodes: { id: string; label: string; type: BrainNode["type"]; radius: number }[] = [];
+
+    // Core nodes in center
+    for (const core of CORE_NODES) {
+      nodes.push({ ...core, radius: 26 });
+    }
+
+    // Category hub nodes
+    const categories = new Set(memories.map((m) => m.category));
+    for (const cat of categories) {
+      nodes.push({
+        id: `cat-${cat}`,
+        label: cat.charAt(0).toUpperCase() + cat.slice(1),
+        type: cat as BrainNode["type"],
+        radius: 20,
+      });
+    }
+
+    // Individual memory nodes (limit to 60 for performance)
+    const recentMemories = memories.slice(0, 60);
+    for (const mem of recentMemories) {
+      nodes.push({
+        id: `mem-${mem.id}`,
+        label: truncateLabel(mem.fact),
+        type: mem.category as BrainNode["type"],
+        radius: 12 + Math.min(mem.fact.length / 20, 4),
+      });
+    }
+
+    return nodes;
+  }, [memories]);
+
+  // Build edges
+  const edgeData = useMemo(() => {
+    const edges: [string, string][] = [];
+    const nodeIds = new Set(nodeData.map((n) => n.id));
+
+    // Connect core nodes to each other
+    for (let i = 0; i < CORE_NODES.length; i++) {
+      for (let j = i + 1; j < CORE_NODES.length; j++) {
+        edges.push([CORE_NODES[i].id, CORE_NODES[j].id]);
+      }
+    }
+
+    // Connect category hubs to core
+    const categories = new Set(memories.map((m) => m.category));
+    for (const cat of categories) {
+      const catId = `cat-${cat}`;
+      if (!nodeIds.has(catId)) continue;
+      // Connect to most relevant core
+      if (cat === "business" || cat === "ideas") {
+        edges.push([catId, "core-ai"]);
+        edges.push([catId, "core-re"]);
+      } else if (cat === "relationships" || cat === "personal") {
+        edges.push([catId, "core-dylan"]);
+      } else if (cat === "goals") {
+        edges.push([catId, "core-dylan"]);
+        edges.push([catId, "core-ai"]);
+      } else {
+        edges.push([catId, "core-jarvis"]);
+      }
+    }
+
+    // Connect memories to their category hub
+    const recentMemories = memories.slice(0, 60);
+    for (const mem of recentMemories) {
+      const catId = `cat-${mem.category}`;
+      const memId = `mem-${mem.id}`;
+      if (nodeIds.has(catId) && nodeIds.has(memId)) {
+        edges.push([memId, catId]);
+      }
+    }
+
+    // Convert to index pairs
+    const idxMap = new Map<string, number>();
+    nodeData.forEach((n, i) => idxMap.set(n.id, i));
+
+    return edges
+      .filter(([a, b]) => idxMap.has(a) && idxMap.has(b))
+      .map(([a, b]) => [idxMap.get(a)!, idxMap.get(b)!] as [number, number]);
+  }, [nodeData, memories]);
+
+  // Rebuild positioned nodes when nodeData changes
+  useEffect(() => {
+    const { w, h } = sizeRef.current;
+    if (w === 0 || h === 0) return;
+
     const cx = w / 2;
     const cy = h / 2;
-    const count = NODE_DATA.length;
-    const radiusSpread = Math.min(w, h) * 0.35;
+    const now = performance.now();
+    const isGrowing = nodeData.length > prevMemoryCountRef.current;
 
-    nodesRef.current = NODE_DATA.map((nd, i) => {
-      const angle = (i / count) * Math.PI * 2 - Math.PI / 2;
-      const jitter = (Math.random() - 0.5) * radiusSpread * 0.3;
-      const r = radiusSpread + jitter;
-      const x = cx + Math.cos(angle) * r;
-      const y = cy + Math.sin(angle) * r;
+    const existingMap = new Map<string, BrainNode>();
+    for (const node of nodesRef.current) {
+      existingMap.set(node.id, node);
+    }
 
-      return {
+    const newNodes: BrainNode[] = [];
+    const coreCount = CORE_NODES.length;
+    const catNodes = nodeData.filter((n) => n.id.startsWith("cat-"));
+    const memNodes = nodeData.filter((n) => n.id.startsWith("mem-"));
+
+    for (let i = 0; i < nodeData.length; i++) {
+      const nd = nodeData[i];
+      const existing = existingMap.get(nd.id);
+
+      if (existing) {
+        // Keep existing position, update label/radius
+        newNodes.push({ ...existing, label: nd.label, radius: nd.radius, type: nd.type });
+        continue;
+      }
+
+      // Calculate new position based on type
+      let x: number, y: number;
+      if (nd.id.startsWith("core-")) {
+        // Core nodes in tight center cluster
+        const coreIdx = CORE_NODES.findIndex((c) => c.id === nd.id);
+        const angle = (coreIdx / coreCount) * Math.PI * 2 - Math.PI / 2;
+        const r = Math.min(w, h) * 0.08;
+        x = cx + Math.cos(angle) * r;
+        y = cy + Math.sin(angle) * r;
+      } else if (nd.id.startsWith("cat-")) {
+        // Category hubs in middle ring
+        const catIdx = catNodes.findIndex((c) => c.id === nd.id);
+        const angle = (catIdx / Math.max(catNodes.length, 1)) * Math.PI * 2 - Math.PI / 2;
+        const r = Math.min(w, h) * 0.22;
+        x = cx + Math.cos(angle) * r + (Math.random() - 0.5) * 20;
+        y = cy + Math.sin(angle) * r + (Math.random() - 0.5) * 20;
+      } else {
+        // Memory nodes in outer ring, clustered near their category
+        const cat = nd.type;
+        const catNode = newNodes.find((n) => n.id === `cat-${cat}`);
+        if (catNode) {
+          const memIdx = memNodes.filter((m) => m.type === cat).findIndex((m) => m.id === nd.id);
+          const spreadAngle = ((memIdx || 0) / 8) * Math.PI * 0.8 - Math.PI * 0.4;
+          const catAngle = Math.atan2(catNode.baseY - cy, catNode.baseX - cx);
+          const angle = catAngle + spreadAngle * 0.5;
+          const r = Math.min(w, h) * (0.3 + Math.random() * 0.1);
+          x = cx + Math.cos(angle) * r;
+          y = cy + Math.sin(angle) * r;
+        } else {
+          const angle = Math.random() * Math.PI * 2;
+          const r = Math.min(w, h) * 0.35;
+          x = cx + Math.cos(angle) * r;
+          y = cy + Math.sin(angle) * r;
+        }
+      }
+
+      // Clamp to canvas
+      x = Math.max(30, Math.min(w - 30, x));
+      y = Math.max(30, Math.min(h - 30, y));
+
+      newNodes.push({
         ...nd,
         x,
         y,
@@ -157,71 +250,59 @@ export default function JarvisBrain({ onNodeClick }: JarvisBrainProps) {
         phase: Math.random() * Math.PI * 2,
         freqX: 0.0003 + Math.random() * 0.0004,
         freqY: 0.0004 + Math.random() * 0.0003,
-      };
-    });
-    initializedRef.current = true;
-  }, []);
-
-  const repositionNodes = useCallback((w: number, h: number) => {
-    if (!initializedRef.current || nodesRef.current.length === 0) {
-      initNodes(w, h);
-      return;
+        isNew: isGrowing,
+        spawnTime: isGrowing ? now : undefined,
+      });
     }
+
+    nodesRef.current = newNodes;
+    edgesRef.current = edgeData;
+    prevMemoryCountRef.current = nodeData.length;
+  }, [nodeData, edgeData]);
+
+  const initSize = useCallback(() => {
+    const container = containerRef.current;
+    const canvas = canvasRef.current;
+    if (!container || !canvas) return;
+
+    const dpr = window.devicePixelRatio || 1;
+    dprRef.current = dpr;
+    const rect = container.getBoundingClientRect();
+    const w = rect.width;
+    const h = rect.height;
+    if (w === 0 || h === 0) return;
+
+    canvas.width = w * dpr;
+    canvas.height = h * dpr;
+    canvas.style.width = `${w}px`;
+    canvas.style.height = `${h}px`;
+
+    // Rescale existing nodes if size changed
     const oldW = sizeRef.current.w;
     const oldH = sizeRef.current.h;
-    if (oldW === 0 || oldH === 0) {
-      initNodes(w, h);
-      return;
+    if (oldW > 0 && oldH > 0 && (oldW !== w || oldH !== h)) {
+      const sx = w / oldW;
+      const sy = h / oldH;
+      for (const node of nodesRef.current) {
+        node.baseX *= sx;
+        node.baseY *= sy;
+        node.x *= sx;
+        node.y *= sy;
+      }
     }
-    const scaleX = w / oldW;
-    const scaleY = h / oldH;
-    for (const node of nodesRef.current) {
-      node.baseX *= scaleX;
-      node.baseY *= scaleY;
-      node.x *= scaleX;
-      node.y *= scaleY;
-    }
-  }, [initNodes]);
+
+    sizeRef.current = { w, h };
+  }, []);
 
   useEffect(() => {
     const canvas = canvasRef.current;
     const container = containerRef.current;
     if (!canvas || !container) return;
 
-    const dpr = window.devicePixelRatio || 1;
-    dprRef.current = dpr;
+    initSize();
 
-    const resizeCanvas = () => {
-      const rect = container.getBoundingClientRect();
-      const w = rect.width;
-      const h = rect.height;
-
-      if (w === 0 || h === 0) return;
-
-      if (initializedRef.current) {
-        repositionNodes(w, h);
-      }
-
-      canvas.width = w * dpr;
-      canvas.height = h * dpr;
-      canvas.style.width = `${w}px`;
-      canvas.style.height = `${h}px`;
-
-      if (!initializedRef.current) {
-        initNodes(w, h);
-      }
-
-      sizeRef.current = { w, h };
-    };
-
-    const ro = new ResizeObserver(resizeCanvas);
+    const ro = new ResizeObserver(initSize);
     ro.observe(container);
-    resizeCanvas();
-
-    // Edge index lookup
-    const nodeIndexMap = new Map<string, number>();
-    NODE_DATA.forEach((n, i) => nodeIndexMap.set(n.id, i));
-    const edgeIndices = EDGES.map(([a, b]) => [nodeIndexMap.get(a)!, nodeIndexMap.get(b)!] as [number, number]);
 
     // Mouse events
     const getMousePos = (e: MouseEvent) => {
@@ -231,8 +312,6 @@ export default function JarvisBrain({ onNodeClick }: JarvisBrainProps) {
 
     const onMouseMove = (e: MouseEvent) => {
       const pos = getMousePos(e);
-      mousePosRef.current = pos;
-
       const nodes = nodesRef.current;
       let found = -1;
       for (let i = 0; i < nodes.length; i++) {
@@ -244,7 +323,7 @@ export default function JarvisBrain({ onNodeClick }: JarvisBrainProps) {
         }
       }
       hoveredNodeRef.current = found;
-      canvas.style.cursor = found >= 0 && nodes[found].projectId ? "pointer" : found >= 0 ? "default" : "default";
+      canvas.style.cursor = found >= 0 ? "pointer" : "default";
     };
 
     const onClick = (e: MouseEvent) => {
@@ -254,8 +333,8 @@ export default function JarvisBrain({ onNodeClick }: JarvisBrainProps) {
         const dx = pos.x - nodes[i].x;
         const dy = pos.y - nodes[i].y;
         if (dx * dx + dy * dy < (nodes[i].radius + 4) * (nodes[i].radius + 4)) {
-          if (nodes[i].projectId && onNodeClick) {
-            onNodeClick({ id: nodes[i].id, type: nodes[i].type, projectId: nodes[i].projectId });
+          if (onNodeClick) {
+            onNodeClick({ id: nodes[i].id, type: nodes[i].type });
           }
           break;
         }
@@ -273,42 +352,66 @@ export default function JarvisBrain({ onNodeClick }: JarvisBrainProps) {
       const { w, h } = sizeRef.current;
       const d = dprRef.current;
       const nodes = nodesRef.current;
+      const edges = edgesRef.current;
 
       ctx.setTransform(d, 0, 0, d, 0, 0);
       ctx.clearRect(0, 0, w, h);
 
+      if (nodes.length === 0) {
+        // Empty state
+        ctx.font = "500 14px system-ui, -apple-system, sans-serif";
+        ctx.fillStyle = "#64748b";
+        ctx.textAlign = "center";
+        ctx.textBaseline = "middle";
+        ctx.fillText("Memories will appear here as Jarvis learns", w / 2, h / 2);
+        animFrameRef.current = requestAnimationFrame(draw);
+        return;
+      }
+
       // Update node positions (gentle floating)
       for (const node of nodes) {
-        node.x = node.baseX + Math.sin(time * node.freqX + node.phase) * 8;
-        node.y = node.baseY + Math.cos(time * node.freqY + node.phase * 1.3) * 6;
+        // Spawn animation for new nodes
+        let scale = 1;
+        if (node.isNew && node.spawnTime) {
+          const age = time - node.spawnTime;
+          if (age < 1000) {
+            scale = Math.min(1, age / 1000);
+          } else {
+            node.isNew = false;
+          }
+        }
+
+        node.x = node.baseX + Math.sin(time * node.freqX + node.phase) * 8 * scale;
+        node.y = node.baseY + Math.cos(time * node.freqY + node.phase * 1.3) * 6 * scale;
       }
 
       // Schedule firings
-      if (time - lastFireTimeRef.current > nextFireDelayRef.current) {
-        const edgeIdx = Math.floor(Math.random() * edgeIndices.length);
-        const [from, to] = edgeIndices[edgeIdx];
+      if (edges.length > 0 && time - lastFireTimeRef.current > nextFireDelayRef.current) {
+        const edgeIdx = Math.floor(Math.random() * edges.length);
+        const [from] = edges[edgeIdx];
         const fromNode = nodes[from];
-        const color = CATEGORY_COLORS[fromNode.type];
-        firingsRef.current.push({ from, to, startTime: time, duration: 800, color });
+        if (fromNode) {
+          const color = CATEGORY_COLORS[fromNode.type] || "#6366f1";
+          firingsRef.current.push({ from: edges[edgeIdx][0], to: edges[edgeIdx][1], startTime: time, duration: 800, color });
+        }
         lastFireTimeRef.current = time;
-        nextFireDelayRef.current = 2000 + Math.random() * 2000;
+        nextFireDelayRef.current = 1500 + Math.random() * 2000;
       }
 
-      // Build set of currently firing edges for lookup
+      // Build firing set
       const firingSet = new Set<string>();
       for (const f of firingsRef.current) {
         firingSet.add(`${f.from}-${f.to}`);
         firingSet.add(`${f.to}-${f.from}`);
       }
 
-      // Draw edges (non-firing)
-      ctx.lineWidth = 1;
-      for (const [ai, bi] of edgeIndices) {
-        const key = `${ai}-${bi}`;
-        if (firingSet.has(key)) continue;
-
+      // Draw non-firing edges
+      ctx.lineWidth = 0.8;
+      for (const [ai, bi] of edges) {
+        if (firingSet.has(`${ai}-${bi}`)) continue;
         const a = nodes[ai];
         const b = nodes[bi];
+        if (!a || !b) continue;
         ctx.beginPath();
         ctx.moveTo(a.x, a.y);
         ctx.lineTo(b.x, b.y);
@@ -324,14 +427,13 @@ export default function JarvisBrain({ onNodeClick }: JarvisBrainProps) {
         activeFirings.push(f);
 
         const progress = elapsed / f.duration;
-        // Ease: bright in middle, dim at start/end
         const intensity = Math.sin(progress * Math.PI);
         const rgb = hexToRgb(f.color);
 
         const a = nodes[f.from];
         const b = nodes[f.to];
+        if (!a || !b) continue;
 
-        // Glow line
         ctx.save();
         ctx.lineWidth = 1.5 + intensity * 2;
         ctx.shadowColor = f.color;
@@ -348,24 +450,44 @@ export default function JarvisBrain({ onNodeClick }: JarvisBrainProps) {
       // Draw nodes
       for (let i = 0; i < nodes.length; i++) {
         const node = nodes[i];
-        const color = CATEGORY_COLORS[node.type];
+        const color = CATEGORY_COLORS[node.type] || "#6366f1";
         const rgb = hexToRgb(color);
         const isHovered = hoveredNodeRef.current === i;
 
-        // Pulsing glow
+        let scale = 1;
+        if (node.isNew && node.spawnTime) {
+          const age = time - node.spawnTime;
+          scale = Math.min(1, age / 1000);
+        }
+
+        const r = node.radius * scale;
         const glowPulse = 15 + Math.sin(time * 0.002 + node.phase) * 5;
+
+        // New node spawn glow
+        if (node.isNew && node.spawnTime) {
+          const age = time - node.spawnTime;
+          if (age < 2000) {
+            const spawnGlow = Math.max(0, 1 - age / 2000) * 30;
+            ctx.save();
+            ctx.shadowColor = color;
+            ctx.shadowBlur = spawnGlow + 20;
+            ctx.beginPath();
+            ctx.arc(node.x, node.y, r + 4, 0, Math.PI * 2);
+            ctx.fillStyle = `rgba(${rgb.r}, ${rgb.g}, ${rgb.b}, ${0.15 * (1 - age / 2000)})`;
+            ctx.fill();
+            ctx.restore();
+          }
+        }
 
         ctx.save();
         ctx.shadowColor = color;
         ctx.shadowBlur = isHovered ? glowPulse + 12 : glowPulse;
 
-        // Fill
         ctx.beginPath();
-        ctx.arc(node.x, node.y, node.radius, 0, Math.PI * 2);
+        ctx.arc(node.x, node.y, r, 0, Math.PI * 2);
         ctx.fillStyle = `rgba(${rgb.r}, ${rgb.g}, ${rgb.b}, ${isHovered ? 0.5 : 0.3})`;
         ctx.fill();
 
-        // Stroke
         ctx.lineWidth = isHovered ? 2.5 : 1.5;
         ctx.strokeStyle = `rgba(${rgb.r}, ${rgb.g}, ${rgb.b}, 0.8)`;
         ctx.stroke();
@@ -373,7 +495,7 @@ export default function JarvisBrain({ onNodeClick }: JarvisBrainProps) {
 
         // Inner bright dot
         ctx.beginPath();
-        ctx.arc(node.x, node.y, node.radius * 0.25, 0, Math.PI * 2);
+        ctx.arc(node.x, node.y, r * 0.25, 0, Math.PI * 2);
         ctx.fillStyle = `rgba(${rgb.r}, ${rgb.g}, ${rgb.b}, 0.6)`;
         ctx.fill();
       }
@@ -386,30 +508,25 @@ export default function JarvisBrain({ onNodeClick }: JarvisBrainProps) {
         const metrics = ctx.measureText(label);
         const textW = metrics.width;
         const padX = 10;
-        const padY = 6;
         const tooltipW = textW + padX * 2;
         const tooltipH = 24;
         let tx = node.x - tooltipW / 2;
         let ty = node.y - node.radius - tooltipH - 8;
 
-        // Clamp to canvas bounds
         if (tx < 4) tx = 4;
         if (tx + tooltipW > w - 4) tx = w - 4 - tooltipW;
         if (ty < 4) ty = node.y + node.radius + 8;
 
-        // Background
         ctx.fillStyle = "rgba(10, 10, 20, 0.9)";
         ctx.beginPath();
         ctx.roundRect(tx, ty, tooltipW, tooltipH, 6);
         ctx.fill();
 
-        // Border
-        const color = CATEGORY_COLORS[node.type];
-        ctx.strokeStyle = `${color}66`;
+        const borderColor = CATEGORY_COLORS[node.type] || "#6366f1";
+        ctx.strokeStyle = `${borderColor}66`;
         ctx.lineWidth = 1;
         ctx.stroke();
 
-        // Text
         ctx.fillStyle = "#ffffff";
         ctx.textAlign = "center";
         ctx.textBaseline = "middle";
@@ -427,7 +544,7 @@ export default function JarvisBrain({ onNodeClick }: JarvisBrainProps) {
       canvas.removeEventListener("click", onClick);
       cancelAnimationFrame(animFrameRef.current);
     };
-  }, [onNodeClick, initNodes, repositionNodes]);
+  }, [onNodeClick, initSize]);
 
   return (
     <div ref={containerRef} className="w-full h-full relative">

@@ -16,9 +16,10 @@ import {
   Filler,
 } from "chart.js";
 import { Bar, Line } from "react-chartjs-2";
-import { db } from "@/lib/db";
-import type { Project, Goal, ChatMessage } from "@/lib/types";
+import { api } from "@/lib/api";
+import type { Project, Goal, ChatMessage, Memory, MemoryCategory } from "@/lib/types";
 import JarvisBrain from "@/components/JarvisBrain";
+import type { MemoryForBrain } from "@/components/JarvisBrain";
 import SpotifyWidget from "@/components/SpotifyWidget";
 import LindyChat from "@/components/LindyChat";
 
@@ -73,11 +74,14 @@ const ACTIVITY_FEED = [
 
 const MOODS = ["Fired Up", "Focused", "Tired", "Stressed", "Creative"];
 
-const MEMORY_ITEMS = [
-  { category: "Identity", items: ["Dylan Murdoch, 31, Eagle Mountain UT", "RE agent @ Narwhal Homes / Red Rock Real Estate", "8-9 years experience, new construction focus", "Wife + kids, family-first values"] },
-  { category: "Mission", items: ["Build AI businesses for financial freedom", "Work fully remote eventually", "90-day sprint to first AI revenue", "Automate real estate operations"] },
-  { category: "Schedule", items: ["Wake 7:45am", "Work 9:30-6:30pm", "Family time 6-8pm (SACRED)", "Vibe coding after 8pm"] },
-  { category: "Priorities", items: ["AI Lead Nurture for Builders — BUILD FIRST", "Jarvis-as-a-Service — plan next", "Master Claude API + Next.js", "Generate $1k/mo AI revenue in 90 days"] },
+const MEMORY_CATEGORIES: { key: MemoryCategory; label: string; color: string; icon: string }[] = [
+  { key: "personal", label: "Personal", color: "bg-blue-500/20 text-blue-400", icon: "👤" },
+  { key: "business", label: "Business", color: "bg-green-500/20 text-green-400", icon: "💼" },
+  { key: "health", label: "Health", color: "bg-red-500/20 text-red-400", icon: "❤️" },
+  { key: "goals", label: "Goals", color: "bg-yellow-500/20 text-yellow-400", icon: "🎯" },
+  { key: "relationships", label: "Relationships", color: "bg-pink-500/20 text-pink-400", icon: "🤝" },
+  { key: "preferences", label: "Preferences", color: "bg-purple-500/20 text-purple-400", icon: "⚙️" },
+  { key: "ideas", label: "Ideas", color: "bg-cyan-500/20 text-cyan-400", icon: "💡" },
 ];
 
 // ─── Component ────────────────────────────────────────────
@@ -101,11 +105,46 @@ export default function Dashboard() {
   const [projects, setProjects] = useState<Project[]>([]);
   const [goals, setGoals] = useState<Goal[]>([]);
   const [ideaFilter, setIdeaFilter] = useState<string>("All");
-  useEffect(() => {
-    db.init();
-    setProjects(db.projects.list());
-    setGoals(db.goals.list());
+
+  // Memory state
+  const [memories, setMemories] = useState<Memory[]>([]);
+  const [memoryFilter, setMemoryFilter] = useState<string>("all");
+  const [memoryLoading, setMemoryLoading] = useState(false);
+  const [rememberCategory, setRememberCategory] = useState<MemoryCategory>("personal");
+  const [showRememberModal, setShowRememberModal] = useState(false);
+  const [rememberMessageIdx, setRememberMessageIdx] = useState<number>(-1);
+
+  // Daily brief
+  const [dailyBrief, setDailyBrief] = useState<string | null>(null);
+  const [briefLoading, setBriefLoading] = useState(false);
+
+  const fetchMemories = useCallback(async () => {
+    try {
+      const res = await fetch("/api/memories");
+      const data = await res.json();
+      if (data.memories) setMemories(data.memories);
+    } catch { /* Supabase may not be configured yet */ }
   }, []);
+
+  useEffect(() => {
+    async function loadData() {
+      const [projectsData, goalsData] = await Promise.all([
+        api.projects.list(),
+        api.goals.list(),
+      ]);
+      setProjects(projectsData);
+      setGoals(goalsData);
+      fetchMemories();
+
+      // Auto-generate daily brief on load
+      try {
+        const res = await fetch("/api/brief");
+        const data = await res.json();
+        if (data.brief) setDailyBrief(data.brief);
+      } catch { /* silent */ }
+    }
+    loadData();
+  }, [fetchMemories]);
 
   useEffect(() => {
     const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
@@ -115,6 +154,44 @@ export default function Dashboard() {
   useEffect(() => {
     chatEndRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [chatMessages]);
+
+  const extractMemories = useCallback(async (msgs: ChatMessage[]) => {
+    if (msgs.length < 4) return; // Only extract after meaningful conversation
+    try {
+      await fetch("/api/memories/extract", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ messages: msgs }),
+      });
+      fetchMemories(); // Refresh memory list
+    } catch { /* silent — extraction is best-effort */ }
+  }, [fetchMemories]);
+
+  const saveMemory = useCallback(async (fact: string, category: MemoryCategory, source: string = "manual") => {
+    try {
+      const res = await fetch("/api/memories", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ fact, category, source, confidence: 1.0 }),
+      });
+      const data = await res.json();
+      if (data.memory) {
+        setMemories((prev) => [data.memory, ...prev]);
+      }
+      return data.memory;
+    } catch { return null; }
+  }, []);
+
+  const deleteMemory = useCallback(async (id: string) => {
+    try {
+      await fetch("/api/memories", {
+        method: "DELETE",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ id }),
+      });
+      setMemories((prev) => prev.filter((m) => m.id !== id));
+    } catch { /* silent */ }
+  }, []);
 
   const sendChat = useCallback(async (text?: string) => {
     const msg = text || chatInput.trim();
@@ -130,12 +207,17 @@ export default function Dashboard() {
         body: JSON.stringify({ messages: newMessages }),
       });
       const data = await res.json();
-      setChatMessages((prev) => [...prev, { role: "assistant", content: data.response }]);
+      setChatMessages([...newMessages, { role: "assistant", content: data.response }]);
+
+      // Refresh memories after a few exchanges (API auto-extracts)
+      if (newMessages.length % 6 === 0) {
+        fetchMemories();
+      }
     } catch {
       setChatMessages((prev) => [...prev, { role: "assistant", content: "Connection error. Standing by, sir." }]);
     }
     setChatLoading(false);
-  }, [chatInput, chatMessages]);
+  }, [chatInput, chatMessages, fetchMemories]);
 
   const handleMood = (mood: string) => {
     setSelectedMood(mood);
@@ -237,6 +319,41 @@ export default function Dashboard() {
 
   const renderOverview = () => (
     <div className="space-y-6 animate-[slideUp_0.3s_ease-out]">
+      {/* Daily Brief */}
+      {dailyBrief && (
+        <div className="bg-jarvis-card border border-jarvis-accent/30 rounded-xl p-4 animate-[slideUp_0.3s_ease-out]">
+          <div className="flex items-center justify-between mb-2">
+            <div className="flex items-center gap-2">
+              <div className="w-6 h-6 bg-jarvis-accent rounded-full flex items-center justify-center text-white text-xs font-bold">J</div>
+              <h3 className="text-sm font-semibold text-white">Daily Brief</h3>
+            </div>
+            <button onClick={() => setDailyBrief(null)} className="text-jarvis-muted hover:text-white text-sm p-1">Dismiss</button>
+          </div>
+          <div className="text-sm text-jarvis-text whitespace-pre-wrap leading-relaxed">{dailyBrief}</div>
+        </div>
+      )}
+      {!dailyBrief && !briefLoading && (
+        <button
+          onClick={async () => {
+            setBriefLoading(true);
+            try {
+              const res = await fetch("/api/brief");
+              const data = await res.json();
+              if (data.brief) setDailyBrief(data.brief);
+            } catch { /* silent */ }
+            setBriefLoading(false);
+          }}
+          className="w-full bg-jarvis-card border border-jarvis-border rounded-xl p-3 text-sm text-jarvis-muted hover:text-jarvis-accent hover:border-jarvis-accent/30 transition-all text-center"
+        >
+          Generate Daily Brief
+        </button>
+      )}
+      {briefLoading && (
+        <div className="bg-jarvis-card border border-jarvis-border rounded-xl p-4 text-center">
+          <div className="text-sm text-jarvis-muted animate-pulse">JARVIS is preparing your brief...</div>
+        </div>
+      )}
+
       {/* KPI Row */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
         <KPICard label="Emails Processed" value="47" sub="+12 today" icon="📧" onClick={() => openModal({ title: "Email Processing", body: "47 emails processed this week.\n\n12 today:\n- 3 flagged for review\n- 5 auto-responded\n- 4 archived", actions: [{ label: "Review Flagged", onClick: closeModal }] })} />
@@ -300,12 +417,13 @@ export default function Dashboard() {
             <h3 className="text-sm font-semibold text-white">Jarvis Brain</h3>
             <p className="text-xs text-jarvis-muted">your connected knowledge</p>
           </div>
-          <span className="text-xs text-jarvis-muted">{projects.length + goals.length + 10} nodes</span>
+          <span className="text-xs text-jarvis-muted">{memories.length + 4} nodes</span>
         </div>
         <div className="h-[400px] rounded-lg overflow-hidden">
-          <JarvisBrain onNodeClick={(node) => {
-            if (node.projectId) {
-              window.location.href = `/ideas/${node.projectId}`;
+          <JarvisBrain memories={memories as MemoryForBrain[]} onNodeClick={(node) => {
+            if (node.id.startsWith("cat-")) {
+              setActiveTab("memory");
+              setMemoryFilter(node.type);
             }
           }} />
         </div>
@@ -513,25 +631,126 @@ export default function Dashboard() {
     </div>
   );
 
+  const filteredMemories = memoryFilter === "all" ? memories : memories.filter((m) => m.category === memoryFilter);
+
+  const memoryCounts = memories.reduce<Record<string, number>>((acc, m) => {
+    acc[m.category] = (acc[m.category] || 0) + 1;
+    return acc;
+  }, {});
+
   const renderMemory = () => (
     <div className="space-y-4 animate-[slideUp_0.3s_ease-out]">
-      <div className="flex items-center justify-between">
-        <h2 className="text-lg font-bold">JARVIS Memory Bank</h2>
-        <span className="text-xs text-jarvis-muted">{MEMORY_ITEMS.reduce((a, c) => a + c.items.length, 0)} items stored</span>
+      <div className="flex items-center justify-between flex-wrap gap-2">
+        <div>
+          <h2 className="text-lg font-bold">JARVIS Memory Bank</h2>
+          <p className="text-xs text-jarvis-muted">{memories.length} memories stored across {Object.keys(memoryCounts).length} categories</p>
+        </div>
+        <div className="flex gap-2">
+          <button
+            onClick={() => {
+              setRememberMessageIdx(-1);
+              setShowRememberModal(true);
+            }}
+            className="px-3 py-1.5 bg-jarvis-accent text-white rounded-lg text-sm hover:bg-jarvis-accent-hover transition-colors"
+          >
+            + Add Memory
+          </button>
+          <button
+            onClick={async () => {
+              setMemoryLoading(true);
+              if (chatMessages.length >= 2) {
+                await extractMemories(chatMessages);
+              }
+              setMemoryLoading(false);
+            }}
+            disabled={memoryLoading || chatMessages.length < 2}
+            className="px-3 py-1.5 bg-jarvis-border text-jarvis-text rounded-lg text-sm hover:bg-jarvis-accent/20 transition-colors disabled:opacity-50"
+          >
+            {memoryLoading ? "Extracting..." : "Extract from Chat"}
+          </button>
+        </div>
       </div>
-      {MEMORY_ITEMS.map((cat, i) => (
-        <button key={i} onClick={() => openModal({ title: `Memory: ${cat.category}`, body: cat.items.map((item, j) => `${j + 1}. ${item}`).join("\n"), actions: [{ label: "Edit Memory", onClick: closeModal }, { label: "Clear Category", onClick: closeModal }] })} className="w-full bg-jarvis-card border border-jarvis-border rounded-xl p-4 text-left hover:border-jarvis-accent/50 transition-all cursor-pointer">
-          <h3 className="text-sm font-semibold text-jarvis-accent mb-2">{cat.category}</h3>
-          <div className="space-y-1">
-            {cat.items.map((item, j) => (
-              <div key={j} className="text-sm text-jarvis-text flex items-start gap-2">
-                <span className="text-jarvis-muted">•</span>
-                {item}
-              </div>
-            ))}
+
+      {/* Category Stats */}
+      <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-7 gap-2">
+        {MEMORY_CATEGORIES.map((cat) => (
+          <button
+            key={cat.key}
+            onClick={() => setMemoryFilter(memoryFilter === cat.key ? "all" : cat.key)}
+            className={`p-3 rounded-xl border transition-all text-left ${
+              memoryFilter === cat.key
+                ? "bg-jarvis-accent/20 border-jarvis-accent/50"
+                : "bg-jarvis-card border-jarvis-border hover:border-jarvis-accent/30"
+            }`}
+          >
+            <div className="text-lg mb-1">{cat.icon}</div>
+            <div className="text-xs font-semibold text-jarvis-text">{cat.label}</div>
+            <div className="text-lg font-bold text-white">{memoryCounts[cat.key] || 0}</div>
+          </button>
+        ))}
+      </div>
+
+      {/* Jarvis Brain — Live */}
+      <div className="bg-jarvis-card border border-jarvis-border rounded-xl p-4">
+        <div className="flex items-center justify-between mb-2">
+          <div>
+            <h3 className="text-sm font-semibold text-white">Jarvis Brain</h3>
+            <p className="text-xs text-jarvis-muted">live knowledge graph — grows as you teach it</p>
           </div>
-        </button>
-      ))}
+          <span className="text-xs text-jarvis-muted">{memories.length + 4} nodes</span>
+        </div>
+        <div className="h-[350px] rounded-lg overflow-hidden">
+          <JarvisBrain memories={memories as MemoryForBrain[]} onNodeClick={(node) => {
+            if (node.id.startsWith("cat-")) {
+              setMemoryFilter(node.type);
+            }
+          }} />
+        </div>
+      </div>
+
+      {/* Memory List */}
+      <div className="space-y-2">
+        {filteredMemories.length === 0 && (
+          <div className="text-center py-12 text-jarvis-muted">
+            <div className="text-4xl mb-3">🧠</div>
+            <p className="text-sm">{memories.length === 0 ? "No memories yet. Start chatting with JARVIS or add memories manually." : "No memories in this category."}</p>
+          </div>
+        )}
+        {filteredMemories.map((mem) => {
+          const catInfo = MEMORY_CATEGORIES.find((c) => c.key === mem.category);
+          return (
+            <div key={mem.id} className="bg-jarvis-card border border-jarvis-border rounded-xl p-4 hover:border-jarvis-accent/30 transition-all group">
+              <div className="flex items-start justify-between gap-3">
+                <div className="flex-1 min-w-0">
+                  <div className="flex items-center gap-2 mb-1 flex-wrap">
+                    <span className={`text-xs px-2 py-0.5 rounded ${catInfo?.color || "bg-jarvis-border text-jarvis-muted"}`}>
+                      {catInfo?.icon} {catInfo?.label || mem.category}
+                    </span>
+                    <span className="text-xs text-jarvis-muted">
+                      {new Date(mem.created_at).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })}
+                    </span>
+                    <span className={`text-xs px-1.5 py-0.5 rounded ${
+                      mem.source === "manual" ? "bg-jarvis-accent/20 text-jarvis-accent" :
+                      mem.source === "chat_extraction" ? "bg-jarvis-green/20 text-jarvis-green" :
+                      "bg-jarvis-border text-jarvis-muted"
+                    }`}>
+                      {mem.source === "manual" ? "manual" : mem.source === "chat_extraction" ? "auto" : mem.source}
+                    </span>
+                  </div>
+                  <p className="text-sm text-jarvis-text">{mem.fact}</p>
+                </div>
+                <button
+                  onClick={() => deleteMemory(mem.id)}
+                  className="text-jarvis-muted hover:text-jarvis-red transition-colors opacity-0 group-hover:opacity-100 flex-shrink-0 p-1"
+                  title="Delete memory"
+                >
+                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M3 6h18M19 6v14a2 2 0 01-2 2H7a2 2 0 01-2-2V6M8 6V4a2 2 0 012-2h4a2 2 0 012 2v2" /></svg>
+                </button>
+              </div>
+            </div>
+          );
+        })}
+      </div>
     </div>
   );
 
@@ -603,7 +822,7 @@ export default function Dashboard() {
           <div className="p-3 mt-auto border-t border-jarvis-border">
             <div className="text-xs text-jarvis-muted mb-2 font-semibold">MEMORY</div>
             <div className="space-y-1 text-xs">
-              <div className="flex justify-between text-jarvis-text"><span>Items</span><span className="text-jarvis-accent">{MEMORY_ITEMS.reduce((a, c) => a + c.items.length, 0)}</span></div>
+              <div className="flex justify-between text-jarvis-text"><span>Memories</span><span className="text-jarvis-accent">{memories.length}</span></div>
               <div className="flex justify-between text-jarvis-text"><span>Projects</span><span className="text-jarvis-accent">{projects.length}</span></div>
               <div className="flex justify-between text-jarvis-text"><span>Goals</span><span className="text-jarvis-accent">{goals.length}</span></div>
               <div className="flex justify-between text-jarvis-text"><span>Chat History</span><span className="text-jarvis-accent">{chatMessages.length}</span></div>
@@ -704,9 +923,18 @@ export default function Dashboard() {
                   </div>
                 )}
                 {chatMessages.map((msg, i) => (
-                  <div key={i} className={`flex ${msg.role === "user" ? "justify-end" : "justify-start"}`}>
-                    <div className={`max-w-[85%] rounded-xl px-3 py-2 text-sm whitespace-pre-wrap ${msg.role === "user" ? "bg-jarvis-accent text-white" : "bg-jarvis-border text-jarvis-text"}`}>
-                      {msg.content}
+                  <div key={i} className={`flex ${msg.role === "user" ? "justify-end" : "justify-start"} group/msg`}>
+                    <div className="relative max-w-[85%]">
+                      <div className={`rounded-xl px-3 py-2 text-sm whitespace-pre-wrap ${msg.role === "user" ? "bg-jarvis-accent text-white" : "bg-jarvis-border text-jarvis-text"}`}>
+                        {msg.content}
+                      </div>
+                      <button
+                        onClick={() => { setRememberMessageIdx(i); setShowRememberModal(true); }}
+                        className="absolute -bottom-1 right-1 opacity-0 group-hover/msg:opacity-100 transition-opacity text-xs px-1.5 py-0.5 rounded bg-jarvis-card border border-jarvis-border text-jarvis-muted hover:text-jarvis-accent"
+                        title="Remember this"
+                      >
+                        🧠
+                      </button>
                     </div>
                   </div>
                 ))}
@@ -789,8 +1017,17 @@ export default function Dashboard() {
           )}
           {chatMessages.map((msg, i) => (
             <div key={i} className={`flex ${msg.role === "user" ? "justify-end" : "justify-start"}`}>
-              <div className={`max-w-[85%] rounded-2xl px-4 py-2.5 text-sm whitespace-pre-wrap ${msg.role === "user" ? "bg-jarvis-accent text-white" : "bg-jarvis-card border border-jarvis-border text-jarvis-text"}`}>
-                {msg.content}
+              <div className="relative max-w-[85%]">
+                <div className={`rounded-2xl px-4 py-2.5 text-sm whitespace-pre-wrap ${msg.role === "user" ? "bg-jarvis-accent text-white" : "bg-jarvis-card border border-jarvis-border text-jarvis-text"}`}>
+                  {msg.content}
+                </div>
+                <button
+                  onClick={() => { setRememberMessageIdx(i); setShowRememberModal(true); }}
+                  className="absolute -bottom-1 right-1 text-xs px-2 py-1 rounded bg-jarvis-card border border-jarvis-border text-jarvis-muted active:text-jarvis-accent"
+                  title="Remember this"
+                >
+                  🧠
+                </button>
               </div>
             </div>
           ))}
@@ -842,6 +1079,74 @@ export default function Dashboard() {
               <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><line x1="22" y1="2" x2="11" y2="13" /><polygon points="22 2 15 22 11 13 2 9 22 2" /></svg>
             </button>
           </div>
+        </div>
+      </div>
+    )}
+
+    {/* Remember This Modal */}
+    {showRememberModal && (
+      <div className="fixed inset-0 z-[70] flex items-center justify-center p-4" onClick={() => setShowRememberModal(false)}>
+        <div className="absolute inset-0 bg-black/60" />
+        <div onClick={(e) => e.stopPropagation()} className="relative bg-jarvis-card border border-jarvis-border rounded-xl p-5 max-w-md w-full animate-[slideUp_0.3s_ease-out]">
+          <div className="flex items-center justify-between mb-4">
+            <h2 className="text-lg font-bold text-white">🧠 Remember This</h2>
+            <button onClick={() => setShowRememberModal(false)} className="text-jarvis-muted hover:text-white text-xl p-1">×</button>
+          </div>
+
+          {rememberMessageIdx >= 0 && chatMessages[rememberMessageIdx] && (
+            <div className="mb-3 p-3 bg-jarvis-bg rounded-lg text-sm text-jarvis-text border border-jarvis-border">
+              <div className="text-xs text-jarvis-muted mb-1">{chatMessages[rememberMessageIdx].role === "user" ? "You said:" : "JARVIS said:"}</div>
+              <div className="line-clamp-3">{chatMessages[rememberMessageIdx].content}</div>
+            </div>
+          )}
+
+          <form onSubmit={async (e) => {
+            e.preventDefault();
+            const form = e.target as HTMLFormElement;
+            const factInput = form.elements.namedItem("fact") as HTMLInputElement;
+            const fact = factInput.value.trim();
+            if (!fact) return;
+            await saveMemory(fact, rememberCategory);
+            setShowRememberModal(false);
+            factInput.value = "";
+          }}>
+            <label className="block text-xs text-jarvis-muted mb-1">What should JARVIS remember?</label>
+            <input
+              name="fact"
+              type="text"
+              defaultValue={rememberMessageIdx >= 0 && chatMessages[rememberMessageIdx] ? chatMessages[rememberMessageIdx].content.slice(0, 200) : ""}
+              className="w-full bg-jarvis-bg border border-jarvis-border rounded-lg px-3 py-2 text-sm text-jarvis-text placeholder:text-jarvis-muted focus:outline-none focus:border-jarvis-accent mb-3"
+              placeholder="e.g. I prefer morning standups..."
+              autoFocus
+            />
+
+            <label className="block text-xs text-jarvis-muted mb-1">Category</label>
+            <div className="flex flex-wrap gap-1.5 mb-4">
+              {MEMORY_CATEGORIES.map((cat) => (
+                <button
+                  key={cat.key}
+                  type="button"
+                  onClick={() => setRememberCategory(cat.key)}
+                  className={`text-xs px-2 py-1 rounded-lg transition-all ${
+                    rememberCategory === cat.key
+                      ? "bg-jarvis-accent text-white"
+                      : "bg-jarvis-border text-jarvis-muted hover:text-jarvis-text"
+                  }`}
+                >
+                  {cat.icon} {cat.label}
+                </button>
+              ))}
+            </div>
+
+            <div className="flex gap-2">
+              <button type="submit" className="flex-1 px-4 py-2.5 bg-jarvis-accent text-white rounded-lg text-sm hover:bg-jarvis-accent-hover transition-colors">
+                Save Memory
+              </button>
+              <button type="button" onClick={() => setShowRememberModal(false)} className="px-4 py-2.5 bg-jarvis-border text-jarvis-text rounded-lg text-sm hover:bg-jarvis-accent/20 transition-colors">
+                Cancel
+              </button>
+            </div>
+          </form>
         </div>
       </div>
     )}
