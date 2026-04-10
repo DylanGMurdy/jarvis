@@ -1,32 +1,6 @@
 "use client";
 
-import { useRef, useEffect, useCallback, useMemo } from "react";
-
-interface BrainNode {
-  id: string;
-  label: string;
-  type: "personal" | "business" | "health" | "goals" | "relationships" | "preferences" | "ideas" | "core";
-  x: number;
-  y: number;
-  vx: number;
-  vy: number;
-  radius: number;
-  phase: number;
-  freqX: number;
-  freqY: number;
-  baseX: number;
-  baseY: number;
-  isNew?: boolean;
-  spawnTime?: number;
-}
-
-interface FiringEdge {
-  from: number;
-  to: number;
-  startTime: number;
-  duration: number;
-  color: string;
-}
+import { useRef, useEffect, useCallback } from "react";
 
 export interface MemoryForBrain {
   id: string;
@@ -35,519 +9,388 @@ export interface MemoryForBrain {
   created_at: string;
 }
 
-const CATEGORY_COLORS: Record<string, string> = {
-  personal: "#3b82f6",
-  business: "#22c55e",
-  health: "#ef4444",
-  goals: "#eab308",
-  relationships: "#ec4899",
-  preferences: "#a855f7",
-  ideas: "#06b6d4",
-  core: "#6366f1",
-};
-
-// Core nodes that always exist (the brain's foundation)
-const CORE_NODES: { id: string; label: string; type: "core" }[] = [
-  { id: "core-dylan", label: "Dylan", type: "core" },
-  { id: "core-jarvis", label: "JARVIS", type: "core" },
-  { id: "core-ai", label: "AI", type: "core" },
-  { id: "core-re", label: "Real Estate", type: "core" },
-];
-
 interface JarvisBrainProps {
   memories?: MemoryForBrain[];
   onNodeClick?: (node: { id: string; type: string }) => void;
 }
 
-function hexToRgb(hex: string): { r: number; g: number; b: number } {
-  const result = /^#?([a-f\d]{2})([a-f\d]{2})([a-f\d]{2})$/i.exec(hex);
-  return result
-    ? { r: parseInt(result[1], 16), g: parseInt(result[2], 16), b: parseInt(result[3], 16) }
-    : { r: 255, g: 255, b: 255 };
+// ─── 3D Types ───────────────────────────────────────────────
+interface Node3D {
+  id: string;
+  label: string;
+  type: string;
+  x: number; y: number; z: number;
+  radius: number;
+  phase: number;
+  speed: number;
+  orbitRadius: number;
+  orbitTilt: number;
 }
 
-function truncateLabel(text: string, maxLen: number = 18): string {
-  if (text.length <= maxLen) return text;
-  return text.slice(0, maxLen - 1) + "\u2026";
-}
+interface Edge3D { from: number; to: number; }
+
+const COLORS: Record<string, [number, number, number]> = {
+  core:          [99, 102, 241],
+  personal:      [59, 130, 246],
+  business:      [34, 197, 94],
+  health:        [239, 68, 68],
+  goals:         [234, 179, 8],
+  relationships: [236, 72, 153],
+  preferences:   [168, 85, 247],
+  ideas:         [6, 182, 212],
+};
+
+const CORE_LABELS = ["Dylan", "JARVIS", "AI", "Real Estate"];
 
 export default function JarvisBrain({ memories = [], onNodeClick }: JarvisBrainProps) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
-  const nodesRef = useRef<BrainNode[]>([]);
-  const edgesRef = useRef<[number, number][]>([]);
-  const hoveredNodeRef = useRef<number>(-1);
-  const firingsRef = useRef<FiringEdge[]>([]);
-  const lastFireTimeRef = useRef<number>(0);
-  const nextFireDelayRef = useRef<number>(2000);
-  const animFrameRef = useRef<number>(0);
-  const sizeRef = useRef<{ w: number; h: number }>({ w: 800, h: 400 });
-  const dprRef = useRef<number>(1);
-  const prevMemoryCountRef = useRef<number>(0);
+  const stateRef = useRef({
+    nodes: [] as Node3D[],
+    edges: [] as Edge3D[],
+    rotX: -0.3,
+    rotY: 0,
+    dragging: false,
+    lastMouse: { x: 0, y: 0 },
+    hovered: -1,
+    w: 0, h: 0, dpr: 1,
+    built: false,
+    animId: 0,
+  });
 
-  // Build nodes from memories + core nodes
-  const nodeData = useMemo(() => {
-    const nodes: { id: string; label: string; type: BrainNode["type"]; radius: number }[] = [];
+  // Build 3D nodes from memories
+  const buildScene = useCallback((w: number, h: number) => {
+    const s = stateRef.current;
+    const nodes: Node3D[] = [];
+    const edges: Edge3D[] = [];
+    const scale = Math.min(w, h) * 0.35;
 
-    // Core nodes in center
-    for (const core of CORE_NODES) {
-      nodes.push({ ...core, radius: 26 });
-    }
-
-    // Category hub nodes
-    const categories = new Set(memories.map((m) => m.category));
-    for (const cat of categories) {
+    // Core nodes — small tight sphere in center
+    for (let i = 0; i < CORE_LABELS.length; i++) {
+      const phi = Math.acos(1 - 2 * (i + 0.5) / CORE_LABELS.length);
+      const theta = Math.PI * (1 + Math.sqrt(5)) * i;
       nodes.push({
-        id: `cat-${cat}`,
-        label: cat.charAt(0).toUpperCase() + cat.slice(1),
-        type: cat as BrainNode["type"],
-        radius: 20,
+        id: `core-${i}`, label: CORE_LABELS[i], type: "core",
+        x: Math.sin(phi) * Math.cos(theta) * scale * 0.15,
+        y: Math.cos(phi) * scale * 0.15,
+        z: Math.sin(phi) * Math.sin(theta) * scale * 0.15,
+        radius: 8, phase: i * 1.5, speed: 0.0004 + Math.random() * 0.0002,
+        orbitRadius: scale * 0.15, orbitTilt: phi,
       });
     }
 
-    // Individual memory nodes (limit to 60 for performance)
-    const recentMemories = memories.slice(0, 60);
-    for (const mem of recentMemories) {
+    // Connect core nodes
+    for (let i = 0; i < CORE_LABELS.length; i++)
+      for (let j = i + 1; j < CORE_LABELS.length; j++)
+        edges.push({ from: i, to: j });
+
+    // Category hub nodes — middle sphere
+    const cats = [...new Set(memories.map((m) => m.category))];
+    const catStartIdx = nodes.length;
+    for (let i = 0; i < cats.length; i++) {
+      const phi = Math.acos(1 - 2 * (i + 0.5) / Math.max(cats.length, 1));
+      const theta = Math.PI * (1 + Math.sqrt(5)) * i;
+      const r = scale * 0.45;
       nodes.push({
-        id: `mem-${mem.id}`,
-        label: truncateLabel(mem.fact),
-        type: mem.category as BrainNode["type"],
-        radius: 12 + Math.min(mem.fact.length / 20, 4),
+        id: `cat-${cats[i]}`, label: cats[i].charAt(0).toUpperCase() + cats[i].slice(1), type: cats[i],
+        x: Math.sin(phi) * Math.cos(theta) * r,
+        y: Math.cos(phi) * r,
+        z: Math.sin(phi) * Math.sin(theta) * r,
+        radius: 6, phase: i * 2.1, speed: 0.0003 + Math.random() * 0.0002,
+        orbitRadius: r, orbitTilt: phi,
       });
+      // Connect to a core node
+      const coreTarget = cats[i] === "business" || cats[i] === "ideas" ? 2
+        : cats[i] === "relationships" || cats[i] === "personal" ? 0
+        : cats[i] === "goals" ? 0 : 1;
+      edges.push({ from: catStartIdx + i, to: coreTarget });
     }
 
-    return nodes;
+    // Memory nodes — outer sphere (cap at 40 for perf)
+    const mems = memories.slice(0, 40);
+    const memStartIdx = nodes.length;
+    for (let i = 0; i < mems.length; i++) {
+      const phi = Math.acos(1 - 2 * (i + 0.5) / Math.max(mems.length, 1));
+      const theta = Math.PI * (1 + Math.sqrt(5)) * i;
+      const r = scale * (0.7 + Math.random() * 0.2);
+      const label = mems[i].fact.length > 20 ? mems[i].fact.slice(0, 19) + "\u2026" : mems[i].fact;
+      nodes.push({
+        id: `mem-${mems[i].id}`, label, type: mems[i].category,
+        x: Math.sin(phi) * Math.cos(theta) * r,
+        y: Math.cos(phi) * r,
+        z: Math.sin(phi) * Math.sin(theta) * r,
+        radius: 3.5, phase: i * 0.7, speed: 0.0002 + Math.random() * 0.0003,
+        orbitRadius: r, orbitTilt: phi,
+      });
+      // Connect to category hub
+      const catIdx = cats.indexOf(mems[i].category);
+      if (catIdx >= 0) edges.push({ from: memStartIdx + i, to: catStartIdx + catIdx });
+    }
+
+    s.nodes = nodes;
+    s.edges = edges;
+    s.built = true;
   }, [memories]);
-
-  // Build edges
-  const edgeData = useMemo(() => {
-    const edges: [string, string][] = [];
-    const nodeIds = new Set(nodeData.map((n) => n.id));
-
-    // Connect core nodes to each other
-    for (let i = 0; i < CORE_NODES.length; i++) {
-      for (let j = i + 1; j < CORE_NODES.length; j++) {
-        edges.push([CORE_NODES[i].id, CORE_NODES[j].id]);
-      }
-    }
-
-    // Connect category hubs to core
-    const categories = new Set(memories.map((m) => m.category));
-    for (const cat of categories) {
-      const catId = `cat-${cat}`;
-      if (!nodeIds.has(catId)) continue;
-      // Connect to most relevant core
-      if (cat === "business" || cat === "ideas") {
-        edges.push([catId, "core-ai"]);
-        edges.push([catId, "core-re"]);
-      } else if (cat === "relationships" || cat === "personal") {
-        edges.push([catId, "core-dylan"]);
-      } else if (cat === "goals") {
-        edges.push([catId, "core-dylan"]);
-        edges.push([catId, "core-ai"]);
-      } else {
-        edges.push([catId, "core-jarvis"]);
-      }
-    }
-
-    // Connect memories to their category hub
-    const recentMemories = memories.slice(0, 60);
-    for (const mem of recentMemories) {
-      const catId = `cat-${mem.category}`;
-      const memId = `mem-${mem.id}`;
-      if (nodeIds.has(catId) && nodeIds.has(memId)) {
-        edges.push([memId, catId]);
-      }
-    }
-
-    // Convert to index pairs
-    const idxMap = new Map<string, number>();
-    nodeData.forEach((n, i) => idxMap.set(n.id, i));
-
-    return edges
-      .filter(([a, b]) => idxMap.has(a) && idxMap.has(b))
-      .map(([a, b]) => [idxMap.get(a)!, idxMap.get(b)!] as [number, number]);
-  }, [nodeData, memories]);
-
-  // Rebuild positioned nodes when nodeData changes
-  useEffect(() => {
-    const { w, h } = sizeRef.current;
-    if (w === 0 || h === 0) return;
-
-    const cx = w / 2;
-    const cy = h / 2;
-    const now = performance.now();
-    const isGrowing = nodeData.length > prevMemoryCountRef.current;
-
-    const existingMap = new Map<string, BrainNode>();
-    for (const node of nodesRef.current) {
-      existingMap.set(node.id, node);
-    }
-
-    const newNodes: BrainNode[] = [];
-    const coreCount = CORE_NODES.length;
-    const catNodes = nodeData.filter((n) => n.id.startsWith("cat-"));
-    const memNodes = nodeData.filter((n) => n.id.startsWith("mem-"));
-
-    for (let i = 0; i < nodeData.length; i++) {
-      const nd = nodeData[i];
-      const existing = existingMap.get(nd.id);
-
-      if (existing) {
-        // Keep existing position, update label/radius
-        newNodes.push({ ...existing, label: nd.label, radius: nd.radius, type: nd.type });
-        continue;
-      }
-
-      // Calculate new position based on type
-      let x: number, y: number;
-      if (nd.id.startsWith("core-")) {
-        // Core nodes in tight center cluster
-        const coreIdx = CORE_NODES.findIndex((c) => c.id === nd.id);
-        const angle = (coreIdx / coreCount) * Math.PI * 2 - Math.PI / 2;
-        const r = Math.min(w, h) * 0.08;
-        x = cx + Math.cos(angle) * r;
-        y = cy + Math.sin(angle) * r;
-      } else if (nd.id.startsWith("cat-")) {
-        // Category hubs in middle ring
-        const catIdx = catNodes.findIndex((c) => c.id === nd.id);
-        const angle = (catIdx / Math.max(catNodes.length, 1)) * Math.PI * 2 - Math.PI / 2;
-        const r = Math.min(w, h) * 0.22;
-        x = cx + Math.cos(angle) * r + (Math.random() - 0.5) * 20;
-        y = cy + Math.sin(angle) * r + (Math.random() - 0.5) * 20;
-      } else {
-        // Memory nodes in outer ring, clustered near their category
-        const cat = nd.type;
-        const catNode = newNodes.find((n) => n.id === `cat-${cat}`);
-        if (catNode) {
-          const memIdx = memNodes.filter((m) => m.type === cat).findIndex((m) => m.id === nd.id);
-          const spreadAngle = ((memIdx || 0) / 8) * Math.PI * 0.8 - Math.PI * 0.4;
-          const catAngle = Math.atan2(catNode.baseY - cy, catNode.baseX - cx);
-          const angle = catAngle + spreadAngle * 0.5;
-          const r = Math.min(w, h) * (0.3 + Math.random() * 0.1);
-          x = cx + Math.cos(angle) * r;
-          y = cy + Math.sin(angle) * r;
-        } else {
-          const angle = Math.random() * Math.PI * 2;
-          const r = Math.min(w, h) * 0.35;
-          x = cx + Math.cos(angle) * r;
-          y = cy + Math.sin(angle) * r;
-        }
-      }
-
-      // Clamp to canvas
-      x = Math.max(30, Math.min(w - 30, x));
-      y = Math.max(30, Math.min(h - 30, y));
-
-      newNodes.push({
-        ...nd,
-        x,
-        y,
-        baseX: x,
-        baseY: y,
-        vx: 0,
-        vy: 0,
-        phase: Math.random() * Math.PI * 2,
-        freqX: 0.0003 + Math.random() * 0.0004,
-        freqY: 0.0004 + Math.random() * 0.0003,
-        isNew: isGrowing,
-        spawnTime: isGrowing ? now : undefined,
-      });
-    }
-
-    nodesRef.current = newNodes;
-    edgesRef.current = edgeData;
-    prevMemoryCountRef.current = nodeData.length;
-  }, [nodeData, edgeData]);
-
-  const initSize = useCallback(() => {
-    const container = containerRef.current;
-    const canvas = canvasRef.current;
-    if (!container || !canvas) return;
-
-    const dpr = window.devicePixelRatio || 1;
-    dprRef.current = dpr;
-    const rect = container.getBoundingClientRect();
-    const w = rect.width;
-    const h = rect.height;
-    if (w === 0 || h === 0) return;
-
-    canvas.width = w * dpr;
-    canvas.height = h * dpr;
-    canvas.style.width = `${w}px`;
-    canvas.style.height = `${h}px`;
-
-    // Rescale existing nodes if size changed
-    const oldW = sizeRef.current.w;
-    const oldH = sizeRef.current.h;
-    if (oldW > 0 && oldH > 0 && (oldW !== w || oldH !== h)) {
-      const sx = w / oldW;
-      const sy = h / oldH;
-      for (const node of nodesRef.current) {
-        node.baseX *= sx;
-        node.baseY *= sy;
-        node.x *= sx;
-        node.y *= sy;
-      }
-    }
-
-    sizeRef.current = { w, h };
-  }, []);
 
   useEffect(() => {
     const canvas = canvasRef.current;
     const container = containerRef.current;
     if (!canvas || !container) return;
 
-    initSize();
+    const s = stateRef.current;
+    const dpr = window.devicePixelRatio || 1;
+    s.dpr = dpr;
 
-    const ro = new ResizeObserver(initSize);
+    function resize() {
+      const rect = container!.getBoundingClientRect();
+      const w = rect.width;
+      const h = rect.height;
+      if (w === 0 || h === 0) return;
+      canvas!.width = w * dpr;
+      canvas!.height = h * dpr;
+      canvas!.style.width = `${w}px`;
+      canvas!.style.height = `${h}px`;
+      s.w = w;
+      s.h = h;
+      buildScene(w, h);
+    }
+
+    const ro = new ResizeObserver(resize);
     ro.observe(container);
+    resize();
 
-    // Mouse events
-    const getMousePos = (e: MouseEvent) => {
-      const rect = canvas.getBoundingClientRect();
+    // ─── Input handling ───────────────────────────────
+    function getPos(e: MouseEvent | Touch) {
+      const rect = canvas!.getBoundingClientRect();
       return { x: e.clientX - rect.left, y: e.clientY - rect.top };
-    };
+    }
 
-    const onMouseMove = (e: MouseEvent) => {
-      const pos = getMousePos(e);
-      const nodes = nodesRef.current;
-      let found = -1;
-      for (let i = 0; i < nodes.length; i++) {
-        const dx = pos.x - nodes[i].x;
-        const dy = pos.y - nodes[i].y;
-        if (dx * dx + dy * dy < (nodes[i].radius + 4) * (nodes[i].radius + 4)) {
-          found = i;
-          break;
-        }
+    function onPointerDown(e: MouseEvent) {
+      s.dragging = true;
+      s.lastMouse = getPos(e);
+    }
+    function onPointerUp() { s.dragging = false; }
+    function onPointerMove(e: MouseEvent) {
+      const pos = getPos(e);
+      if (s.dragging) {
+        const dx = pos.x - s.lastMouse.x;
+        const dy = pos.y - s.lastMouse.y;
+        s.rotY += dx * 0.008;
+        s.rotX += dy * 0.008;
+        s.rotX = Math.max(-Math.PI / 2, Math.min(Math.PI / 2, s.rotX));
+        s.lastMouse = pos;
       }
-      hoveredNodeRef.current = found;
-      canvas.style.cursor = found >= 0 ? "pointer" : "default";
-    };
+      // Hit test for hover
+      s.hovered = hitTest(pos.x, pos.y);
+      canvas!.style.cursor = s.hovered >= 0 ? "pointer" : "grab";
+    }
+    function onClick(e: MouseEvent) {
+      if (!onNodeClick) return;
+      const pos = getPos(e);
+      const idx = hitTest(pos.x, pos.y);
+      if (idx >= 0) onNodeClick({ id: s.nodes[idx].id, type: s.nodes[idx].type });
+    }
 
-    const onClick = (e: MouseEvent) => {
-      const pos = getMousePos(e);
-      const nodes = nodesRef.current;
-      for (let i = 0; i < nodes.length; i++) {
-        const dx = pos.x - nodes[i].x;
-        const dy = pos.y - nodes[i].y;
-        if (dx * dx + dy * dy < (nodes[i].radius + 4) * (nodes[i].radius + 4)) {
-          if (onNodeClick) {
-            onNodeClick({ id: nodes[i].id, type: nodes[i].type });
-          }
-          break;
-        }
+    // Touch
+    function onTouchStart(e: TouchEvent) {
+      if (e.touches.length === 1) {
+        s.dragging = true;
+        s.lastMouse = getPos(e.touches[0]);
       }
-    };
+    }
+    function onTouchMove(e: TouchEvent) {
+      if (!s.dragging || e.touches.length !== 1) return;
+      e.preventDefault();
+      const pos = getPos(e.touches[0]);
+      const dx = pos.x - s.lastMouse.x;
+      const dy = pos.y - s.lastMouse.y;
+      s.rotY += dx * 0.008;
+      s.rotX += dy * 0.008;
+      s.rotX = Math.max(-Math.PI / 2, Math.min(Math.PI / 2, s.rotX));
+      s.lastMouse = pos;
+    }
+    function onTouchEnd() { s.dragging = false; }
 
-    canvas.addEventListener("mousemove", onMouseMove);
+    canvas.addEventListener("mousedown", onPointerDown);
+    canvas.addEventListener("mouseup", onPointerUp);
+    canvas.addEventListener("mouseleave", onPointerUp);
+    canvas.addEventListener("mousemove", onPointerMove);
     canvas.addEventListener("click", onClick);
+    canvas.addEventListener("touchstart", onTouchStart, { passive: true });
+    canvas.addEventListener("touchmove", onTouchMove, { passive: false });
+    canvas.addEventListener("touchend", onTouchEnd);
 
-    // Animation loop
-    const draw = (time: number) => {
-      const ctx = canvas.getContext("2d");
-      if (!ctx) return;
+    // ─── Project 3D → 2D ─────────────────────────────
+    function project(x: number, y: number, z: number): { sx: number; sy: number; depth: number } {
+      // Rotate Y
+      const cosY = Math.cos(s.rotY), sinY = Math.sin(s.rotY);
+      let rx = x * cosY + z * sinY;
+      let rz = -x * sinY + z * cosY;
+      // Rotate X
+      const cosX = Math.cos(s.rotX), sinX = Math.sin(s.rotX);
+      const ry = y * cosX - rz * sinX;
+      rz = y * sinX + rz * cosX;
+      // Perspective
+      const fov = 600;
+      const scale = fov / (fov + rz + 300);
+      return { sx: s.w / 2 + rx * scale, sy: s.h / 2 + ry * scale, depth: rz };
+    }
 
-      const { w, h } = sizeRef.current;
-      const d = dprRef.current;
-      const nodes = nodesRef.current;
-      const edges = edgesRef.current;
+    function hitTest(mx: number, my: number): number {
+      const nodes = s.nodes;
+      for (let i = nodes.length - 1; i >= 0; i--) {
+        const p = project(nodes[i].x, nodes[i].y, nodes[i].z);
+        const r = nodes[i].radius * (600 / (600 + p.depth + 300)) * 2.5;
+        const dx = mx - p.sx, dy = my - p.sy;
+        if (dx * dx + dy * dy < (r + 6) * (r + 6)) return i;
+      }
+      return -1;
+    }
 
+    // ─── Draw loop ────────────────────────────────────
+    function draw(time: number) {
+      const ctx = canvas!.getContext("2d");
+      if (!ctx || !s.built) { s.animId = requestAnimationFrame(draw); return; }
+
+      const { w, h, dpr: d, nodes, edges } = s;
       ctx.setTransform(d, 0, 0, d, 0, 0);
       ctx.clearRect(0, 0, w, h);
 
-      if (nodes.length === 0) {
-        // Empty state
-        ctx.font = "500 14px system-ui, -apple-system, sans-serif";
-        ctx.fillStyle = "#64748b";
-        ctx.textAlign = "center";
-        ctx.textBaseline = "middle";
-        ctx.fillText("Memories will appear here as Jarvis learns", w / 2, h / 2);
-        animFrameRef.current = requestAnimationFrame(draw);
-        return;
+      // Slow auto-rotation when not dragging
+      if (!s.dragging) s.rotY += 0.002;
+
+      // Animate node positions (gentle orbit)
+      for (const n of nodes) {
+        const t = time * n.speed + n.phase;
+        const wobble = n.type === "core" ? 3 : n.id.startsWith("cat-") ? 5 : 8;
+        n.x += Math.sin(t) * wobble * 0.01;
+        n.y += Math.cos(t * 0.7) * wobble * 0.008;
+        n.z += Math.sin(t * 1.3) * wobble * 0.01;
       }
 
-      // Update node positions (gentle floating)
-      for (const node of nodes) {
-        // Spawn animation for new nodes
-        let scale = 1;
-        if (node.isNew && node.spawnTime) {
-          const age = time - node.spawnTime;
-          if (age < 1000) {
-            scale = Math.min(1, age / 1000);
-          } else {
-            node.isNew = false;
-          }
-        }
+      // Project all nodes
+      const projected = nodes.map((n) => ({ ...project(n.x, n.y, n.z), node: n }));
 
-        node.x = node.baseX + Math.sin(time * node.freqX + node.phase) * 8 * scale;
-        node.y = node.baseY + Math.cos(time * node.freqY + node.phase * 1.3) * 6 * scale;
-      }
+      // Sort by depth (back to front)
+      const sortedIndices = projected.map((_, i) => i).sort((a, b) => projected[a].depth - projected[b].depth);
 
-      // Schedule firings
-      if (edges.length > 0 && time - lastFireTimeRef.current > nextFireDelayRef.current) {
-        const edgeIdx = Math.floor(Math.random() * edges.length);
-        const [from] = edges[edgeIdx];
-        const fromNode = nodes[from];
-        if (fromNode) {
-          const color = CATEGORY_COLORS[fromNode.type] || "#6366f1";
-          firingsRef.current.push({ from: edges[edgeIdx][0], to: edges[edgeIdx][1], startTime: time, duration: 800, color });
-        }
-        lastFireTimeRef.current = time;
-        nextFireDelayRef.current = 1500 + Math.random() * 2000;
-      }
-
-      // Build firing set
-      const firingSet = new Set<string>();
-      for (const f of firingsRef.current) {
-        firingSet.add(`${f.from}-${f.to}`);
-        firingSet.add(`${f.to}-${f.from}`);
-      }
-
-      // Draw non-firing edges
-      ctx.lineWidth = 0.8;
-      for (const [ai, bi] of edges) {
-        if (firingSet.has(`${ai}-${bi}`)) continue;
-        const a = nodes[ai];
-        const b = nodes[bi];
-        if (!a || !b) continue;
+      // Draw edges
+      for (const edge of edges) {
+        const a = projected[edge.from];
+        const b = projected[edge.to];
+        const avgDepth = (a.depth + b.depth) / 2;
+        const alpha = Math.max(0.03, Math.min(0.25, 0.15 - avgDepth * 0.0003));
         ctx.beginPath();
-        ctx.moveTo(a.x, a.y);
-        ctx.lineTo(b.x, b.y);
-        ctx.strokeStyle = "rgba(30, 30, 46, 0.4)";
+        ctx.moveTo(a.sx, a.sy);
+        ctx.lineTo(b.sx, b.sy);
+        ctx.strokeStyle = `rgba(99,102,241,${alpha})`;
+        ctx.lineWidth = 0.7;
         ctx.stroke();
       }
 
-      // Draw firing edges
-      const activeFirings: FiringEdge[] = [];
-      for (const f of firingsRef.current) {
-        const elapsed = time - f.startTime;
-        if (elapsed > f.duration) continue;
-        activeFirings.push(f);
-
-        const progress = elapsed / f.duration;
-        const intensity = Math.sin(progress * Math.PI);
-        const rgb = hexToRgb(f.color);
-
-        const a = nodes[f.from];
-        const b = nodes[f.to];
-        if (!a || !b) continue;
-
-        ctx.save();
-        ctx.lineWidth = 1.5 + intensity * 2;
-        ctx.shadowColor = f.color;
-        ctx.shadowBlur = intensity * 20;
-        ctx.beginPath();
-        ctx.moveTo(a.x, a.y);
-        ctx.lineTo(b.x, b.y);
-        ctx.strokeStyle = `rgba(${rgb.r}, ${rgb.g}, ${rgb.b}, ${0.15 + intensity * 0.85})`;
-        ctx.stroke();
-        ctx.restore();
-      }
-      firingsRef.current = activeFirings;
-
-      // Draw nodes
-      for (let i = 0; i < nodes.length; i++) {
-        const node = nodes[i];
-        const color = CATEGORY_COLORS[node.type] || "#6366f1";
-        const rgb = hexToRgb(color);
-        const isHovered = hoveredNodeRef.current === i;
-
-        let scale = 1;
-        if (node.isNew && node.spawnTime) {
-          const age = time - node.spawnTime;
-          scale = Math.min(1, age / 1000);
-        }
-
-        const r = node.radius * scale;
-        const glowPulse = 15 + Math.sin(time * 0.002 + node.phase) * 5;
-
-        // New node spawn glow
-        if (node.isNew && node.spawnTime) {
-          const age = time - node.spawnTime;
-          if (age < 2000) {
-            const spawnGlow = Math.max(0, 1 - age / 2000) * 30;
-            ctx.save();
-            ctx.shadowColor = color;
-            ctx.shadowBlur = spawnGlow + 20;
-            ctx.beginPath();
-            ctx.arc(node.x, node.y, r + 4, 0, Math.PI * 2);
-            ctx.fillStyle = `rgba(${rgb.r}, ${rgb.g}, ${rgb.b}, ${0.15 * (1 - age / 2000)})`;
-            ctx.fill();
-            ctx.restore();
-          }
-        }
-
-        ctx.save();
-        ctx.shadowColor = color;
-        ctx.shadowBlur = isHovered ? glowPulse + 12 : glowPulse;
+      // Draw firing pulses on random edges
+      const fireIdx = Math.floor((time * 0.001) % Math.max(edges.length, 1));
+      const fireProgress = (time * 0.001) % 1;
+      if (edges.length > 0) {
+        const fe = edges[fireIdx];
+        const a = projected[fe.from];
+        const b = projected[fe.to];
+        const px = a.sx + (b.sx - a.sx) * fireProgress;
+        const py = a.sy + (b.sy - a.sy) * fireProgress;
+        const col = COLORS[nodes[fe.from].type] || COLORS.core;
+        const pulseAlpha = Math.sin(fireProgress * Math.PI) * 0.8;
 
         ctx.beginPath();
-        ctx.arc(node.x, node.y, r, 0, Math.PI * 2);
-        ctx.fillStyle = `rgba(${rgb.r}, ${rgb.g}, ${rgb.b}, ${isHovered ? 0.5 : 0.3})`;
+        ctx.arc(px, py, 3, 0, Math.PI * 2);
+        ctx.fillStyle = `rgba(${col[0]},${col[1]},${col[2]},${pulseAlpha})`;
         ctx.fill();
 
-        ctx.lineWidth = isHovered ? 2.5 : 1.5;
-        ctx.strokeStyle = `rgba(${rgb.r}, ${rgb.g}, ${rgb.b}, 0.8)`;
-        ctx.stroke();
-        ctx.restore();
-
-        // Inner bright dot
+        // Pulse line segment
         ctx.beginPath();
-        ctx.arc(node.x, node.y, r * 0.25, 0, Math.PI * 2);
-        ctx.fillStyle = `rgba(${rgb.r}, ${rgb.g}, ${rgb.b}, 0.6)`;
-        ctx.fill();
+        ctx.moveTo(a.sx, a.sy);
+        ctx.lineTo(b.sx, b.sy);
+        ctx.strokeStyle = `rgba(${col[0]},${col[1]},${col[2]},${pulseAlpha * 0.4})`;
+        ctx.lineWidth = 1.5;
+        ctx.stroke();
       }
 
-      // Tooltip for hovered node
-      if (hoveredNodeRef.current >= 0) {
-        const node = nodes[hoveredNodeRef.current];
-        const label = node.label;
-        ctx.font = "600 12px system-ui, -apple-system, sans-serif";
-        const metrics = ctx.measureText(label);
-        const textW = metrics.width;
-        const padX = 10;
-        const tooltipW = textW + padX * 2;
-        const tooltipH = 24;
-        let tx = node.x - tooltipW / 2;
-        let ty = node.y - node.radius - tooltipH - 8;
+      // Draw nodes (sorted back-to-front)
+      for (const idx of sortedIndices) {
+        const p = projected[idx];
+        const n = p.node;
+        const col = COLORS[n.type] || COLORS.core;
+        const depthScale = 600 / (600 + p.depth + 300);
+        const r = n.radius * depthScale * 2.5;
+        const isHovered = s.hovered === idx;
+        const alpha = Math.max(0.2, Math.min(1, 0.6 + depthScale * 0.5));
 
-        if (tx < 4) tx = 4;
-        if (tx + tooltipW > w - 4) tx = w - 4 - tooltipW;
-        if (ty < 4) ty = node.y + node.radius + 8;
+        // Outer glow
+        if (isHovered || n.type === "core") {
+          const glowR = r * (isHovered ? 3.5 : 2.2);
+          const grad = ctx.createRadialGradient(p.sx, p.sy, r * 0.5, p.sx, p.sy, glowR);
+          grad.addColorStop(0, `rgba(${col[0]},${col[1]},${col[2]},${isHovered ? 0.25 : 0.1})`);
+          grad.addColorStop(1, `rgba(${col[0]},${col[1]},${col[2]},0)`);
+          ctx.beginPath();
+          ctx.arc(p.sx, p.sy, glowR, 0, Math.PI * 2);
+          ctx.fillStyle = grad;
+          ctx.fill();
+        }
 
-        ctx.fillStyle = "rgba(10, 10, 20, 0.9)";
+        // Node body
         ctx.beginPath();
-        ctx.roundRect(tx, ty, tooltipW, tooltipH, 6);
+        ctx.arc(p.sx, p.sy, r, 0, Math.PI * 2);
+        ctx.fillStyle = `rgba(${col[0]},${col[1]},${col[2]},${alpha * (isHovered ? 0.7 : 0.4)})`;
         ctx.fill();
-
-        const borderColor = CATEGORY_COLORS[node.type] || "#6366f1";
-        ctx.strokeStyle = `${borderColor}66`;
-        ctx.lineWidth = 1;
+        ctx.strokeStyle = `rgba(${col[0]},${col[1]},${col[2]},${alpha * 0.9})`;
+        ctx.lineWidth = isHovered ? 2 : 1;
         ctx.stroke();
 
-        ctx.fillStyle = "#ffffff";
-        ctx.textAlign = "center";
-        ctx.textBaseline = "middle";
-        ctx.fillText(label, tx + tooltipW / 2, ty + tooltipH / 2);
+        // Inner bright core
+        ctx.beginPath();
+        ctx.arc(p.sx, p.sy, r * 0.3, 0, Math.PI * 2);
+        ctx.fillStyle = `rgba(${col[0]},${col[1]},${col[2]},${alpha * 0.8})`;
+        ctx.fill();
+
+        // Label for core/category/hovered nodes
+        if (n.type === "core" || n.id.startsWith("cat-") || isHovered) {
+          ctx.font = `${isHovered ? 600 : 500} ${Math.max(9, 11 * depthScale)}px system-ui, -apple-system, sans-serif`;
+          ctx.fillStyle = `rgba(255,255,255,${alpha * 0.9})`;
+          ctx.textAlign = "center";
+          ctx.textBaseline = "middle";
+          ctx.fillText(n.label, p.sx, p.sy - r - 6 * depthScale);
+        }
       }
 
-      animFrameRef.current = requestAnimationFrame(draw);
-    };
+      // Scanline effect (subtle)
+      const scanY = (time * 0.05) % h;
+      const scanGrad = ctx.createLinearGradient(0, scanY - 2, 0, scanY + 2);
+      scanGrad.addColorStop(0, "rgba(99,102,241,0)");
+      scanGrad.addColorStop(0.5, "rgba(99,102,241,0.03)");
+      scanGrad.addColorStop(1, "rgba(99,102,241,0)");
+      ctx.fillStyle = scanGrad;
+      ctx.fillRect(0, scanY - 2, w, 4);
 
-    animFrameRef.current = requestAnimationFrame(draw);
+      s.animId = requestAnimationFrame(draw);
+    }
+
+    s.animId = requestAnimationFrame(draw);
 
     return () => {
       ro.disconnect();
-      canvas.removeEventListener("mousemove", onMouseMove);
+      canvas.removeEventListener("mousedown", onPointerDown);
+      canvas.removeEventListener("mouseup", onPointerUp);
+      canvas.removeEventListener("mouseleave", onPointerUp);
+      canvas.removeEventListener("mousemove", onPointerMove);
       canvas.removeEventListener("click", onClick);
-      cancelAnimationFrame(animFrameRef.current);
+      canvas.removeEventListener("touchstart", onTouchStart);
+      canvas.removeEventListener("touchmove", onTouchMove);
+      canvas.removeEventListener("touchend", onTouchEnd);
+      cancelAnimationFrame(s.animId);
     };
-  }, [onNodeClick, initSize]);
+  }, [buildScene, onNodeClick]);
 
   return (
-    <div ref={containerRef} className="w-full h-full relative">
+    <div ref={containerRef} className="w-full h-full relative select-none">
       <canvas ref={canvasRef} className="block w-full h-full" />
     </div>
   );
