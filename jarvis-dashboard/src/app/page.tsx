@@ -2,35 +2,17 @@
 
 import { useState, useRef, useEffect, useCallback } from "react";
 import Link from "next/link";
-import {
-  Chart as ChartJS,
-  CategoryScale,
-  LinearScale,
-  BarElement,
-  PointElement,
-  LineElement,
-  ArcElement,
-  Title,
-  Tooltip,
-  Legend,
-  Filler,
-} from "chart.js";
-import { Bar, Line } from "react-chartjs-2";
 import { api } from "@/lib/api";
 import type { Project, Goal, ChatMessage, Memory, MemoryCategory } from "@/lib/types";
-import JarvisBrain from "@/components/JarvisBrain";
 import type { MemoryForBrain } from "@/components/JarvisBrain";
-import SpotifyWidget from "@/components/SpotifyWidget";
 import LindyChat from "@/components/LindyChat";
 import VoiceChatInput from "@/components/VoiceChatInput";
 import dynamic from "next/dynamic";
 
+// Lazy-load heavy components — only when needed
+const JarvisBrain = dynamic(() => import("@/components/JarvisBrain"), { ssr: false });
 const OrgChart = dynamic(() => import("@/components/OrgChart"), { ssr: false });
-
-ChartJS.register(
-  CategoryScale, LinearScale, BarElement, PointElement, LineElement, ArcElement,
-  Title, Tooltip, Legend, Filler
-);
+const GoalCharts = dynamic(() => import("@/components/GoalCharts"), { ssr: false });
 
 // ─── Types ────────────────────────────────────────────────
 type Tab = "overview" | "ideas" | "agents" | "goals" | "memory";
@@ -136,13 +118,6 @@ export default function Dashboard() {
       setProjects(projectsData);
       setGoals(goalsData);
       fetchMemories();
-
-      // Auto-generate daily brief on load
-      try {
-        const res = await fetch("/api/brief");
-        const data = await res.json();
-        if (data.brief) setDailyBrief(data.brief);
-      } catch { /* silent */ }
     }
     loadData();
   }, [fetchMemories]);
@@ -453,9 +428,8 @@ export default function Dashboard() {
           </div>
         </div>
 
-        {/* Spotify + Weather + Markets + Game */}
+        {/* Weather + Markets + Game */}
         <div className="space-y-6">
-          <SpotifyWidget />
           <WeatherWidget openModal={openModal} />
           <MarketsWidget openModal={openModal} />
           <MotoTTT />
@@ -596,32 +570,8 @@ export default function Dashboard() {
         ))}
       </div>
 
-      {/* Bar Chart */}
-      <div className="bg-jarvis-card border border-jarvis-border rounded-xl p-4">
-        <h3 className="text-sm font-semibold text-jarvis-muted mb-4">Goal Progress Overview</h3>
-        <div className="h-64">
-          <Bar
-            data={{
-              labels: goals.map((g) => g.title.split(" ").slice(0, 3).join(" ")),
-              datasets: [{
-                label: "Progress %",
-                data: goals.map((g) => g.progress),
-                backgroundColor: ["#6366f1", "#818cf8", "#6366f1", "#818cf8"],
-                borderRadius: 6,
-              }],
-            }}
-            options={{
-              responsive: true,
-              maintainAspectRatio: false,
-              plugins: { legend: { display: false } },
-              scales: {
-                y: { max: 100, grid: { color: "#1e1e2e" }, ticks: { color: "#64748b" } },
-                x: { grid: { display: false }, ticks: { color: "#64748b", font: { size: 11 } } },
-              },
-            }}
-          />
-        </div>
-      </div>
+      {/* Bar Chart — lazy loaded */}
+      <GoalCharts goals={goals} />
     </div>
   );
 
@@ -682,24 +632,6 @@ export default function Dashboard() {
             <div className="text-lg font-bold text-white">{memoryCounts[cat.key] || 0}</div>
           </button>
         ))}
-      </div>
-
-      {/* Jarvis Brain — Live */}
-      <div className="bg-jarvis-card border border-jarvis-border rounded-xl p-4">
-        <div className="flex items-center justify-between mb-2">
-          <div>
-            <h3 className="text-sm font-semibold text-white">Jarvis Brain</h3>
-            <p className="text-xs text-jarvis-muted">live knowledge graph — grows as you teach it</p>
-          </div>
-          <span className="text-xs text-jarvis-muted">{memories.length + 4} nodes</span>
-        </div>
-        <div className="h-[350px] rounded-lg overflow-hidden">
-          <JarvisBrain memories={memories as MemoryForBrain[]} onNodeClick={(node) => {
-            if (node.id.startsWith("cat-")) {
-              setMemoryFilter(node.type);
-            }
-          }} />
-        </div>
       </div>
 
       {/* Memory List */}
@@ -1176,23 +1108,16 @@ function MarketsWidget({ openModal }: { openModal: (d: ModalData) => void }) {
           </button>
         ))}
       </div>
-      <div className="h-24">
-        <Line
-          data={{
-            labels: ["Mon", "Tue", "Wed", "Thu", "Fri"],
-            datasets: [{
-              data: [5180, 5210, 5195, 5230, 5248],
-              borderColor: "#6366f1",
-              backgroundColor: "rgba(99, 102, 241, 0.1)",
-              fill: true, tension: 0.4, pointRadius: 0, borderWidth: 2,
-            }],
-          }}
-          options={{
-            responsive: true, maintainAspectRatio: false,
-            plugins: { legend: { display: false } },
-            scales: { y: { display: false }, x: { grid: { display: false }, ticks: { color: "#64748b", font: { size: 10 } } } },
-          }}
-        />
+      {/* Mini sparkline — pure CSS, no Chart.js */}
+      <div className="flex items-end gap-1 h-16 mt-1">
+        {[62, 68, 64, 72, 78].map((v, i) => (
+          <div key={i} className="flex-1 flex flex-col items-center gap-1">
+            <div className="w-full bg-jarvis-accent/20 rounded-sm" style={{ height: `${v}%` }}>
+              <div className="w-full h-full bg-jarvis-accent/40 rounded-sm" />
+            </div>
+            <span className="text-[9px] text-jarvis-muted">{["M","T","W","T","F"][i]}</span>
+          </div>
+        ))}
       </div>
     </div>
   );
