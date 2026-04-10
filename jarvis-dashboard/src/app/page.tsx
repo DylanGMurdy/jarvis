@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useRef, useEffect, useCallback } from "react";
+import Link from "next/link";
 import { api } from "@/lib/api";
 import type { Project, Goal, ChatMessage, Memory, MemoryCategory } from "@/lib/types";
 import VoiceChatInput from "@/components/VoiceChatInput";
@@ -44,6 +45,7 @@ export default function Dashboard() {
   const [chatMessages, setChatMessages] = useState<ChatMessage[]>([]);
   const [chatInput, setChatInput] = useState("");
   const [chatLoading, setChatLoading] = useState(false);
+  const [chatConversationId, setChatConversationId] = useState<string | null>(null);
   const [modal, setModal] = useState<ModalData>(null);
   const chatEndRef = useRef<HTMLDivElement>(null);
   const [chatOpen, setChatOpen] = useState(false);
@@ -77,6 +79,17 @@ export default function Dashboard() {
       setProjects(projectsData);
       setGoals(goalsData);
       fetchMemories();
+
+      // Load most recent global conversation so chat continues where you left off
+      try {
+        const chatData = await api.conversations.getLatestGlobal();
+        if (chatData.messages?.length > 0) {
+          setChatMessages(chatData.messages);
+        }
+        if (chatData.conversation?.id) {
+          setChatConversationId(chatData.conversation.id);
+        }
+      } catch { /* silent */ }
     }
     loadData();
   }, [fetchMemories]);
@@ -131,13 +144,11 @@ export default function Dashboard() {
     setChatInput("");
     setChatLoading(true);
     try {
-      const res = await fetch("/api/chat", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ messages: newMessages }),
-      });
-      const data = await res.json();
+      const data = await api.conversations.send(newMessages, chatConversationId || undefined);
       setChatMessages([...newMessages, { role: "assistant", content: data.response }]);
+      if (data.conversationId && !chatConversationId) {
+        setChatConversationId(data.conversationId);
+      }
       if (newMessages.length % 6 === 0) {
         fetchMemories();
       }
@@ -145,7 +156,7 @@ export default function Dashboard() {
       setChatMessages((prev) => [...prev, { role: "assistant", content: "Connection error. Standing by, sir." }]);
     }
     setChatLoading(false);
-  }, [chatInput, chatMessages, fetchMemories]);
+  }, [chatInput, chatMessages, chatConversationId, fetchMemories]);
 
   const openModal = (data: ModalData) => setModal(data);
   const closeModal = () => setModal(null);
@@ -250,6 +261,18 @@ export default function Dashboard() {
                 </button>
               ))}
             </div>
+          </div>
+        )}
+        {!sidebarCollapsed && (
+          <div className="p-3 border-b border-jarvis-border">
+            <Link href="/history" className="flex items-center gap-2 w-full text-left text-xs px-2 py-2 rounded hover:bg-jarvis-accent/20 text-jarvis-text hover:text-jarvis-accent transition-colors">
+              <span>💬</span>
+              <span>Chat History</span>
+            </Link>
+            <Link href="/chat" className="flex items-center gap-2 w-full text-left text-xs px-2 py-2 rounded hover:bg-jarvis-accent/20 text-jarvis-text hover:text-jarvis-accent transition-colors">
+              <span>✉️</span>
+              <span>Messages</span>
+            </Link>
           </div>
         )}
         {!sidebarCollapsed && (
