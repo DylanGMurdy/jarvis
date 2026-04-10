@@ -3,5 +3,5 @@
   "outputDirectory": "jarvis-dashboard/.next",
   "installCommand": "cd jarvis-dashboard && npm install",
   "framework": "nextjs",
-  "rootDirectory": "jarvis-dashboard"
+  "rewrites": [{"source": "/(.*)", "destination": "/"}]
 }
