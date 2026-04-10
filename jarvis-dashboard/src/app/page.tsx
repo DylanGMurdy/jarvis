@@ -1200,7 +1200,7 @@ function MarketsWidget({ openModal }: { openModal: (d: ModalData) => void }) {
 
 // ─── Moto Tic-Tac-Toe Widget ─────────────────────────────
 const RIDER = "🏍️";
-const HELMET = "⛑️";
+const HELMET = "🪖";
 const WIN_LINES = [[0,1,2],[3,4,5],[6,7,8],[0,3,6],[1,4,7],[2,5,8],[0,4,8],[2,4,6]];
 
 function MotoTTT() {
@@ -1278,12 +1278,12 @@ function MotoTTT() {
       </div>
 
       {/* Board */}
-      <div className="grid grid-cols-3 gap-1 mb-3">
+      <div className="grid grid-cols-3 gap-1.5 mb-3">
         {board.map((cell, i) => (
           <button
             key={i}
             onClick={() => play(i)}
-            className={`aspect-square rounded-lg flex items-center justify-center text-2xl transition-all ${
+            className={`aspect-square rounded-lg flex items-center justify-center text-4xl transition-all ${
               winCells.includes(i)
                 ? "bg-orange-500/15 shadow-[inset_0_0_12px_rgba(249,115,22,0.3)]"
                 : cell
