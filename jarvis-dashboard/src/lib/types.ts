@@ -82,3 +82,25 @@ export interface LindyBriefing {
 }
 
 export type ChatMessage = { role: "user" | "assistant"; content: string };
+
+export interface Conversation {
+  id: string;
+  messages: ChatMessage[];
+  summary: string;
+  title: string;
+  conversation_type: "global" | "project";
+  created_at: string;
+  updated_at: string;
+}
+
+export interface ConversationPreview {
+  id: string;
+  title: string;
+  summary: string;
+  conversation_type: "global" | "project";
+  created_at: string;
+  updated_at: string;
+  message_count: number;
+  preview: string;
+  last_role: string;
+}

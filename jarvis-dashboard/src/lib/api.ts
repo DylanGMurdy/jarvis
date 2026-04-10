@@ -1,5 +1,5 @@
 // Client-side API module — all data flows through Supabase-backed API routes
-import type { Project, ProjectTask, ProjectNote, Goal, GoalJournal } from "./types";
+import type { Project, ProjectTask, ProjectNote, Goal, GoalJournal, ChatMessage, ConversationPreview } from "./types";
 
 async function fetchJSON<T>(url: string, opts?: RequestInit): Promise<T> {
   const res = await fetch(url, opts);
@@ -91,6 +91,36 @@ export const api = {
     async create(goalId: string, entry: string): Promise<GoalJournal | null> {
       const res = await post(`/api/db/goals/${goalId}/journal`, { entry });
       return (res as { data?: GoalJournal }).data || null;
+    },
+  },
+
+  conversations: {
+    async list(): Promise<ConversationPreview[]> {
+      const res = await fetchJSON<{ conversations: ConversationPreview[] }>("/api/chat?list=true");
+      return res.conversations || [];
+    },
+    async get(id: string): Promise<{ messages: ChatMessage[]; conversation: { id: string; title: string } | null }> {
+      return fetchJSON(`/api/chat?id=${id}`);
+    },
+    async getLatestGlobal(): Promise<{ messages: ChatMessage[]; conversation: { id: string; title: string } | null }> {
+      return fetchJSON("/api/chat?type=global");
+    },
+    async send(messages: ChatMessage[], conversationId?: string): Promise<{ response: string; conversationId: string }> {
+      return fetchJSON("/api/chat", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ messages, conversationId }),
+      });
+    },
+    async updateTitle(id: string, title: string): Promise<void> {
+      await patch("/api/conversations", { id, title } as Record<string, unknown>);
+    },
+    async delete(id: string): Promise<void> {
+      await fetchJSON("/api/conversations", {
+        method: "DELETE",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ id }),
+      });
     },
   },
 };

@@ -1,5 +1,23 @@
 import { getSupabase } from "@/lib/supabase";
 
+async function sendPushNotification(summary: string, flags: string[]) {
+  const baseUrl = process.env.NEXT_PUBLIC_SITE_URL || process.env.VERCEL_URL || "http://localhost:3000";
+  const url = baseUrl.startsWith("http") ? baseUrl : `https://${baseUrl}`;
+
+  try {
+    await fetch(`${url}/api/push/send`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        title: flags.length > 0 ? "JARVIS — Needs Attention" : "JARVIS Update",
+        body: summary || "New update from your agents",
+        url: "/chat",
+        tag: "lindy-update",
+      }),
+    });
+  } catch { /* silent */ }
+}
+
 export async function POST(request: Request) {
   const sb = getSupabase();
 
@@ -25,6 +43,11 @@ export async function POST(request: Request) {
       if (error) {
         console.log("[Lindy update] Supabase error:", error.message);
         return Response.json({ error: error.message }, { status: 500 });
+      }
+
+      // Send push notification for important updates
+      if (update.flags.length > 0 || update.summary) {
+        sendPushNotification(update.summary, update.flags).catch(() => {});
       }
 
       return Response.json({ ok: true, id: data.id });

@@ -51,51 +51,171 @@ async function loadMemories(): Promise<string> {
   }
 }
 
-function buildSystemPrompt(
-  base: string,
-  context?: {
-    type: string;
-    project?: Record<string, unknown>;
-    goal?: Record<string, unknown>;
-  }
-): string {
-  if (!context) return base;
+// GET — Load conversations (latest global or by ID)
+export async function GET(request: Request) {
+  const sb = getSupabase();
+  if (!sb) return Response.json({ messages: [], conversations: [] });
 
-  if (context.type === "project" && context.project) {
-    const p = context.project;
-    return `${base}
+  const { searchParams } = new URL(request.url);
+  const id = searchParams.get("id");
+  const type = searchParams.get("type") || "global";
+  const limit = parseInt(searchParams.get("limit") || "20");
 
-CURRENT CONTEXT: You are discussing a specific project with Dylan.
+  // Load a specific conversation by ID
+  if (id) {
+    const { data, error } = await sb
+      .from("conversations")
+      .select("*")
+      .eq("id", id)
+      .single();
 
-PROJECT DETAILS:
-- Title: ${p.title}
-- Category: ${p.category}
-- Status: ${p.status}
-- Grade: ${p.grade}
-- Description: ${p.description}
-- Revenue Goal: ${p.revenue_goal}
-- Progress: ${p.progress}%
-
-Stay focused on this project. Help Dylan make decisions, overcome blockers, and move it forward. Be specific and actionable.`;
+    if (error || !data) {
+      return Response.json({ messages: [], conversation: null });
+    }
+    return Response.json({ messages: data.messages || [], conversation: data });
   }
 
-  if (context.type === "goal" && context.goal) {
-    const g = context.goal;
-    return `${base}
+  // Load conversation list (for the chat list page)
+  if (searchParams.get("list") === "true") {
+    const { data, error } = await sb
+      .from("conversations")
+      .select("id, title, summary, conversation_type, created_at, updated_at, messages")
+      .order("updated_at", { ascending: false })
+      .limit(limit);
 
-CURRENT CONTEXT: You are discussing a specific 90-day goal with Dylan.
+    if (error) return Response.json({ conversations: [] });
 
-GOAL DETAILS:
-- Title: ${g.title}
-- Target: ${g.target}
-- Progress: ${g.progress}%
-- Target Date: ${g.target_date}
-- Milestones: ${g.milestones_summary}
+    // Add preview (last message) to each conversation
+    const conversations = (data || []).map((c) => {
+      const msgs = c.messages as { role: string; content: string }[] || [];
+      const lastMsg = msgs[msgs.length - 1];
+      return {
+        id: c.id,
+        title: c.title || c.summary || "Chat",
+        summary: c.summary || "",
+        conversation_type: c.conversation_type || "global",
+        created_at: c.created_at,
+        updated_at: c.updated_at || c.created_at,
+        message_count: msgs.length,
+        preview: lastMsg ? lastMsg.content.slice(0, 100) : "",
+        last_role: lastMsg?.role || "",
+      };
+    });
 
-Stay focused on this goal. Help Dylan track progress, plan next steps, and stay motivated. Be specific and actionable.`;
+    return Response.json({ conversations });
   }
 
-  return base;
+  // Load the most recent global conversation
+  const { data, error } = await sb
+    .from("conversations")
+    .select("*")
+    .or("conversation_type.eq.global,conversation_type.is.null")
+    .not("summary", "like", "project:%")
+    .order("updated_at", { ascending: false })
+    .limit(1);
+
+  if (error || !data || data.length === 0) {
+    return Response.json({ messages: [], conversation: null });
+  }
+
+  return Response.json({
+    messages: data[0].messages || [],
+    conversation: {
+      id: data[0].id,
+      title: data[0].title || data[0].summary || "Chat",
+      summary: data[0].summary,
+      conversation_type: data[0].conversation_type,
+      updated_at: data[0].updated_at || data[0].created_at,
+    },
+  });
+}
+
+export async function POST(request: Request) {
+  const apiKey = process.env.ANTHROPIC_API_KEY;
+  if (!apiKey || apiKey === "your-api-key-here") {
+    return Response.json(
+      {
+        response:
+          "JARVIS is standing by, sir. Add your Anthropic API key to .env.local to activate full AI capabilities. For now, I'm running in demo mode — but I'm still here to help you stay focused on what matters.",
+      },
+      { status: 200 }
+    );
+  }
+
+  try {
+    const { messages, context, conversationId } = await request.json();
+
+    // Load persistent memories and inject into system prompt
+    const memories = await loadMemories();
+    const systemPrompt = BASE_SYSTEM + memories;
+
+    const client = new Anthropic({ apiKey });
+    const response = await client.messages.create({
+      model: "claude-sonnet-4-20250514",
+      max_tokens: 1024,
+      system: systemPrompt,
+      messages: messages.map((m: { role: string; content: string }) => ({
+        role: m.role as "user" | "assistant",
+        content: m.content,
+      })),
+    });
+
+    const textBlock = response.content.find((b) => b.type === "text");
+    const assistantResponse = textBlock ? textBlock.text : "No response generated.";
+
+    const allMessages = [...messages, { role: "assistant", content: assistantResponse }];
+
+    // Save/update conversation in Supabase
+    const sb = getSupabase();
+    let savedConversationId = conversationId;
+
+    if (sb) {
+      // Generate title from first user message
+      const firstUserMsg = allMessages.find((m: { role: string; content: string }) => m.role === "user");
+      const autoTitle = firstUserMsg ? firstUserMsg.content.slice(0, 60) : "Chat";
+
+      if (conversationId) {
+        // Update existing conversation
+        await sb.from("conversations")
+          .update({
+            messages: allMessages,
+            updated_at: new Date().toISOString(),
+          })
+          .eq("id", conversationId);
+      } else {
+        // Create new conversation
+        const { data } = await sb.from("conversations")
+          .insert({
+            messages: allMessages,
+            summary: autoTitle,
+            title: autoTitle,
+            conversation_type: context?.type === "project" ? "project" : "global",
+            created_at: new Date().toISOString(),
+            updated_at: new Date().toISOString(),
+          })
+          .select("id")
+          .single();
+
+        if (data) {
+          savedConversationId = data.id;
+        }
+      }
+
+      // Extract memories in background
+      if (allMessages.length >= 4) {
+        extractAndSaveMemories(allMessages, apiKey).catch(() => {});
+      }
+    }
+
+    return Response.json({
+      response: assistantResponse,
+      conversationId: savedConversationId,
+    });
+  } catch (error: unknown) {
+    const message =
+      error instanceof Error ? error.message : "Unknown error occurred";
+    return Response.json({ response: `Error: ${message}` }, { status: 500 });
+  }
 }
 
 async function extractAndSaveMemories(
@@ -125,7 +245,6 @@ async function extractAndSaveMemories(
     const memories: { fact: string; category: string; confidence: number }[] = JSON.parse(cleaned);
     if (!Array.isArray(memories) || memories.length === 0) return;
 
-    // Dedup
     const { data: existing } = await sb
       .from("memories")
       .select("fact")
@@ -152,79 +271,5 @@ async function extractAndSaveMemories(
     }
   } catch {
     // Silent — extraction is best-effort
-  }
-}
-
-async function saveConversation(messages: { role: string; content: string }[]) {
-  const sb = getSupabase();
-  if (!sb || messages.length < 2) return;
-
-  try {
-    // Generate a short summary from the last few messages
-    const lastFew = messages.slice(-4);
-    const summary = lastFew
-      .filter((m) => m.role === "user")
-      .map((m) => m.content.slice(0, 80))
-      .join(" | ");
-
-    await sb.from("conversations").insert({
-      messages,
-      summary: summary || "Chat session",
-      created_at: new Date().toISOString(),
-    });
-  } catch {
-    // Silent
-  }
-}
-
-export async function POST(request: Request) {
-  const apiKey = process.env.ANTHROPIC_API_KEY;
-  if (!apiKey || apiKey === "your-api-key-here") {
-    return Response.json(
-      {
-        response:
-          "JARVIS is standing by, sir. Add your Anthropic API key to .env.local to activate full AI capabilities. For now, I'm running in demo mode — but I'm still here to help you stay focused on what matters.",
-      },
-      { status: 200 }
-    );
-  }
-
-  try {
-    const { messages, context } = await request.json();
-
-    // Load persistent memories and inject into system prompt
-    const memories = await loadMemories();
-    const systemPrompt = buildSystemPrompt(BASE_SYSTEM + memories, context);
-
-    const client = new Anthropic({ apiKey });
-    const response = await client.messages.create({
-      model: "claude-sonnet-4-20250514",
-      max_tokens: 1024,
-      system: systemPrompt,
-      messages: messages.map((m: { role: string; content: string }) => ({
-        role: m.role as "user" | "assistant",
-        content: m.content,
-      })),
-    });
-
-    const textBlock = response.content.find((b) => b.type === "text");
-    const assistantResponse = textBlock ? textBlock.text : "No response generated.";
-
-    // After responding, extract memories and save conversation in background
-    const allMessages = [...messages, { role: "assistant", content: assistantResponse }];
-
-    // Fire and forget — don't block the response
-    if (allMessages.length >= 4) {
-      extractAndSaveMemories(allMessages, apiKey).catch(() => {});
-    }
-    if (allMessages.length >= 2) {
-      saveConversation(allMessages).catch(() => {});
-    }
-
-    return Response.json({ response: assistantResponse });
-  } catch (error: unknown) {
-    const message =
-      error instanceof Error ? error.message : "Unknown error occurred";
-    return Response.json({ response: `Error: ${message}` }, { status: 500 });
   }
 }

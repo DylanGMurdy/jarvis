@@ -40,6 +40,21 @@ body {
   to { opacity: 1; transform: translateY(0); }
 }
 
+@keyframes bounce {
+  0%, 60%, 100% { transform: translateY(0); }
+  30% { transform: translateY(-6px); }
+}
+
+@keyframes messageIn {
+  from { opacity: 0; transform: translateY(8px) scale(0.97); }
+  to { opacity: 1; transform: translateY(0) scale(1); }
+}
+
+/* Chat message entrance */
+.chat-message-in {
+  animation: messageIn 0.25s ease-out;
+}
+
 .modal-backdrop {
   background: rgba(0, 0, 0, 0.7);
   backdrop-filter: blur(4px);

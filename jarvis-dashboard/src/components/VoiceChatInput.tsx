@@ -12,6 +12,12 @@ const MicIcon = ({ size = 16 }: { size?: number }) => (
   </svg>
 );
 
+const SendIcon = ({ size = 18 }: { size?: number }) => (
+  <svg width={size} height={size} viewBox="0 0 24 24" fill="currentColor">
+    <path d="M2.01 21L23 12 2.01 3 2 10l15 2-15 2z" />
+  </svg>
+);
+
 interface VoiceChatInputProps {
   value: string;
   onChange: (value: string) => void;
@@ -30,9 +36,18 @@ export default function VoiceChatInput({
   placeholder = "Ask JARVIS...",
   variant = "panel",
 }: VoiceChatInputProps) {
-  const [sendDisabled] = useState(false);
   const valueRef = useRef(value);
+  const textareaRef = useRef<HTMLTextAreaElement>(null);
   useEffect(() => { valueRef.current = value; }, [value]);
+
+  // Auto-resize textarea
+  useEffect(() => {
+    const ta = textareaRef.current;
+    if (!ta) return;
+    ta.style.height = "auto";
+    const maxHeight = variant === "panel" ? 80 : 120;
+    ta.style.height = Math.min(ta.scrollHeight, maxHeight) + "px";
+  }, [value, variant]);
 
   const appendTranscript = useCallback(
     (text: string) => {
@@ -49,6 +64,10 @@ export default function VoiceChatInput({
   function handleSend() {
     if (isListening) stopListening();
     onSend();
+    // Haptic feedback on send
+    if (typeof navigator !== "undefined" && "vibrate" in navigator) {
+      navigator.vibrate(10);
+    }
   }
 
   function handleKeyDown(e: React.KeyboardEvent) {
@@ -59,6 +78,7 @@ export default function VoiceChatInput({
   }
 
   const isPanel = variant === "panel";
+  const hasContent = value.trim().length > 0;
 
   return (
     <div className="relative">
@@ -67,26 +87,28 @@ export default function VoiceChatInput({
         <div className="flex items-center gap-2 mb-2 px-1">
           <span className="w-2 h-2 rounded-full bg-red-500 animate-[pulse-dot_1s_ease-in-out_infinite]" />
           <span className="text-xs text-red-400">Listening...</span>
-          <span className="text-xs text-[#64748b] ml-auto">Click mic to stop or Send to submit</span>
+          <span className="text-xs text-jarvis-muted ml-auto">Tap mic to stop</span>
         </div>
       )}
 
       <div className="flex gap-2 items-end">
-        {/* Input with interim text overlay */}
+        {/* Textarea with auto-grow */}
         <div className="relative flex-1">
-          <input
-            type="text"
+          <textarea
+            ref={textareaRef}
             value={value}
             onChange={(e) => onChange(e.target.value)}
             onKeyDown={handleKeyDown}
             placeholder={placeholder}
             disabled={disabled}
             autoComplete="off"
-            className={`w-full border rounded-${isPanel ? "lg" : "xl"} text-sm text-[#e2e8f0] placeholder:text-[#64748b] focus:outline-none focus:border-[#6366f1] transition-colors disabled:opacity-50 ${
+            rows={1}
+            className={`w-full border text-sm text-jarvis-text placeholder:text-jarvis-muted focus:outline-none focus:border-jarvis-accent transition-colors disabled:opacity-50 resize-none overflow-hidden ${
               isPanel
-                ? "bg-[#0a0a0f] border-[#1e1e2e] px-3 py-2"
-                : "bg-[#0a0a0f] border-[#1e1e2e] px-4 py-2.5"
+                ? "bg-jarvis-bg border-jarvis-border rounded-lg px-3 py-2"
+                : "bg-jarvis-bg border-jarvis-border rounded-2xl px-4 py-2.5"
             }`}
+            style={{ minHeight: isPanel ? "36px" : "40px" }}
           />
           {/* Interim text overlay */}
           {isListening && interimText && (
@@ -94,7 +116,7 @@ export default function VoiceChatInput({
               <span className={`text-sm text-transparent ${isPanel ? "px-3" : "px-4"}`}>
                 {value}
               </span>
-              <span className="text-sm text-[#64748b]/50 italic truncate">{interimText}</span>
+              <span className="text-sm text-jarvis-muted/50 italic truncate">{interimText}</span>
             </div>
           )}
         </div>
@@ -107,8 +129,8 @@ export default function VoiceChatInput({
             disabled={disabled}
             className={`flex-shrink-0 flex items-center justify-center transition-all disabled:opacity-50 ${
               isPanel
-                ? `px-3 py-2 rounded-lg text-sm ${isListening ? "bg-red-500 text-white animate-[pulse-dot_1s_ease-in-out_infinite]" : "bg-[#1e1e2e] text-[#64748b] hover:text-white hover:bg-[#6366f1]/30"}`
-                : `w-10 h-10 rounded-lg ${isListening ? "bg-red-500 text-white animate-[pulse-dot_1s_ease-in-out_infinite]" : "bg-[#1e1e2e] text-[#64748b] hover:text-white hover:bg-[#6366f1]/30"}`
+                ? `w-9 h-9 rounded-lg text-sm ${isListening ? "bg-red-500 text-white animate-[pulse-dot_1s_ease-in-out_infinite]" : "bg-jarvis-border text-jarvis-muted hover:text-white hover:bg-jarvis-accent/30"}`
+                : `w-10 h-10 rounded-full ${isListening ? "bg-red-500 text-white animate-[pulse-dot_1s_ease-in-out_infinite]" : "bg-jarvis-border text-jarvis-muted hover:text-white hover:bg-jarvis-accent/30"}`
             }`}
             title={isListening ? "Stop listening" : "Voice input"}
           >
@@ -116,24 +138,24 @@ export default function VoiceChatInput({
           </button>
         )}
 
-        {/* Send button */}
+        {/* Send button — animated color transition */}
         <button
           onTouchEnd={(e) => { e.preventDefault(); handleSend(); }}
           onClick={handleSend}
-          disabled={disabled || sendDisabled || (!value.trim() && !isListening)}
-          className={`flex-shrink-0 text-white font-medium transition-colors disabled:opacity-50 ${
+          disabled={disabled || (!hasContent && !isListening)}
+          className={`flex-shrink-0 flex items-center justify-center transition-all duration-200 disabled:opacity-30 active:scale-90 ${
             isPanel
-              ? "px-3 py-2 bg-[#6366f1] rounded-lg text-sm hover:bg-[#5558e6]"
-              : "px-4 py-2.5 bg-[#6366f1] rounded-lg text-sm hover:bg-[#5558e6]"
+              ? `w-9 h-9 rounded-lg ${hasContent ? "bg-jarvis-accent text-white" : "bg-jarvis-border text-jarvis-muted"}`
+              : `w-10 h-10 rounded-full ${hasContent ? "bg-jarvis-accent text-white shadow-lg shadow-jarvis-accent/30" : "bg-jarvis-border text-jarvis-muted"}`
           }`}
         >
-          Send
+          <SendIcon size={isPanel ? 16 : 18} />
         </button>
       </div>
 
       {/* Browser not supported message */}
       {!isSupported && (
-        <p className="text-xs text-[#64748b] mt-1 px-1">Voice input requires Chrome or Safari</p>
+        <p className="text-xs text-jarvis-muted mt-1 px-1">Voice input requires Chrome or Safari</p>
       )}
     </div>
   );
