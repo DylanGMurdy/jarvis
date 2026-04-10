@@ -28,15 +28,15 @@ export default function AgentsTab({ openModal, closeModal }: AgentsTabProps) {
     <div className="space-y-6 animate-[slideUp_0.3s_ease-out]">
       {/* Org Chart */}
       <div>
-        <div className="flex items-center justify-between mb-3">
+        <div className="flex items-center justify-between mb-3 flex-wrap gap-2">
           <div>
-            <h2 className="text-lg font-bold">Organization</h2>
-            <p className="text-xs text-jarvis-muted">Click nodes for details. Drag to reorganize.</p>
+            <h2 className="text-lg font-bold">PE Business Empire</h2>
+            <p className="text-xs text-jarvis-muted">21 Agents &middot; Click nodes for details &middot; Pinch to zoom</p>
           </div>
-          <div className="flex items-center gap-3 text-sm text-jarvis-muted">
-            <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-jarvis-green" /> 2 Active</span>
-            <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-jarvis-yellow" /> 1 In Dev</span>
-            <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-jarvis-accent" /> 2 Planning</span>
+          <div className="flex items-center gap-3 text-xs text-jarvis-muted">
+            <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-jarvis-green" /> 1 Active</span>
+            <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-jarvis-yellow" /> 2 In Dev</span>
+            <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-jarvis-muted" /> 18 Planned</span>
           </div>
         </div>
         <OrgChart />
