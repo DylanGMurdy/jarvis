@@ -1,0 +1,406 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Moto Tic-Tac-Toe</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+
+  body {
+    background: #0a0a0f;
+    color: #e2e8f0;
+    font-family: system-ui, -apple-system, sans-serif;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    min-height: 100vh;
+  }
+
+  .game-container {
+    text-align: center;
+    max-width: 420px;
+    width: 100%;
+    padding: 20px;
+  }
+
+  h1 {
+    font-size: 1.6rem;
+    font-weight: 800;
+    margin-bottom: 4px;
+    background: linear-gradient(135deg, #f97316, #ef4444);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    letter-spacing: -0.5px;
+  }
+
+  .subtitle {
+    font-size: 0.75rem;
+    color: #64748b;
+    margin-bottom: 20px;
+    text-transform: uppercase;
+    letter-spacing: 2px;
+  }
+
+  /* ── Status Bar ────────────────────────── */
+  .status {
+    font-size: 0.95rem;
+    font-weight: 600;
+    padding: 10px 16px;
+    margin-bottom: 16px;
+    border-radius: 10px;
+    background: #12121a;
+    border: 1px solid #1e1e2e;
+    transition: all 0.3s;
+  }
+
+  .status.win {
+    background: linear-gradient(135deg, rgba(249,115,22,0.15), rgba(239,68,68,0.15));
+    border-color: #f97316;
+    color: #fb923c;
+    animation: statusPulse 1.5s ease-in-out infinite;
+  }
+
+  .status.draw {
+    background: rgba(100,116,139,0.15);
+    border-color: #64748b;
+    color: #94a3b8;
+  }
+
+  @keyframes statusPulse {
+    0%, 100% { box-shadow: 0 0 8px rgba(249,115,22,0.2); }
+    50% { box-shadow: 0 0 20px rgba(249,115,22,0.4); }
+  }
+
+  /* ── Score ──────────────────────────────── */
+  .scoreboard {
+    display: flex;
+    justify-content: center;
+    gap: 24px;
+    margin-bottom: 16px;
+  }
+
+  .score-item {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 2px;
+  }
+
+  .score-icon { font-size: 1.4rem; }
+
+  .score-val {
+    font-size: 1.5rem;
+    font-weight: 800;
+    line-height: 1;
+  }
+
+  .score-label {
+    font-size: 0.6rem;
+    text-transform: uppercase;
+    letter-spacing: 1px;
+    color: #64748b;
+  }
+
+  .score-item.rider .score-val { color: #f97316; }
+  .score-item.helmet .score-val { color: #ef4444; }
+  .score-item.draws .score-val { color: #64748b; }
+
+  /* ── Board ─────────────────────────────── */
+  .board {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 6px;
+    margin-bottom: 20px;
+    padding: 6px;
+    background: #12121a;
+    border-radius: 14px;
+    border: 1px solid #1e1e2e;
+  }
+
+  .cell {
+    aspect-ratio: 1;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 2.8rem;
+    background: #0a0a0f;
+    border-radius: 10px;
+    cursor: pointer;
+    transition: all 0.15s;
+    user-select: none;
+    -webkit-tap-highlight-color: transparent;
+    position: relative;
+  }
+
+  .cell:hover:not(.taken):not(.game-over) {
+    background: #1e1e2e;
+    transform: scale(1.03);
+  }
+
+  .cell:active:not(.taken):not(.game-over) {
+    transform: scale(0.97);
+  }
+
+  .cell.taken {
+    cursor: default;
+    animation: placeToken 0.25s cubic-bezier(0.34, 1.56, 0.64, 1);
+  }
+
+  @keyframes placeToken {
+    0% { transform: scale(0.3); opacity: 0; }
+    100% { transform: scale(1); opacity: 1; }
+  }
+
+  .cell.win-cell {
+    background: linear-gradient(135deg, rgba(249,115,22,0.2), rgba(239,68,68,0.2));
+    animation: winGlow 1s ease-in-out infinite alternate;
+  }
+
+  @keyframes winGlow {
+    0% { box-shadow: inset 0 0 10px rgba(249,115,22,0.15); }
+    100% { box-shadow: inset 0 0 25px rgba(249,115,22,0.35); }
+  }
+
+  .cell.game-over:not(.win-cell) {
+    opacity: 0.3;
+    cursor: default;
+  }
+
+  /* hover preview */
+  .cell:not(.taken):not(.game-over)::after {
+    content: attr(data-preview);
+    position: absolute;
+    font-size: 2.8rem;
+    opacity: 0;
+    transition: opacity 0.15s;
+    filter: grayscale(1);
+  }
+
+  .cell:not(.taken):not(.game-over):hover::after {
+    opacity: 0.2;
+  }
+
+  /* ── Buttons ───────────────────────────── */
+  .buttons {
+    display: flex;
+    gap: 8px;
+    justify-content: center;
+  }
+
+  .btn {
+    padding: 10px 20px;
+    border: none;
+    border-radius: 10px;
+    font-size: 0.8rem;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 0.15s;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+  }
+
+  .btn:active { transform: scale(0.96); }
+
+  .btn-primary {
+    background: linear-gradient(135deg, #f97316, #ef4444);
+    color: white;
+  }
+
+  .btn-primary:hover {
+    box-shadow: 0 4px 20px rgba(249,115,22,0.35);
+  }
+
+  .btn-secondary {
+    background: #1e1e2e;
+    color: #94a3b8;
+    border: 1px solid #2e2e3e;
+  }
+
+  .btn-secondary:hover {
+    background: #2e2e3e;
+    color: #e2e8f0;
+  }
+
+  /* ── Win Line Overlay ──────────────────── */
+  .win-banner {
+    position: fixed;
+    top: 0; left: 0; right: 0; bottom: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: rgba(0,0,0,0.6);
+    z-index: 100;
+    animation: fadeIn 0.3s;
+    cursor: pointer;
+  }
+
+  .win-banner-inner {
+    text-align: center;
+    padding: 32px 48px;
+    background: #12121a;
+    border: 1px solid #f97316;
+    border-radius: 16px;
+    box-shadow: 0 0 60px rgba(249,115,22,0.3);
+    animation: popIn 0.4s cubic-bezier(0.34, 1.56, 0.64, 1);
+  }
+
+  .win-banner-icon { font-size: 3.5rem; margin-bottom: 8px; }
+  .win-banner-text { font-size: 1.3rem; font-weight: 700; color: #fb923c; }
+  .win-banner-sub { font-size: 0.75rem; color: #64748b; margin-top: 6px; }
+
+  @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
+  @keyframes popIn { 0% { transform: scale(0.5); opacity: 0; } 100% { transform: scale(1); opacity: 1; } }
+</style>
+</head>
+<body>
+
+<div class="game-container">
+  <h1>MOTO TIC-TAC-TOE</h1>
+  <p class="subtitle">Rider vs Helmet</p>
+
+  <div class="scoreboard">
+    <div class="score-item rider">
+      <span class="score-icon">🏍️</span>
+      <span class="score-val" id="score-rider">0</span>
+      <span class="score-label">Rider</span>
+    </div>
+    <div class="score-item draws">
+      <span class="score-icon">🤝</span>
+      <span class="score-val" id="score-draw">0</span>
+      <span class="score-label">Draws</span>
+    </div>
+    <div class="score-item helmet">
+      <span class="score-icon">⛑️</span>
+      <span class="score-val" id="score-helmet">0</span>
+      <span class="score-label">Helmet</span>
+    </div>
+  </div>
+
+  <div class="status" id="status">🏍️ Rider's turn</div>
+
+  <div class="board" id="board"></div>
+
+  <div class="buttons">
+    <button class="btn btn-primary" onclick="resetGame()">New Round</button>
+    <button class="btn btn-secondary" onclick="resetAll()">Reset Scores</button>
+  </div>
+</div>
+
+<div class="win-banner" id="win-banner" style="display:none" onclick="this.style.display='none'">
+  <div class="win-banner-inner">
+    <div class="win-banner-icon" id="banner-icon"></div>
+    <div class="win-banner-text" id="banner-text"></div>
+    <div class="win-banner-sub">Click anywhere to continue</div>
+  </div>
+</div>
+
+<script>
+const RIDER = "🏍️";
+const HELMET = "⛑️";
+const WINS = [
+  [0,1,2],[3,4,5],[6,7,8], // rows
+  [0,3,6],[1,4,7],[2,5,8], // cols
+  [0,4,8],[2,4,6]           // diagonals
+];
+
+let board = Array(9).fill(null);
+let current = RIDER;
+let gameOver = false;
+let scores = { rider: 0, helmet: 0, draw: 0 };
+
+const $ = (id) => document.getElementById(id);
+const boardEl = $("board");
+const statusEl = $("status");
+
+function render() {
+  boardEl.innerHTML = "";
+  board.forEach((val, i) => {
+    const cell = document.createElement("div");
+    cell.className = "cell";
+    if (val) {
+      cell.textContent = val;
+      cell.classList.add("taken");
+    } else {
+      cell.setAttribute("data-preview", current);
+    }
+    if (gameOver) cell.classList.add("game-over");
+    cell.addEventListener("click", () => makeMove(i));
+    boardEl.appendChild(cell);
+  });
+
+  $("score-rider").textContent = scores.rider;
+  $("score-helmet").textContent = scores.helmet;
+  $("score-draw").textContent = scores.draw;
+}
+
+function makeMove(i) {
+  if (board[i] || gameOver) return;
+  board[i] = current;
+  const winLine = checkWin(current);
+  if (winLine) {
+    gameOver = true;
+    const name = current === RIDER ? "Rider" : "Helmet";
+    if (current === RIDER) scores.rider++; else scores.helmet++;
+
+    statusEl.textContent = `${current} ${name} wins!`;
+    statusEl.className = "status win";
+
+    render();
+    highlightWin(winLine);
+    showBanner(current, `${name} wins!`);
+    return;
+  }
+  if (board.every(c => c !== null)) {
+    gameOver = true;
+    scores.draw++;
+    statusEl.textContent = "🤝 Draw!";
+    statusEl.className = "status draw";
+    render();
+    showBanner("🤝", "It's a draw!");
+    return;
+  }
+  current = current === RIDER ? HELMET : RIDER;
+  const nextName = current === RIDER ? "Rider" : "Helmet";
+  statusEl.textContent = `${current} ${nextName}'s turn`;
+  statusEl.className = "status";
+  render();
+}
+
+function checkWin(player) {
+  for (const line of WINS) {
+    if (line.every(i => board[i] === player)) return line;
+  }
+  return null;
+}
+
+function highlightWin(line) {
+  const cells = boardEl.querySelectorAll(".cell");
+  line.forEach(i => cells[i].classList.add("win-cell"));
+}
+
+function showBanner(icon, text) {
+  $("banner-icon").textContent = icon;
+  $("banner-text").textContent = text;
+  $("win-banner").style.display = "flex";
+}
+
+function resetGame() {
+  board = Array(9).fill(null);
+  current = RIDER;
+  gameOver = false;
+  statusEl.textContent = `${RIDER} Rider's turn`;
+  statusEl.className = "status";
+  $("win-banner").style.display = "none";
+  render();
+}
+
+function resetAll() {
+  scores = { rider: 0, helmet: 0, draw: 0 };
+  resetGame();
+}
+
+render();
+</script>
+</body>
+</html>
