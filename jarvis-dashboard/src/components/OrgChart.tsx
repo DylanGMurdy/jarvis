@@ -18,7 +18,7 @@ import "@xyflow/react/dist/style.css";
 
 // ─── Types ──────────────────────────────────────────────────
 type AgentStatus = "active" | "indev" | "planned";
-type Division = "jarvis" | "csuite" | "revenue" | "opstech" | "finance" | "sub";
+type Division = "founder" | "jarvis" | "csuite" | "revenue" | "opstech" | "finance" | "sub";
 
 interface OrgNodeData {
   label: string;
@@ -33,6 +33,7 @@ interface OrgNodeData {
 
 // ─── Color scheme by division ───────────────────────────────
 const DIV_COLORS: Record<Division, { bg: string; border: string; glow: string; text: string }> = {
+  founder: { bg: "#1c1917", border: "#f59e0b", glow: "rgba(245,158,11,0.5)",  text: "#fcd34d" },
   jarvis:  { bg: "#1e1b4b", border: "#6366f1", glow: "rgba(99,102,241,0.4)",  text: "#a5b4fc" },
   csuite:  { bg: "#172554", border: "#3b82f6", glow: "rgba(59,130,246,0.3)",  text: "#93c5fd" },
   revenue: { bg: "#14532d", border: "#22c55e", glow: "rgba(34,197,94,0.3)",   text: "#86efac" },
@@ -58,7 +59,7 @@ const DIV_LABELS: Record<string, { label: string; color: string }> = {
 function OrgNode({ data, selected }: { data: OrgNodeData; selected?: boolean }) {
   const colors = DIV_COLORS[data.division];
   const status = STATUS_BADGES[data.status];
-  const isJarvis = data.division === "jarvis";
+  const isJarvis = data.division === "jarvis" || data.division === "founder";
 
   return (
     <>
@@ -102,10 +103,18 @@ const nodeTypes: NodeTypes = { orgNode: OrgNode };
 const COL = 200;  // horizontal spacing
 const ROW = 120;  // vertical spacing
 
-// ─── All 21 agent nodes ─────────────────────────────────────
+// ─── All nodes (Dylan + 21 agents) ──────────────────────────
 const NODES: Node<OrgNodeData>[] = [
-  // JARVIS - top center
-  { id: "jarvis", type: "orgNode", position: { x: COL * 4.5, y: 0 }, data: {
+  // DYLAN - top
+  { id: "dylan", type: "orgNode", position: { x: COL * 4.5, y: 0 }, data: {
+    label: "Dylan Murdock", role: "Founder & Owner", status: "active", division: "founder",
+    description: "Founder and visionary. Real estate agent at Narwhal Homes building an AI-powered PE-style business empire. All agents report through JARVIS to Dylan.",
+    capabilities: ["Vision & Strategy", "Sales & Relationships", "Product Direction", "Final Decisions"],
+    projects: ["All Businesses"],
+  }},
+
+  // JARVIS - reports to Dylan
+  { id: "jarvis", type: "orgNode", position: { x: COL * 4.5, y: ROW * 1.2 }, data: {
     label: "JARVIS", role: "CEO / Chief of Staff", status: "active", division: "jarvis",
     description: "Orchestrates all sub-agents, makes strategic decisions, brings key items to Dylan. Reviews all agent outputs and assigns tasks.",
     capabilities: ["Agent Orchestration", "Strategic Decisions", "Memory & Context", "Daily Briefs", "Task Delegation"],
@@ -114,24 +123,24 @@ const NODES: Node<OrgNodeData>[] = [
 
   // ── DIVISION HEADS (Row 1) ──
   // C-Suite Staff
-  { id: "coo-cs", type: "orgNode", position: { x: COL * 0.5, y: ROW * 1.5 }, data: {
+  { id: "coo-cs", type: "orgNode", position: { x: COL * 0.5, y: ROW * 2.7 }, data: {
     label: "COO Agent", role: "Strategic Planning", status: "planned", division: "csuite",
     description: "Strategic planning and cross-division coordination. Ensures all divisions are aligned on Dylan's goals.",
     capabilities: ["Cross-Division Coord", "Strategic Planning", "OKR Tracking", "Resource Allocation"],
   }},
-  { id: "chro", type: "orgNode", position: { x: COL * 1.5, y: ROW * 1.5 }, data: {
+  { id: "chro", type: "orgNode", position: { x: COL * 1.5, y: ROW * 2.7 }, data: {
     label: "CHRO Agent", role: "HR & Talent", status: "planned", division: "csuite",
     description: "Talent strategy and team building as the AI workforce grows.",
     capabilities: ["Recruiting Strategy", "Team Building", "Performance Mgmt"],
   }},
 
   // Revenue Growth
-  { id: "cmo", type: "orgNode", position: { x: COL * 3, y: ROW * 1.5 }, data: {
+  { id: "cmo", type: "orgNode", position: { x: COL * 3, y: ROW * 2.7 }, data: {
     label: "CMO Agent", role: "Marketing Growth", status: "planned", division: "revenue",
     description: "Marketing growth across all businesses. Content strategy, brand building, paid acquisition.",
     capabilities: ["Content Strategy", "Brand Building", "Paid Ads", "Social Media", "Analytics"],
   }},
-  { id: "cso", type: "orgNode", position: { x: COL * 4.5, y: ROW * 1.5 }, data: {
+  { id: "cso", type: "orgNode", position: { x: COL * 4.5, y: ROW * 2.7 }, data: {
     label: "CSO Agent", role: "Sales & Biz Dev", status: "indev", division: "revenue",
     description: "Sales and business development. Closes deals for Lindy agent clients. First active revenue agent.",
     capabilities: ["Deal Closing", "Proposal Writing", "Client Relations", "Revenue Forecasting"],
@@ -139,24 +148,24 @@ const NODES: Node<OrgNodeData>[] = [
   }},
 
   // Operations & Tech
-  { id: "cto", type: "orgNode", position: { x: COL * 6, y: ROW * 1.5 }, data: {
+  { id: "cto", type: "orgNode", position: { x: COL * 6, y: ROW * 2.7 }, data: {
     label: "CTO Agent", role: "Product Dev & Tech", status: "planned", division: "opstech",
     description: "Technical architecture and build decisions across all AI products.",
     capabilities: ["Architecture", "Tech Stack", "Build Decisions", "Code Reviews", "AI Integration"],
   }},
-  { id: "coo-ops", type: "orgNode", position: { x: COL * 7.5, y: ROW * 1.5 }, data: {
+  { id: "coo-ops", type: "orgNode", position: { x: COL * 7.5, y: ROW * 2.7 }, data: {
     label: "COO Agent", role: "Process Ops & Quality", status: "planned", division: "opstech",
     description: "Process operations and quality control across all businesses.",
     capabilities: ["Process Design", "Quality Control", "Workflow Automation", "Efficiency"],
   }},
 
   // Finance & Legal
-  { id: "cfo", type: "orgNode", position: { x: COL * 9, y: ROW * 1.5 }, data: {
+  { id: "cfo", type: "orgNode", position: { x: COL * 9, y: ROW * 2.7 }, data: {
     label: "CFO Agent", role: "Financial Planning", status: "planned", division: "finance",
     description: "Financial planning, budgeting, cash flow management across all businesses.",
     capabilities: ["Budgeting", "Cash Flow", "Fundraising", "Financial Reports"],
   }},
-  { id: "clo", type: "orgNode", position: { x: COL * 10, y: ROW * 1.5 }, data: {
+  { id: "clo", type: "orgNode", position: { x: COL * 10, y: ROW * 2.7 }, data: {
     label: "CLO Agent", role: "Legal & Compliance", status: "planned", division: "finance",
     description: "Legal and compliance for all AI businesses. Contracts, IP protection.",
     capabilities: ["Contract Review", "IP Protection", "Compliance", "Risk Assessment"],
@@ -164,19 +173,19 @@ const NODES: Node<OrgNodeData>[] = [
 
   // ── SUB-AGENTS (Row 2) ──
   // Under CMO
-  { id: "content-creator", type: "orgNode", position: { x: COL * 2.5, y: ROW * 3 }, data: {
+  { id: "content-creator", type: "orgNode", position: { x: COL * 2.5, y: ROW * 4.2 }, data: {
     label: "Content Creator", role: "Content Production", status: "planned", division: "sub",
     description: "Generates blog posts, social content, video scripts for all Dylan's businesses.",
     capabilities: ["Blog Posts", "Social Content", "Video Scripts", "Copy"],
   }},
-  { id: "lead-gen", type: "orgNode", position: { x: COL * 3.5, y: ROW * 3 }, data: {
+  { id: "lead-gen", type: "orgNode", position: { x: COL * 3.5, y: ROW * 4.2 }, data: {
     label: "Lead Generation", role: "Acquisition", status: "planned", division: "sub",
     description: "Runs paid ads, SEO, and outbound campaigns to generate leads for all businesses.",
     capabilities: ["Paid Ads", "SEO", "Outbound", "Landing Pages"],
   }},
 
   // Under CSO
-  { id: "pipeline-mgmt", type: "orgNode", position: { x: COL * 4.5, y: ROW * 3 }, data: {
+  { id: "pipeline-mgmt", type: "orgNode", position: { x: COL * 4.5, y: ROW * 4.2 }, data: {
     label: "Pipeline Mgmt", role: "CRM & Follow-ups", status: "indev", division: "sub",
     description: "Tracks all sales opportunities, sends follow-ups, manages CRM for Lindy agent business.",
     capabilities: ["CRM Mgmt", "Follow-ups", "Deal Tracking", "Reporting"],
@@ -184,55 +193,55 @@ const NODES: Node<OrgNodeData>[] = [
   }},
 
   // Under CTO
-  { id: "devops", type: "orgNode", position: { x: COL * 5.5, y: ROW * 3 }, data: {
+  { id: "devops", type: "orgNode", position: { x: COL * 5.5, y: ROW * 4.2 }, data: {
     label: "Software DevOps", role: "Deployment & CI/CD", status: "planned", division: "sub",
     description: "Code deployment, CI/CD pipelines, infrastructure management.",
     capabilities: ["CI/CD", "Deployment", "Monitoring", "Infrastructure"],
   }},
-  { id: "revenue-analysis", type: "orgNode", position: { x: COL * 6.5, y: ROW * 3 }, data: {
+  { id: "revenue-analysis", type: "orgNode", position: { x: COL * 6.5, y: ROW * 4.2 }, data: {
     label: "Revenue Analysis", role: "Business Metrics", status: "planned", division: "sub",
     description: "Tracks MRR, forecasts revenue, identifies growth opportunities.",
     capabilities: ["MRR Tracking", "Forecasting", "Growth Analysis", "Dashboards"],
   }},
 
   // AI Debug Team (under CTO, row 3)
-  { id: "code-analysis", type: "orgNode", position: { x: COL * 5.5, y: ROW * 4.2 }, data: {
+  { id: "code-analysis", type: "orgNode", position: { x: COL * 5.5, y: ROW * 5.4 }, data: {
     label: "Code Analysis", role: "Claude Sonnet", status: "planned", division: "sub",
     description: "Reviews code quality and identifies issues using Claude Sonnet.",
     capabilities: ["Code Review", "Bug Detection", "Best Practices"],
   }},
-  { id: "error-resolution", type: "orgNode", position: { x: COL * 6.5, y: ROW * 4.2 }, data: {
+  { id: "error-resolution", type: "orgNode", position: { x: COL * 6.5, y: ROW * 5.4 }, data: {
     label: "Error Resolution", role: "Complex Logic", status: "planned", division: "sub",
     description: "Resolves complex logic errors in AI builds.",
     capabilities: ["Debug Complex Bugs", "Logic Analysis", "Fix Suggestions"],
   }},
-  { id: "perf-optimization", type: "orgNode", position: { x: COL * 7.5, y: ROW * 4.2 }, data: {
+  { id: "perf-optimization", type: "orgNode", position: { x: COL * 7.5, y: ROW * 5.4 }, data: {
     label: "Perf Optimization", role: "Speed & Efficiency", status: "planned", division: "sub",
     description: "Optimizes agent performance and response times.",
     capabilities: ["Latency Reduction", "Resource Optimization", "Caching"],
   }},
 
   // Under COO (Ops)
-  { id: "infra-mgmt", type: "orgNode", position: { x: COL * 7.5, y: ROW * 3 }, data: {
+  { id: "infra-mgmt", type: "orgNode", position: { x: COL * 7.5, y: ROW * 4.2 }, data: {
     label: "Infrastructure Mgmt", role: "Servers & Infra", status: "planned", division: "sub",
     description: "Server and infrastructure management.",
     capabilities: ["Server Mgmt", "Scaling", "Uptime Monitoring"],
   }},
 
   // Under CFO
-  { id: "budget-planning", type: "orgNode", position: { x: COL * 9, y: ROW * 3 }, data: {
+  { id: "budget-planning", type: "orgNode", position: { x: COL * 9, y: ROW * 4.2 }, data: {
     label: "Budget Planning", role: "Financial Forecasting", status: "planned", division: "sub",
     description: "Budget allocation and financial forecasting.",
     capabilities: ["Budget Allocation", "Forecasting", "Expense Tracking"],
   }},
 
   // Under CLO
-  { id: "contract-mgmt", type: "orgNode", position: { x: COL * 9.5, y: ROW * 3 }, data: {
+  { id: "contract-mgmt", type: "orgNode", position: { x: COL * 9.5, y: ROW * 4.2 }, data: {
     label: "Contract Mgmt", role: "Client Contracts", status: "planned", division: "sub",
     description: "Manages all client contracts for Lindy agent business and future products.",
     capabilities: ["Contract Drafting", "Client Terms", "Renewals"],
   }},
-  { id: "risk-mgmt", type: "orgNode", position: { x: COL * 10.5, y: ROW * 3 }, data: {
+  { id: "risk-mgmt", type: "orgNode", position: { x: COL * 10.5, y: ROW * 4.2 }, data: {
     label: "Risk Management", role: "Risk & Mitigation", status: "planned", division: "sub",
     description: "Identifies and mitigates business, legal and operational risks.",
     capabilities: ["Risk Assessment", "Mitigation Plans", "Compliance Audits"],
@@ -246,6 +255,9 @@ function edgeStyle(division: Division, animated = false): Partial<Edge> {
 }
 
 const EDGES: Edge[] = [
+  // Dylan to JARVIS
+  { id: "d-j", source: "dylan", target: "jarvis", ...edgeStyle("jarvis", true) },
+
   // JARVIS to division heads
   { id: "j-coo-cs",  source: "jarvis", target: "coo-cs",  ...edgeStyle("csuite") },
   { id: "j-chro",    source: "jarvis", target: "chro",    ...edgeStyle("csuite") },
