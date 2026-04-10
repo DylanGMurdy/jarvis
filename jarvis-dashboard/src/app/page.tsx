@@ -453,11 +453,12 @@ export default function Dashboard() {
           </div>
         </div>
 
-        {/* Spotify + Weather + Markets */}
+        {/* Spotify + Weather + Markets + Game */}
         <div className="space-y-6">
           <SpotifyWidget />
           <WeatherWidget openModal={openModal} />
           <MarketsWidget openModal={openModal} />
+          <MotoTTT />
         </div>
       </div>
     </div>
@@ -1193,6 +1194,116 @@ function MarketsWidget({ openModal }: { openModal: (d: ModalData) => void }) {
           }}
         />
       </div>
+    </div>
+  );
+}
+
+// ─── Moto Tic-Tac-Toe Widget ─────────────────────────────
+const RIDER = "🏍️";
+const HELMET = "⛑️";
+const WIN_LINES = [[0,1,2],[3,4,5],[6,7,8],[0,3,6],[1,4,7],[2,5,8],[0,4,8],[2,4,6]];
+
+function MotoTTT() {
+  const [board, setBoard] = useState<(string | null)[]>(Array(9).fill(null));
+  const [turn, setTurn] = useState(RIDER);
+  const [winner, setWinner] = useState<string | null>(null);
+  const [winCells, setWinCells] = useState<number[]>([]);
+  const [score, setScore] = useState({ r: 0, h: 0, d: 0 });
+
+  function checkWin(b: (string | null)[]): { player: string; cells: number[] } | null {
+    for (const line of WIN_LINES) {
+      const [a, c, e] = line;
+      if (b[a] && b[a] === b[c] && b[a] === b[e]) return { player: b[a]!, cells: line };
+    }
+    return null;
+  }
+
+  function play(i: number) {
+    if (board[i] || winner) return;
+    const next = [...board];
+    next[i] = turn;
+    const result = checkWin(next);
+    if (result) {
+      setBoard(next);
+      setWinner(result.player);
+      setWinCells(result.cells);
+      setScore((s) => ({ ...s, [result.player === RIDER ? "r" : "h"]: s[result.player === RIDER ? "r" : "h"] + 1 }));
+      return;
+    }
+    if (next.every((c) => c)) {
+      setBoard(next);
+      setWinner("draw");
+      setScore((s) => ({ ...s, d: s.d + 1 }));
+      return;
+    }
+    setBoard(next);
+    setTurn(turn === RIDER ? HELMET : RIDER);
+  }
+
+  function reset() {
+    setBoard(Array(9).fill(null));
+    setTurn(RIDER);
+    setWinner(null);
+    setWinCells([]);
+  }
+
+  const isDraw = winner === "draw";
+  const isOver = !!winner;
+
+  return (
+    <div className="bg-jarvis-card border border-jarvis-border rounded-xl p-4">
+      {/* Header */}
+      <div className="flex items-center justify-between mb-3">
+        <h3 className="text-sm font-semibold text-jarvis-muted">Moto TT</h3>
+        <div className="flex items-center gap-3 text-xs">
+          <span className="text-orange-400 font-bold">{score.r}</span>
+          <span className="text-jarvis-muted">-</span>
+          <span className="text-jarvis-muted">{score.d}</span>
+          <span className="text-jarvis-muted">-</span>
+          <span className="text-red-400 font-bold">{score.h}</span>
+        </div>
+      </div>
+
+      {/* Status */}
+      <div className={`text-center text-xs font-semibold mb-2 py-1.5 rounded-lg ${
+        isOver
+          ? isDraw
+            ? "bg-jarvis-muted/10 text-jarvis-muted"
+            : "bg-orange-500/10 text-orange-400"
+          : "text-jarvis-muted"
+      }`}>
+        {isOver
+          ? isDraw ? "🤝 Draw!" : `${winner} Wins!`
+          : `${turn} ${turn === RIDER ? "Rider" : "Helmet"}'s turn`}
+      </div>
+
+      {/* Board */}
+      <div className="grid grid-cols-3 gap-1 mb-3">
+        {board.map((cell, i) => (
+          <button
+            key={i}
+            onClick={() => play(i)}
+            className={`aspect-square rounded-lg flex items-center justify-center text-2xl transition-all ${
+              winCells.includes(i)
+                ? "bg-orange-500/15 shadow-[inset_0_0_12px_rgba(249,115,22,0.3)]"
+                : cell
+                  ? "bg-jarvis-bg"
+                  : isOver
+                    ? "bg-jarvis-bg opacity-30"
+                    : "bg-jarvis-bg hover:bg-jarvis-border cursor-pointer active:scale-90"
+            }`}
+          >
+            {cell}
+          </button>
+        ))}
+      </div>
+
+      {/* Reset */}
+      {isOver && (
+        <button onClick={reset} className="w-full py-1.5 text-xs font-semibold rounded-lg bg-gradient-to-r from-orange-500 to-red-500 text-white hover:shadow-[0_2px_12px_rgba(249,115,22,0.3)] transition-all active:scale-[0.97]">
+          New Round
+        </button>
+      )}
     </div>
   );
 }
