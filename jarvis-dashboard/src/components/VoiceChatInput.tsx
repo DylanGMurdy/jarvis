@@ -26,6 +26,8 @@ interface VoiceChatInputProps {
   placeholder?: string;
   /** "panel" = compact sidebar style, "full" = full-width style */
   variant?: "panel" | "full";
+  /** Called with full transcript when voice input completes — triggers intelligent routing */
+  onVoiceComplete?: (transcript: string) => void;
 }
 
 export default function VoiceChatInput({
@@ -35,7 +37,9 @@ export default function VoiceChatInput({
   disabled = false,
   placeholder = "Ask JARVIS...",
   variant = "panel",
+  onVoiceComplete,
 }: VoiceChatInputProps) {
+  const usedVoiceRef = useRef(false);
   const valueRef = useRef(value);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   useEffect(() => { valueRef.current = value; }, [value]);
@@ -51,6 +55,7 @@ export default function VoiceChatInput({
 
   const appendTranscript = useCallback(
     (text: string) => {
+      usedVoiceRef.current = true;
       const current = valueRef.current;
       const separator = current && !current.endsWith(" ") ? " " : "";
       onChange(current + separator + text);
@@ -63,7 +68,14 @@ export default function VoiceChatInput({
 
   function handleSend() {
     if (isListening) stopListening();
-    onSend();
+    // If voice was used and onVoiceComplete is provided, route through voice pipeline
+    if (usedVoiceRef.current && onVoiceComplete && valueRef.current.trim()) {
+      onVoiceComplete(valueRef.current.trim());
+      onChange("");
+      usedVoiceRef.current = false;
+    } else {
+      onSend();
+    }
     // Haptic feedback on send
     if (typeof navigator !== "undefined" && "vibrate" in navigator) {
       navigator.vibrate(10);

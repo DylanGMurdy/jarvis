@@ -7,7 +7,7 @@ import type { Project, ProjectTask, ProjectNote, ChatMessage } from "@/lib/types
 import VoiceChatInput from "@/components/VoiceChatInput";
 
 const STATUSES: Project["status"][] = ["Idea", "Planning", "Building", "Launched", "Revenue"];
-const TABS = ["Overview", "Tasks", "Notes", "Chat"] as const;
+const TABS = ["Overview", "Tasks", "Notes", "Chat", "History"] as const;
 type Tab = (typeof TABS)[number];
 
 const GRADE_COLORS: Record<Project["grade"], string> = {
@@ -57,6 +57,11 @@ export default function ProjectDetailPage({ params }: { params: Promise<{ id: st
   const [ingestLoading, setIngestLoading] = useState(false);
   const [ingestResult, setIngestResult] = useState<{ summary: string; saved: { notes: number; tasks: number; memories: number } } | null>(null);
 
+  // History state
+  const [projectHistory, setProjectHistory] = useState<{id: string; title: string; message_count: number; preview: string; messages: ChatMessage[]; created_at: string; updated_at: string}[]>([]);
+  const [historyLoading, setHistoryLoading] = useState(false);
+  const [expandedHistoryId, setExpandedHistoryId] = useState<string | null>(null);
+
   // ─── Load Data ───────────────────────────────────────────
   const loadData = useCallback(async () => {
     const [p, t, n] = await Promise.all([
@@ -88,10 +93,28 @@ export default function ProjectDetailPage({ params }: { params: Promise<{ id: st
     setChatHistoryLoaded(true);
   }, [id]);
 
+  // Load project chat history (all conversations)
+  const loadProjectHistory = useCallback(async () => {
+    setHistoryLoading(true);
+    try {
+      const res = await fetch(`/api/projects/${id}/history`);
+      const data = await res.json();
+      setProjectHistory(data.conversations || []);
+    } catch { /* silent */ }
+    setHistoryLoading(false);
+  }, [id]);
+
   useEffect(() => {
     loadData();
     loadChatHistory();
   }, [loadData, loadChatHistory]);
+
+  // Load history when History tab is selected
+  useEffect(() => {
+    if (activeTab === "History") {
+      loadProjectHistory();
+    }
+  }, [activeTab, loadProjectHistory]);
 
   useEffect(() => {
     chatEndRef.current?.scrollIntoView({ behavior: "smooth" });
@@ -475,6 +498,82 @@ curl -X POST ${typeof window !== "undefined" ? window.location.origin : ""}/api/
                   variant="full"
                 />
               </div>
+            </div>
+          )}
+
+          {/* ── History ─────────────────────────────────── */}
+          {activeTab === "History" && (
+            <div className="space-y-3">
+              <div className="flex items-center justify-between mb-2">
+                <p className="text-sm text-[#64748b]">All conversations linked to this project</p>
+                <button onClick={loadProjectHistory} className="text-xs text-[#6366f1] hover:underline">Refresh</button>
+              </div>
+
+              {historyLoading ? (
+                <div className="text-center py-8 text-[#64748b] text-sm animate-pulse">Loading history...</div>
+              ) : projectHistory.length === 0 ? (
+                <div className="text-center py-12 text-[#64748b]">
+                  <div className="text-3xl mb-3">💬</div>
+                  <p className="text-sm">No conversation history for this project yet.</p>
+                  <p className="text-xs mt-1">Chat in the Chat tab or route conversations here from the main dashboard.</p>
+                </div>
+              ) : (
+                projectHistory.map((convo) => {
+                  const isExpanded = expandedHistoryId === convo.id;
+                  return (
+                    <div key={convo.id} className="bg-[#12121a] border border-[#1e1e2e] rounded-xl overflow-hidden">
+                      <button onClick={() => setExpandedHistoryId(isExpanded ? null : convo.id)} className="w-full px-4 py-3 text-left hover:bg-[#1e1e2e]/30 transition-colors">
+                        <div className="flex items-start justify-between gap-3">
+                          <div className="flex-1 min-w-0">
+                            <h4 className="text-sm font-semibold text-white truncate">{convo.title}</h4>
+                            <p className="text-xs text-[#64748b] line-clamp-1 mt-0.5">{convo.preview}</p>
+                          </div>
+                          <div className="flex flex-col items-end gap-0.5 flex-shrink-0">
+                            <span className="text-[11px] text-[#64748b]">{new Date(convo.updated_at).toLocaleDateString("en-US", { month: "short", day: "numeric" })}</span>
+                            <span className="text-[11px] text-[#6366f1]">{convo.message_count} msgs</span>
+                          </div>
+                        </div>
+                        <div className="flex justify-center mt-1">
+                          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className={`text-[#64748b] transition-transform ${isExpanded ? "rotate-180" : ""}`}><path d="M6 9l6 6 6-6" /></svg>
+                        </div>
+                      </button>
+
+                      {isExpanded && (
+                        <div className="border-t border-[#1e1e2e]">
+                          <div className="px-4 py-2 bg-[#0a0a0f]/50 text-[11px] text-[#64748b]">
+                            {new Date(convo.created_at).toLocaleDateString("en-US", { weekday: "short", month: "short", day: "numeric", hour: "numeric", minute: "2-digit" })}
+                          </div>
+                          <div className="px-4 py-3 space-y-3 max-h-[50vh] overflow-y-auto">
+                            {convo.messages.map((msg, i) => (
+                              <div key={i} className={`flex ${msg.role === "user" ? "justify-end" : "justify-start"}`}>
+                                <div className={`flex items-end gap-2 max-w-[80%] ${msg.role === "user" ? "flex-row-reverse" : ""}`}>
+                                  {msg.role === "assistant" && (
+                                    <div className="w-6 h-6 bg-[#6366f1] rounded-full flex items-center justify-center text-white text-[9px] font-bold flex-shrink-0 mb-0.5">J</div>
+                                  )}
+                                  <div className={`rounded-2xl px-3.5 py-2 text-sm whitespace-pre-wrap ${msg.role === "user" ? "bg-[#6366f1] text-white rounded-br-md" : "bg-[#1e1e2e] text-[#e2e8f0] rounded-bl-md"}`}>
+                                    {msg.content}
+                                  </div>
+                                </div>
+                              </div>
+                            ))}
+                          </div>
+                          <div className="px-4 py-2 border-t border-[#1e1e2e]">
+                            <button
+                              onClick={() => {
+                                setChatMessages(convo.messages);
+                                setActiveTab("Chat");
+                              }}
+                              className="w-full text-center px-3 py-2 bg-[#6366f1] text-white rounded-lg text-sm font-medium hover:bg-[#5558e6] transition-colors"
+                            >
+                              Continue this conversation
+                            </button>
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  );
+                })
+              )}
             </div>
           )}
         </div>

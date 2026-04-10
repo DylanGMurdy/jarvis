@@ -11,9 +11,10 @@ import IdeasTab from "@/components/dashboard/IdeasTab";
 import AgentsTab from "@/components/dashboard/AgentsTab";
 import GoalsTab from "@/components/dashboard/GoalsTab";
 import MemoryTab from "@/components/dashboard/MemoryTab";
+import ChatHistoryTab from "@/components/dashboard/ChatHistoryTab";
 
 // ─── Types ────────────────────────────────────────────────
-type Tab = "overview" | "ideas" | "agents" | "goals" | "memory";
+type Tab = "overview" | "ideas" | "agents" | "goals" | "memory" | "history";
 type ModalData = { title: string; body: string; actions?: { label: string; onClick: () => void }[] } | null;
 
 const MEMORY_CATEGORIES: { key: MemoryCategory; label: string; color: string; icon: string }[] = [
@@ -61,6 +62,15 @@ export default function Dashboard() {
   const [showRememberModal, setShowRememberModal] = useState(false);
   const [rememberMessageIdx, setRememberMessageIdx] = useState<number>(-1);
   const [memoryFilter, setMemoryFilter] = useState<string>("all");
+
+  // Smart action buttons state
+  const [showAddToProject, setShowAddToProject] = useState(false);
+  const [actionLoading, setActionLoading] = useState<string | null>(null);
+  const [actionResult, setActionResult] = useState<{ type: string; message: string; link?: string } | null>(null);
+  const [savedBookmarks, setSavedBookmarks] = useState<Set<number>>(new Set());
+
+  // Voice pipeline state
+  const [voiceProcessing, setVoiceProcessing] = useState(false);
 
   const fetchMemories = useCallback(async () => {
     try {
@@ -158,6 +168,138 @@ export default function Dashboard() {
     setChatLoading(false);
   }, [chatInput, chatMessages, chatConversationId, fetchMemories]);
 
+  // ── Smart Action: Create New Idea from chat ──
+  const handleNewIdea = useCallback(async () => {
+    if (chatMessages.length < 3) return;
+    setActionLoading("new-idea");
+    setActionResult(null);
+    try {
+      const res = await fetch("/api/projects/create-from-chat", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ conversation: chatMessages }),
+      });
+      const data = await res.json();
+      if (data.success) {
+        setActionResult({ type: "success", message: `Created "${data.project.title}" in Ideas Lab`, link: `/ideas/${data.project.id}` });
+        // Refresh projects
+        const updatedProjects = await api.projects.list();
+        setProjects(updatedProjects);
+      } else {
+        setActionResult({ type: "error", message: data.error || "Failed to create project" });
+      }
+    } catch {
+      setActionResult({ type: "error", message: "Connection error" });
+    }
+    setActionLoading(null);
+  }, [chatMessages]);
+
+  // ── Smart Action: Add to existing project ──
+  const handleAddToProject = useCallback(async (projectId: string) => {
+    if (chatMessages.length < 2) return;
+    setActionLoading("add-to-project");
+    setActionResult(null);
+    setShowAddToProject(false);
+    try {
+      const res = await fetch("/api/projects/create-from-chat", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ conversation: chatMessages, projectId }),
+      });
+      const data = await res.json();
+      if (data.success) {
+        setActionResult({ type: "success", message: `Added to "${data.projectTitle}" — ${data.tasksCreated} tasks, ${data.notesCreated} notes`, link: `/ideas/${projectId}` });
+      } else {
+        setActionResult({ type: "error", message: data.error || "Failed" });
+      }
+    } catch {
+      setActionResult({ type: "error", message: "Connection error" });
+    }
+    setActionLoading(null);
+  }, [chatMessages]);
+
+  // ── Bookmark a message ──
+  const handleBookmark = useCallback(async (msgIdx: number) => {
+    const msg = chatMessages[msgIdx];
+    if (!msg) return;
+    try {
+      await fetch("/api/memories", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ fact: msg.content.slice(0, 500), category: "ideas", source: "highlight", confidence: 1.0 }),
+      });
+      setSavedBookmarks((prev) => new Set(prev).add(msgIdx));
+      fetchMemories();
+    } catch { /* silent */ }
+  }, [chatMessages, fetchMemories]);
+
+  // ── Voice Pipeline: analyze transcript and auto-route ──
+  const handleVoicePipeline = useCallback(async (transcript: string) => {
+    if (!transcript.trim()) return;
+    setVoiceProcessing(true);
+    setChatLoading(true);
+
+    // Add user message to chat
+    const userMsg: ChatMessage = { role: "user", content: transcript };
+    const updated = [...chatMessages, userMsg];
+    setChatMessages(updated);
+
+    try {
+      const res = await fetch("/api/chat/analyze-voice", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ transcript }),
+      });
+      const analysis = await res.json();
+
+      if (analysis.type === "existing_project" && analysis.projectMatch) {
+        // Route to existing project
+        const addRes = await fetch("/api/projects/create-from-chat", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ conversation: [userMsg], projectId: analysis.projectMatch }),
+        });
+        const addData = await addRes.json();
+        const routeMsg = addData.success
+          ? `${analysis.response}\n\nI added ${addData.tasksCreated} task${addData.tasksCreated !== 1 ? "s" : ""} to ${analysis.projectMatchTitle} →`
+          : analysis.response;
+        setChatMessages([...updated, { role: "assistant", content: routeMsg }]);
+        setActionResult({ type: "success", message: `Routed to "${analysis.projectMatchTitle}"`, link: `/ideas/${analysis.projectMatch}` });
+      } else if (analysis.type === "new_idea") {
+        // Create new project
+        const createRes = await fetch("/api/projects/create-from-chat", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ conversation: [userMsg] }),
+        });
+        const createData = await createRes.json();
+        const ideaMsg = createData.success
+          ? `${analysis.response}\n\nCreated new idea: "${createData.project.title}" in Ideas Lab →`
+          : analysis.response;
+        setChatMessages([...updated, { role: "assistant", content: ideaMsg }]);
+        if (createData.success) {
+          setActionResult({ type: "success", message: `Created "${createData.project.title}"`, link: `/ideas/${createData.project.id}` });
+          const updatedProjects = await api.projects.list();
+          setProjects(updatedProjects);
+        }
+      } else if (analysis.type === "ambiguous" && analysis.clarifyQuestion) {
+        setChatMessages([...updated, { role: "assistant", content: analysis.clarifyQuestion }]);
+      } else {
+        // Personal — just respond conversationally
+        setChatMessages([...updated, { role: "assistant", content: analysis.response || "Got it, sir." }]);
+      }
+
+      // Save conversation
+      if (chatConversationId) {
+        await api.conversations.send([...updated, { role: "assistant", content: analysis.response || "" }], chatConversationId);
+      }
+    } catch {
+      setChatMessages([...updated, { role: "assistant", content: "Voice processing error. Standing by, sir." }]);
+    }
+    setChatLoading(false);
+    setVoiceProcessing(false);
+  }, [chatMessages, chatConversationId]);
+
   const openModal = (data: ModalData) => setModal(data);
   const closeModal = () => setModal(null);
 
@@ -177,6 +319,7 @@ export default function Dashboard() {
     { key: "agents", label: "Agents", icon: "🤖" },
     { key: "goals", label: "90-Day Goals", icon: "🎯" },
     { key: "memory", label: "Memory", icon: "🧠" },
+    { key: "history", label: "Chat History", icon: "💬" },
   ];
 
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
@@ -215,6 +358,7 @@ export default function Dashboard() {
         }}
       />
     ),
+    history: () => <ChatHistoryTab />,
   };
 
   return (
@@ -328,6 +472,20 @@ export default function Dashboard() {
                 <span className="text-sm font-semibold text-white">JARVIS Chat</span>
                 <StatusDot status="active" />
               </div>
+
+              {/* Action result toast */}
+              {actionResult && (
+                <div className={`mx-3 mt-2 px-3 py-2 rounded-lg text-xs animate-[slideUp_0.3s_ease-out] flex items-center justify-between ${actionResult.type === "success" ? "bg-jarvis-green/20 text-jarvis-green" : "bg-jarvis-red/20 text-jarvis-red"}`}>
+                  <span>{actionResult.message}</span>
+                  <div className="flex items-center gap-2">
+                    {actionResult.link && (
+                      <Link href={actionResult.link} className="underline font-semibold">Open</Link>
+                    )}
+                    <button onClick={() => setActionResult(null)} className="opacity-60 hover:opacity-100">&times;</button>
+                  </div>
+                </div>
+              )}
+
               <div className="flex-1 overflow-y-auto p-3 space-y-3">
                 {chatMessages.length === 0 && (
                   <div className="text-center py-8">
@@ -341,23 +499,75 @@ export default function Dashboard() {
                       <div className={`rounded-xl px-3 py-2 text-sm whitespace-pre-wrap ${msg.role === "user" ? "bg-jarvis-accent text-white" : "bg-jarvis-border text-jarvis-text"}`}>
                         {msg.content}
                       </div>
-                      <button
-                        onClick={() => { setRememberMessageIdx(i); setShowRememberModal(true); }}
-                        className="absolute -bottom-1 right-1 opacity-0 group-hover/msg:opacity-100 transition-opacity text-xs px-1.5 py-0.5 rounded bg-jarvis-card border border-jarvis-border text-jarvis-muted hover:text-jarvis-accent"
-                        title="Remember this"
-                      >
-                        🧠
-                      </button>
+                      <div className="absolute -bottom-1 right-1 opacity-0 group-hover/msg:opacity-100 transition-opacity flex gap-1">
+                        {msg.role === "assistant" && (
+                          <button
+                            onClick={() => handleBookmark(i)}
+                            className={`text-xs px-1.5 py-0.5 rounded border transition-colors ${savedBookmarks.has(i) ? "bg-jarvis-accent/20 border-jarvis-accent/50 text-jarvis-accent" : "bg-jarvis-card border-jarvis-border text-jarvis-muted hover:text-jarvis-accent"}`}
+                            title={savedBookmarks.has(i) ? "Saved" : "Save highlight"}
+                          >
+                            {savedBookmarks.has(i) ? "🔖" : "🔖"}
+                          </button>
+                        )}
+                        <button
+                          onClick={() => { setRememberMessageIdx(i); setShowRememberModal(true); }}
+                          className="text-xs px-1.5 py-0.5 rounded bg-jarvis-card border border-jarvis-border text-jarvis-muted hover:text-jarvis-accent"
+                          title="Remember this"
+                        >
+                          🧠
+                        </button>
+                      </div>
                     </div>
                   </div>
                 ))}
                 {chatLoading && (
                   <div className="flex justify-start">
-                    <div className="bg-jarvis-border rounded-xl px-3 py-2 text-sm text-jarvis-muted">Thinking...</div>
+                    <div className="bg-jarvis-border rounded-xl px-3 py-2 text-sm text-jarvis-muted">
+                      {voiceProcessing ? "Analyzing voice..." : "Thinking..."}
+                    </div>
                   </div>
                 )}
                 <div ref={chatEndRef} />
               </div>
+
+              {/* Smart action buttons — visible after 3+ messages */}
+              {chatMessages.length >= 3 && (
+                <div className="px-3 py-2 border-t border-jarvis-border">
+                  <div className="flex gap-2 relative">
+                    <button
+                      onClick={handleNewIdea}
+                      disabled={!!actionLoading}
+                      className="flex-1 text-xs px-2 py-1.5 rounded-lg bg-jarvis-accent/10 text-jarvis-accent hover:bg-jarvis-accent/20 transition-colors disabled:opacity-50 flex items-center justify-center gap-1"
+                    >
+                      {actionLoading === "new-idea" ? "Creating..." : "💡 New Idea"}
+                    </button>
+                    <button
+                      onClick={() => setShowAddToProject(!showAddToProject)}
+                      disabled={!!actionLoading}
+                      className="flex-1 text-xs px-2 py-1.5 rounded-lg bg-jarvis-green/10 text-jarvis-green hover:bg-jarvis-green/20 transition-colors disabled:opacity-50 flex items-center justify-center gap-1"
+                    >
+                      {actionLoading === "add-to-project" ? "Adding..." : "📌 Add to Project"}
+                    </button>
+
+                    {/* Project dropdown */}
+                    {showAddToProject && (
+                      <div className="absolute bottom-full left-0 right-0 mb-1 bg-jarvis-card border border-jarvis-border rounded-xl shadow-xl max-h-48 overflow-y-auto z-10">
+                        {projects.map((p) => (
+                          <button
+                            key={p.id}
+                            onClick={() => handleAddToProject(p.id)}
+                            className="w-full text-left px-3 py-2 text-xs hover:bg-jarvis-accent/10 transition-colors border-b border-jarvis-border last:border-0"
+                          >
+                            <span className="text-jarvis-text">{p.title}</span>
+                            <span className="text-jarvis-muted ml-2">{p.status}</span>
+                          </button>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                </div>
+              )}
+
               <div className="px-3 py-2 border-t border-jarvis-border">
                 <div className="flex flex-wrap gap-1.5">
                   {getSuggestedPrompts().map((p, i) => (
@@ -369,9 +579,15 @@ export default function Dashboard() {
                 <VoiceChatInput
                   value={chatInput}
                   onChange={setChatInput}
-                  onSend={() => sendChat()}
+                  onSend={() => {
+                    // Check if this came from voice (input has content and voice was used)
+                    if (chatInput.trim()) {
+                      sendChat();
+                    }
+                  }}
                   disabled={chatLoading}
                   variant="panel"
+                  onVoiceComplete={handleVoicePipeline}
                 />
               </div>
             </aside>

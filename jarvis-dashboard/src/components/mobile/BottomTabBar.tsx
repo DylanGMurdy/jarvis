@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 
-type Tab = "overview" | "ideas" | "agents" | "goals" | "memory";
+type Tab = "overview" | "ideas" | "agents" | "goals" | "memory" | "history";
 
 interface BottomTabBarProps {
   activeTab: Tab;
