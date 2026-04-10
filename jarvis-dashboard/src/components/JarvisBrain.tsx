@@ -63,19 +63,19 @@ export default function JarvisBrain({ memories = [], onNodeClick }: JarvisBrainP
     const s = stateRef.current;
     const nodes: Node3D[] = [];
     const edges: Edge3D[] = [];
-    const scale = Math.min(w, h) * 0.35;
+    const scale = Math.min(w, h) * 0.55;
 
-    // Core nodes — small tight sphere in center
+    // Core nodes — tight cluster in center
     for (let i = 0; i < CORE_LABELS.length; i++) {
       const phi = Math.acos(1 - 2 * (i + 0.5) / CORE_LABELS.length);
       const theta = Math.PI * (1 + Math.sqrt(5)) * i;
       nodes.push({
         id: `core-${i}`, label: CORE_LABELS[i], type: "core",
-        x: Math.sin(phi) * Math.cos(theta) * scale * 0.15,
-        y: Math.cos(phi) * scale * 0.15,
-        z: Math.sin(phi) * Math.sin(theta) * scale * 0.15,
-        radius: 8, phase: i * 1.5, speed: 0.0004 + Math.random() * 0.0002,
-        orbitRadius: scale * 0.15, orbitTilt: phi,
+        x: Math.sin(phi) * Math.cos(theta) * scale * 0.12,
+        y: Math.cos(phi) * scale * 0.12,
+        z: Math.sin(phi) * Math.sin(theta) * scale * 0.12,
+        radius: 14, phase: i * 1.5, speed: 0.0004 + Math.random() * 0.0002,
+        orbitRadius: scale * 0.12, orbitTilt: phi,
       });
     }
 
@@ -90,13 +90,13 @@ export default function JarvisBrain({ memories = [], onNodeClick }: JarvisBrainP
     for (let i = 0; i < cats.length; i++) {
       const phi = Math.acos(1 - 2 * (i + 0.5) / Math.max(cats.length, 1));
       const theta = Math.PI * (1 + Math.sqrt(5)) * i;
-      const r = scale * 0.45;
+      const r = scale * 0.4;
       nodes.push({
         id: `cat-${cats[i]}`, label: cats[i].charAt(0).toUpperCase() + cats[i].slice(1), type: cats[i],
         x: Math.sin(phi) * Math.cos(theta) * r,
         y: Math.cos(phi) * r,
         z: Math.sin(phi) * Math.sin(theta) * r,
-        radius: 6, phase: i * 2.1, speed: 0.0003 + Math.random() * 0.0002,
+        radius: 10, phase: i * 2.1, speed: 0.0003 + Math.random() * 0.0002,
         orbitRadius: r, orbitTilt: phi,
       });
       // Connect to a core node
@@ -112,14 +112,14 @@ export default function JarvisBrain({ memories = [], onNodeClick }: JarvisBrainP
     for (let i = 0; i < mems.length; i++) {
       const phi = Math.acos(1 - 2 * (i + 0.5) / Math.max(mems.length, 1));
       const theta = Math.PI * (1 + Math.sqrt(5)) * i;
-      const r = scale * (0.7 + Math.random() * 0.2);
+      const r = scale * (0.65 + Math.random() * 0.15);
       const label = mems[i].fact.length > 20 ? mems[i].fact.slice(0, 19) + "\u2026" : mems[i].fact;
       nodes.push({
         id: `mem-${mems[i].id}`, label, type: mems[i].category,
         x: Math.sin(phi) * Math.cos(theta) * r,
         y: Math.cos(phi) * r,
         z: Math.sin(phi) * Math.sin(theta) * r,
-        radius: 3.5, phase: i * 0.7, speed: 0.0002 + Math.random() * 0.0003,
+        radius: 6, phase: i * 0.7, speed: 0.0002 + Math.random() * 0.0003,
         orbitRadius: r, orbitTilt: phi,
       });
       // Connect to category hub
@@ -231,8 +231,8 @@ export default function JarvisBrain({ memories = [], onNodeClick }: JarvisBrainP
       const ry = y * cosX - rz * sinX;
       rz = y * sinX + rz * cosX;
       // Perspective
-      const fov = 600;
-      const scale = fov / (fov + rz + 300);
+      const fov = 500;
+      const scale = fov / (fov + rz + 100);
       return { sx: s.w / 2 + rx * scale, sy: s.h / 2 + ry * scale, depth: rz };
     }
 
@@ -240,7 +240,7 @@ export default function JarvisBrain({ memories = [], onNodeClick }: JarvisBrainP
       const nodes = s.nodes;
       for (let i = nodes.length - 1; i >= 0; i--) {
         const p = project(nodes[i].x, nodes[i].y, nodes[i].z);
-        const r = nodes[i].radius * (600 / (600 + p.depth + 300)) * 2.5;
+        const r = nodes[i].radius * (500 / (500 + p.depth + 100)) * 2.5;
         const dx = mx - p.sx, dy = my - p.sy;
         if (dx * dx + dy * dy < (r + 6) * (r + 6)) return i;
       }
@@ -319,7 +319,7 @@ export default function JarvisBrain({ memories = [], onNodeClick }: JarvisBrainP
         const p = projected[idx];
         const n = p.node;
         const col = COLORS[n.type] || COLORS.core;
-        const depthScale = 600 / (600 + p.depth + 300);
+        const depthScale = 500 / (500 + p.depth + 100);
         const r = n.radius * depthScale * 2.5;
         const isHovered = s.hovered === idx;
         const alpha = Math.max(0.2, Math.min(1, 0.6 + depthScale * 0.5));
@@ -353,7 +353,7 @@ export default function JarvisBrain({ memories = [], onNodeClick }: JarvisBrainP
 
         // Label for core/category/hovered nodes
         if (n.type === "core" || n.id.startsWith("cat-") || isHovered) {
-          ctx.font = `${isHovered ? 600 : 500} ${Math.max(9, 11 * depthScale)}px system-ui, -apple-system, sans-serif`;
+          ctx.font = `${isHovered ? 600 : 500} ${Math.max(10, 13 * depthScale)}px system-ui, -apple-system, sans-serif`;
           ctx.fillStyle = `rgba(255,255,255,${alpha * 0.9})`;
           ctx.textAlign = "center";
           ctx.textBaseline = "middle";
