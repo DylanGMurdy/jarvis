@@ -65,7 +65,7 @@ export async function POST(request: Request) {
     return Response.json({ error: error.message }, { status: 500 });
   }
 
-  return Response.json({ memory: data });
+  return Response.json({ ok: true, id: data.id, memory: data });
 }
 
 // DELETE — remove a memory by id
