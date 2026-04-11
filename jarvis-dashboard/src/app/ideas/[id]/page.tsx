@@ -70,54 +70,89 @@ export default function ProjectDetailPage({ params }: { params: Promise<{ id: st
   const [driveLoading, setDriveLoading] = useState(false);
   const [driveError, setDriveError] = useState<string | null>(null);
 
-  // War Room state
-  const [warRoomResults, setWarRoomResults] = useState<Record<string, { loading: boolean; analysis: string | null }>>({
-    devils_advocate: { loading: false, analysis: null },
-    market_analyst: { loading: false, analysis: null },
-    risk_assessor: { loading: false, analysis: null },
-  });
-
-  // Move to Build state
+  // ── War Room unified state ───────────────────────────────
+  interface WarRoomAgent { key: string; name: string; role: string; tier: string; result: string }
+  const [warRoomDeploying, setWarRoomDeploying] = useState(false);
+  const [warRoomDeployError, setWarRoomDeployError] = useState<string | null>(null);
+  const [warRoomSummary, setWarRoomSummary] = useState<string | null>(null);
+  const [warRoomAgents, setWarRoomAgents] = useState<WarRoomAgent[]>([]);
+  const [warRoomExpanded, setWarRoomExpanded] = useState<Set<string>>(new Set());
+  const [warRoomRerunning, setWarRoomRerunning] = useState<Set<string>>(new Set());
   const [showBuildConfirm, setShowBuildConfirm] = useState(false);
   const [moveToBuildLoading, setMoveToBuildLoading] = useState(false);
 
-  // War Room Deploy + Summary + Chat
-  const [deployLoading, setDeployLoading] = useState(false);
-  const [deploySummary, setDeploySummary] = useState<{ consensus: string[]; conflicts: string[]; recommendations: string[]; verdict: string; confidence_score: number } | null>(null);
-  const [deployAgentCount, setDeployAgentCount] = useState(0);
-  const [warRoomChatMessages, setWarRoomChatMessages] = useState<{ role: "user" | "assistant"; content: string }[]>([]);
-  const [warRoomChatInput, setWarRoomChatInput] = useState("");
-  const [warRoomChatLoading, setWarRoomChatLoading] = useState(false);
-  const [warRoomContext, setWarRoomContext] = useState("");
-  const warRoomChatEndRef = useRef<HTMLDivElement>(null);
+  const AGENT_ROUTES: Record<string, string> = {
+    cfo: "cfo", cto: "cto", clo: "clo", coo: "coo", cmo: "cmo", chro: "chro", cso: "cso",
+    vp_product: "vp_product", vp_engineering: "vp_engineering", vp_finance: "vp_finance",
+    vp_sales: "vp_sales", vp_marketing: "vp_marketing", vp_operations: "vp_operations",
+    head_of_growth: "head_of_growth", head_of_content: "head_of_content",
+    head_of_design: "head_of_design", data_analytics: "data_analytics",
+    head_cx: "head_cx", head_of_pr: "head_of_pr", sdr: "sdr",
+    partnerships: "partnerships", investor_relations: "investor_relations",
+    head_of_recruiting: "head_of_recruiting", customer_success: "customer_success",
+  };
 
-  useEffect(() => {
-    warRoomChatEndRef.current?.scrollIntoView({ behavior: "smooth" });
-  }, [warRoomChatMessages]);
+  const AGENT_FIRST_ACTION: Record<string, string> = {
+    cfo: "revenue_model", cto: "tech_stack", clo: "legal_risks", coo: "operations_plan",
+    cmo: "market_analysis", chro: "org_structure", cso: "sales_strategy",
+    vp_product: "product_vision", vp_engineering: "architecture_plan", vp_finance: "financial_model",
+    vp_sales: "pipeline_structure", vp_marketing: "brand_strategy", vp_operations: "operations_stack",
+    head_of_growth: "growth_loops", head_of_content: "content_calendar",
+    head_of_design: "design_system", data_analytics: "metrics_framework",
+    head_cx: "cx_strategy", head_of_pr: "pr_strategy", sdr: "cold_outreach",
+    partnerships: "partnership_targets", investor_relations: "investor_update",
+    head_of_recruiting: "job_descriptions", customer_success: "onboarding_flow",
+  };
+
+  const TIER_ICONS: Record<string, string> = {
+    cfo: "💰", cto: "⚙️", clo: "⚖️", coo: "📋", cmo: "📣", chro: "👥", cso: "🎯",
+    vp_product: "🧩", vp_engineering: "🔧", vp_finance: "💵", vp_sales: "🤝",
+    vp_marketing: "📢", vp_operations: "🏭", head_of_growth: "🚀", head_of_content: "✍️",
+    head_of_design: "🎨", data_analytics: "📉", head_cx: "💎", head_of_pr: "📰",
+    sdr: "📞", partnerships: "🤝", investor_relations: "🏦", head_of_recruiting: "🎯",
+    customer_success: "🌟",
+  };
 
   async function deployWarRoom() {
-    setDeployLoading(true);
-    setDeploySummary(null);
+    setWarRoomDeploying(true);
+    setWarRoomDeployError(null);
+    setWarRoomSummary(null);
+    setWarRoomAgents([]);
+    setWarRoomExpanded(new Set());
     try {
-      const res = await fetch(`/api/projects/${id}/warroom/deploy`, {
+      const res = await fetch(`/api/projects/${id}/war-room/deploy`, { method: "POST" });
+      const data = await res.json();
+      if (data.ok) {
+        setWarRoomSummary(data.summary);
+        setWarRoomAgents(data.agents);
+        loadData();
+      } else {
+        setWarRoomDeployError(data.error || "Deployment failed");
+      }
+    } catch {
+      setWarRoomDeployError("Connection error");
+    }
+    setWarRoomDeploying(false);
+  }
+
+  async function rerunAgent(agentKey: string) {
+    const route = AGENT_ROUTES[agentKey];
+    const action = AGENT_FIRST_ACTION[agentKey];
+    if (!route || !action) return;
+    setWarRoomRerunning((prev) => new Set(prev).add(agentKey));
+    try {
+      const res = await fetch(`/api/agents/${route}`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action, projectId: id, projectTitle: project?.title, projectDescription: project?.description }),
       });
       const data = await res.json();
       if (data.ok) {
-        setDeploySummary(data.summary);
-        setDeployAgentCount(data.agentCount);
-        // Build context string for chat
-        const allResults = [...(data.wave1 || []), ...(data.wave2 || [])];
-        const ctx = allResults
-          .filter((r: { ok: boolean }) => r.ok)
-          .map((r: { agent: string; action: string; result: string }) => `=== ${r.agent.toUpperCase()} — ${r.action} ===\n${r.result}`)
-          .join("\n\n");
-        setWarRoomContext(ctx);
-        loadData(); // Refresh notes
+        setWarRoomAgents((prev) => prev.map((a) => a.key === agentKey ? { ...a, result: data.result } : a));
+        loadData();
       }
     } catch { /* silent */ }
-    setDeployLoading(false);
+    setWarRoomRerunning((prev) => { const next = new Set(prev); next.delete(agentKey); return next; });
   }
 
   async function moveToBuild() {
@@ -125,78 +160,12 @@ export default function ProjectDetailPage({ params }: { params: Promise<{ id: st
     setMoveToBuildLoading(true);
     try {
       await api.projects.update(id, { status: "Building" as const });
-      await api.projects.update(id, { war_room_completed_at: new Date().toISOString() } as Partial<Project>);
-      await api.projectNotes.create(id, `[War Room Completed — ${new Date().toLocaleDateString()}]\n\nWar Room analysis complete. Project moved to Build stage. Team is ready for execution.`);
+      await api.projectNotes.create(id, `[War Room Completed — ${new Date().toLocaleDateString()}]\n\nWar Room analysis complete. Project moved to Build stage.`);
       await loadData();
       setShowBuildConfirm(false);
       setActiveTab("Overview");
     } catch { /* silent */ }
     setMoveToBuildLoading(false);
-  }
-
-  async function sendWarRoomChat() {
-    const text = warRoomChatInput.trim();
-    if (!text) return;
-    const updated = [...warRoomChatMessages, { role: "user" as const, content: text }];
-    setWarRoomChatMessages(updated);
-    setWarRoomChatInput("");
-    setWarRoomChatLoading(true);
-    try {
-      const res = await fetch(`/api/projects/${id}/warroom/chat`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ message: text, warRoomContext }),
-      });
-      const data = await res.json();
-      setWarRoomChatMessages([...updated, { role: "assistant", content: data.response || "No response." }]);
-      // Handle rerun instructions
-      if (data.rerun && data.agent) {
-        const agentEndpoints: Record<string, string> = {
-          cmo: "/api/agents/cmo", cto: "/api/agents/cto", cfo: "/api/agents/cfo",
-          cso: "/api/agents/cso", coo: "/api/agents/coo", vp_sales: "/api/agents/vp_sales",
-          vp_finance: "/api/agents/vp_finance", sdr: "/api/agents/sdr", partnerships: "/api/agents/partnerships",
-          data_analytics: "/api/agents/data_analytics", clo: "/api/agents/clo", chro: "/api/agents/chro",
-        };
-        const endpoint = agentEndpoints[data.agent];
-        if (endpoint) {
-          setWarRoomChatMessages((prev) => [...prev, { role: "assistant", content: `Re-running ${data.agent.toUpperCase()} agent...` }]);
-          try {
-            const rerunRes = await fetch(endpoint, {
-              method: "POST",
-              headers: { "Content-Type": "application/json" },
-              body: JSON.stringify({ action: data.newInstructions || "market_analysis", projectId: id, projectTitle: project?.title, projectDescription: project?.description }),
-            });
-            const rerunData = await rerunRes.json();
-            if (rerunData.ok) {
-              setWarRoomChatMessages((prev) => [...prev, { role: "assistant", content: `${data.agent.toUpperCase()} re-run complete:\n\n${rerunData.result}` }]);
-              loadData();
-            }
-          } catch { /* silent */ }
-        }
-      }
-    } catch {
-      setWarRoomChatMessages([...updated, { role: "assistant", content: "Connection error." }]);
-    }
-    setWarRoomChatLoading(false);
-  }
-
-  // War Room completion detection
-  const warRoomNotes = notes.filter((n) => /^\[(War Room|CFO Agent|CMO Agent|CTO Agent|COO Agent|CLO Agent|CHRO Agent|CSO Agent|VP |Head of|Customer Success|SDR Agent|Partnerships|Data Analytics|Investor Relations|Recruiting)/.test(n.content));
-  const hasWarRoomRun = warRoomNotes.length > 0 || deploySummary !== null;
-
-  // Agent icons for war room report display
-  const AGENT_ICONS: Record<string, string> = {
-    "War Room": "🏛️", "CFO Agent": "💰", "CMO Agent": "📣", "CTO Agent": "🛠️", "COO Agent": "⚙️",
-    "CLO Agent": "⚖️", "CHRO Agent": "👥", "CSO Agent": "💼", "VP Marketing": "📢", "VP Sales": "🤝",
-    "VP Product": "🎯", "VP Engineering": "🔧", "VP Finance": "💵", "VP Operations": "🏭",
-    "Head of Growth": "📈", "Head of Content": "📝", "Head of Design": "🎨", "Head of CX": "💬",
-    "Head of PR": "📰", "Customer Success": "🌟", "SDR Agent": "📞", "Data Analytics": "📉",
-    "Partnerships": "🤝", "Investor Relations": "💎", "Recruiting": "🔍",
-  };
-
-  function getAgentNameFromNote(content: string): string {
-    const match = content.match(/^\[(.+?)(?:\s*—|\])/);
-    return match ? match[1] : "Agent";
   }
 
   // Sales Agent state (Lindy project only)
@@ -373,6 +342,21 @@ export default function ProjectDetailPage({ params }: { params: Promise<{ id: st
       }
     } catch { /* silent */ }
     setPdfLoading(false);
+  }
+
+  // War Room helper computations for Notes tab
+  const warRoomNotes = notes.filter((n) => /^\[(War Room|CFO |CMO |CTO |COO |CLO |CHRO |CSO |VP |Head of|Customer Success|SDR |Data Analytics|Partnerships|Investor Relations|Recruiting)/.test(n.content));
+  const AGENT_ICONS: Record<string, string> = {
+    "War Room": "🏛️", "CFO": "💰", "CMO": "📣", "CTO": "🛠️", "COO": "⚙️",
+    "CLO": "⚖️", "CHRO": "👥", "CSO": "💼", "VP Marketing": "📢", "VP Sales": "🤝",
+    "VP Product": "🎯", "VP Engineering": "🔧", "VP Finance": "💵", "VP Operations": "🏭",
+    "Head of Growth": "📈", "Head of Content": "📝", "Head of Design": "🎨", "Head of CX": "💬",
+    "Head of PR": "📰", "Customer Success": "🌟", "SDR": "📞", "Data Analytics": "📉",
+    "Partnerships": "🤝", "Investor Relations": "💎", "Recruiting": "🔍",
+  };
+  function getAgentNameFromNote(content: string): string {
+    const match = content.match(/^\[(.+?)(?:\s*—|\])/);
+    return match ? match[1] : "Agent";
   }
 
   // Research Agent state
@@ -729,23 +713,6 @@ export default function ProjectDetailPage({ params }: { params: Promise<{ id: st
     }
   }
 
-  async function runAnalysis(analyst: string) {
-    setWarRoomResults((prev) => ({ ...prev, [analyst]: { loading: true, analysis: null } }));
-    try {
-      const res = await fetch(`/api/projects/${id}/warroom`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ analyst }),
-      });
-      const data = await res.json();
-      setWarRoomResults((prev) => ({
-        ...prev,
-        [analyst]: { loading: false, analysis: data.success ? data.analysis : data.error || "Failed" },
-      }));
-    } catch {
-      setWarRoomResults((prev) => ({ ...prev, [analyst]: { loading: false, analysis: "Connection error" } }));
-    }
-  }
 
   // ─── Drive helpers ──────────────────────────────────────
   const loadDriveFiles = useCallback(async () => {
@@ -1372,1158 +1339,205 @@ curl -X POST ${typeof window !== "undefined" ? window.location.origin : ""}/api/
           {/* ── War Room ────────────────────────────────── */}
           {activeTab === "War Room" && (
             <div className="space-y-6">
-              {/* ── Master Orchestrator ───────────────── */}
-              <div className="space-y-4">
-                <div className="bg-gradient-to-r from-yellow-500/10 via-amber-500/10 to-orange-500/10 rounded-xl border border-yellow-500/40 p-4">
-                  <div className="flex items-center gap-2 mb-1">
-                    <span className="text-lg">🧠</span>
-                    <h3 className="text-lg font-bold text-white">Master Orchestrator</h3>
-                    <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-yellow-500/20 text-yellow-400 border border-yellow-500/30 uppercase tracking-wider">Master</span>
-                  </div>
-                  <p className="text-sm text-[#64748b]">Executive command — briefings, agent assignments, weekly reviews, and escalation. Pulls live project data.</p>
-                </div>
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                  {([
-                    { key: "daily_briefing", icon: "☀️", name: "Daily Briefing", desc: "Morning status, top 3 priorities, quick wins", btnClass: "bg-yellow-500/10 border-yellow-500/30 text-yellow-400 hover:bg-yellow-500/20", borderClass: "border-yellow-500/20" },
-                    { key: "assign_tasks", icon: "📋", name: "Assign Tasks", desc: "Route work to the right agents automatically", btnClass: "bg-amber-500/10 border-amber-500/30 text-amber-400 hover:bg-amber-500/20", borderClass: "border-amber-500/20" },
-                    { key: "weekly_review", icon: "📊", name: "Weekly Review", desc: "Scorecard, wins, misses, next week priorities", btnClass: "bg-orange-500/10 border-orange-500/30 text-orange-400 hover:bg-orange-500/20", borderClass: "border-orange-500/20" },
-                    { key: "escalate", icon: "🚨", name: "Escalate", desc: "What needs Dylan's attention right now", btnClass: "bg-red-500/10 border-red-500/30 text-red-400 hover:bg-red-500/20", borderClass: "border-red-500/20" },
-                  ] as const).map((panel) => (
-                    <div key={panel.key} className={`bg-[#12121a] rounded-xl border ${orchestratorResults[panel.key].output ? panel.borderClass : "border-[#1e1e2e]"} flex flex-col`}>
-                      <div className="p-4 border-b border-[#1e1e2e]">
-                        <div className="flex items-center gap-2 mb-1">
-                          <span className="text-lg">{panel.icon}</span>
-                          <h4 className="text-sm font-bold text-white">{panel.name}</h4>
-                        </div>
-                        <p className="text-xs text-[#64748b]">{panel.desc}</p>
-                      </div>
-                      <div className="flex-1 p-4 min-h-[80px] max-h-[400px] overflow-y-auto">
-                        {orchestratorResults[panel.key].loading ? (
-                          <div className="text-sm text-[#64748b] animate-pulse">Orchestrating...</div>
-                        ) : orchestratorResults[panel.key].output ? (
-                          <div className="text-sm text-[#e2e8f0] whitespace-pre-wrap leading-relaxed">{orchestratorResults[panel.key].output}</div>
-                        ) : (
-                          <p className="text-sm text-[#64748b]">Click below to run.</p>
-                        )}
-                      </div>
-                      <div className="p-4 border-t border-[#1e1e2e]">
-                        <button
-                          onClick={() => runOrchestrator(panel.key)}
-                          disabled={orchestratorResults[panel.key].loading}
-                          className={`w-full px-4 py-2.5 border rounded-lg text-sm font-medium disabled:opacity-50 transition-colors ${panel.btnClass}`}
-                        >
-                          {orchestratorResults[panel.key].loading ? "Running..." : orchestratorResults[panel.key].output ? "Re-run" : "Run"}
-                        </button>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              </div>
-
-              {/* ── Sales Agent (Lindy project only) ──── */}
-              {isLindyProject && (
-                <div className="space-y-4">
-                  <div className="bg-gradient-to-r from-[#6366f1]/10 to-[#8b5cf6]/10 rounded-xl border border-[#6366f1]/30 p-4">
-                    <div className="flex items-center gap-2 mb-1">
-                      <span className="text-lg">🤝</span>
-                      <h3 className="text-lg font-bold text-white">Sales Agent</h3>
-                    </div>
-                    <p className="text-sm text-[#64748b]">AI-powered sales tools for the Lindy agent business. Results save to project notes.</p>
-                  </div>
-                  <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
-                    {([
-                      { key: "find_leads", icon: "🎯", name: "Find Leads", desc: "10 Utah brokerages that need Lindy agents", btnClass: "bg-emerald-500/10 border-emerald-500/30 text-emerald-400 hover:bg-emerald-500/20", borderClass: "border-emerald-500/20" },
-                      { key: "draft_outreach", icon: "✉️", name: "Draft Outreach", desc: "Cold text, warm follow-up, and email drafts", btnClass: "bg-violet-500/10 border-violet-500/30 text-violet-400 hover:bg-violet-500/20", borderClass: "border-violet-500/20" },
-                      { key: "generate_demo_script", icon: "🎬", name: "Demo Script", desc: "5-minute walkthrough script for prospects", btnClass: "bg-cyan-500/10 border-cyan-500/30 text-cyan-400 hover:bg-cyan-500/20", borderClass: "border-cyan-500/20" },
-                    ] as const).map((panel) => (
-                      <div key={panel.key} className={`bg-[#12121a] rounded-xl border ${salesResults[panel.key].output ? panel.borderClass : "border-[#1e1e2e]"} flex flex-col`}>
-                        <div className="p-4 border-b border-[#1e1e2e]">
-                          <div className="flex items-center gap-2 mb-1">
-                            <span className="text-lg">{panel.icon}</span>
-                            <h4 className="text-sm font-bold text-white">{panel.name}</h4>
-                          </div>
-                          <p className="text-xs text-[#64748b]">{panel.desc}</p>
-                        </div>
-                        <div className="flex-1 p-4 min-h-[100px] max-h-[400px] overflow-y-auto">
-                          {salesResults[panel.key].loading ? (
-                            <div className="text-sm text-[#64748b] animate-pulse">Generating...</div>
-                          ) : salesResults[panel.key].output ? (
-                            <div className="text-sm text-[#e2e8f0] whitespace-pre-wrap leading-relaxed">{salesResults[panel.key].output}</div>
-                          ) : (
-                            <p className="text-sm text-[#64748b]">Click below to generate.</p>
-                          )}
-                        </div>
-                        <div className="p-4 border-t border-[#1e1e2e]">
-                          <button
-                            onClick={() => runSalesAgent(panel.key)}
-                            disabled={salesResults[panel.key].loading}
-                            className={`w-full px-4 py-2.5 border rounded-lg text-sm font-medium disabled:opacity-50 transition-colors ${panel.btnClass}`}
-                          >
-                            {salesResults[panel.key].loading ? "Running..." : salesResults[panel.key].output ? "Regenerate" : "Generate"}
-                          </button>
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              )}
-
-              <div className="bg-[#12121a] rounded-xl border border-[#1e1e2e] p-4">
-                <h3 className="text-lg font-bold text-white mb-1">War Room</h3>
-                <p className="text-sm text-[#64748b]">Run AI analyst panels to stress-test this idea before building.</p>
-              </div>
-              <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
-                {([
-                  { key: "devils_advocate", icon: "😈", name: "Devil\u2019s Advocate", desc: "Finds every flaw, blind spot, and weakness", btnClass: "bg-red-500/10 border-red-500/30 text-red-400 hover:bg-red-500/20", borderClass: "border-red-500/20" },
-                  { key: "market_analyst", icon: "📊", name: "Market Analyst", desc: "Market size, competition, timing, acquisition", btnClass: "bg-blue-500/10 border-blue-500/30 text-blue-400 hover:bg-blue-500/20", borderClass: "border-blue-500/20" },
-                  { key: "risk_assessor", icon: "⚠️", name: "Risk Assessor", desc: "Technical, market, execution, financial risk", btnClass: "bg-amber-500/10 border-amber-500/30 text-amber-400 hover:bg-amber-500/20", borderClass: "border-amber-500/20" },
-                ] as const).map((panel) => (
-                  <div key={panel.key} className={`bg-[#12121a] rounded-xl border ${warRoomResults[panel.key].analysis ? panel.borderClass : "border-[#1e1e2e]"} flex flex-col`}>
-                    <div className="p-4 border-b border-[#1e1e2e]">
-                      <div className="flex items-center gap-2 mb-1">
-                        <span className="text-lg">{panel.icon}</span>
-                        <h4 className="text-sm font-bold text-white">{panel.name}</h4>
-                      </div>
-                      <p className="text-xs text-[#64748b]">{panel.desc}</p>
-                    </div>
-                    <div className="flex-1 p-4 min-h-[100px]">
-                      {warRoomResults[panel.key].loading ? (
-                        <div className="text-sm text-[#64748b] animate-pulse">Analyzing...</div>
-                      ) : warRoomResults[panel.key].analysis ? (
-                        <div className="text-sm text-[#e2e8f0] whitespace-pre-wrap leading-relaxed">{warRoomResults[panel.key].analysis}</div>
-                      ) : (
-                        <p className="text-sm text-[#64748b]">Click below to run this analysis.</p>
-                      )}
-                    </div>
-                    <div className="p-4 border-t border-[#1e1e2e]">
-                      <button
-                        onClick={() => runAnalysis(panel.key)}
-                        disabled={warRoomResults[panel.key].loading}
-                        className={`w-full px-4 py-2.5 border rounded-lg text-sm font-medium disabled:opacity-50 transition-colors ${panel.btnClass}`}
-                      >
-                        {warRoomResults[panel.key].loading ? "Running..." : warRoomResults[panel.key].analysis ? "Re-run Analysis" : "Run Analysis"}
-                      </button>
-                    </div>
-                  </div>
-                ))}
-              </div>
-              <button
-                onClick={() => { runAnalysis("devils_advocate"); runAnalysis("market_analyst"); runAnalysis("risk_assessor"); }}
-                disabled={warRoomResults.devils_advocate.loading || warRoomResults.market_analyst.loading || warRoomResults.risk_assessor.loading}
-                className="w-full px-4 py-3 bg-[#6366f1] text-white rounded-lg text-sm font-medium hover:bg-[#5558e6] disabled:opacity-50 transition-colors"
-              >
-                Run All Analysts
-              </button>
-
-              {/* ── CFO Agent ──────────────────────────── */}
-              <div className="space-y-4">
-                <div className="bg-gradient-to-r from-emerald-500/10 to-teal-500/10 rounded-xl border border-emerald-500/30 p-4">
-                  <div className="flex items-center gap-2 mb-1">
-                    <span className="text-lg">💰</span>
-                    <h3 className="text-lg font-bold text-white">CFO Agent</h3>
-                  </div>
-                  <p className="text-sm text-[#64748b]">Financial analysis and projections. Results are saved to project notes.</p>
-                </div>
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                  {([
-                    { key: "revenue_model", icon: "📈", name: "Revenue Model", desc: "Pricing, revenue streams, 12-month projection", btnClass: "bg-emerald-500/10 border-emerald-500/30 text-emerald-400 hover:bg-emerald-500/20", borderClass: "border-emerald-500/20" },
-                    { key: "unit_economics", icon: "🧮", name: "Unit Economics", desc: "CAC, LTV, margins, break-even analysis", btnClass: "bg-teal-500/10 border-teal-500/30 text-teal-400 hover:bg-teal-500/20", borderClass: "border-teal-500/20" },
-                    { key: "funding_needs", icon: "🏦", name: "Funding Needs", desc: "Bootstrap vs funded path, resource needs", btnClass: "bg-cyan-500/10 border-cyan-500/30 text-cyan-400 hover:bg-cyan-500/20", borderClass: "border-cyan-500/20" },
-                    { key: "financial_risks", icon: "🛡️", name: "Financial Risks", desc: "Top 5 risks with mitigation strategies", btnClass: "bg-amber-500/10 border-amber-500/30 text-amber-400 hover:bg-amber-500/20", borderClass: "border-amber-500/20" },
-                  ] as const).map((panel) => (
-                    <div key={panel.key} className={`bg-[#12121a] rounded-xl border ${cfoResults[panel.key].output ? panel.borderClass : "border-[#1e1e2e]"} flex flex-col`}>
-                      <div className="p-4 border-b border-[#1e1e2e]">
-                        <div className="flex items-center gap-2 mb-1">
-                          <span className="text-lg">{panel.icon}</span>
-                          <h4 className="text-sm font-bold text-white">{panel.name}</h4>
-                        </div>
-                        <p className="text-xs text-[#64748b]">{panel.desc}</p>
-                      </div>
-                      <div className="flex-1 p-4 min-h-[80px] max-h-[400px] overflow-y-auto">
-                        {cfoResults[panel.key].loading ? (
-                          <div className="text-sm text-[#64748b] animate-pulse">Analyzing financials...</div>
-                        ) : cfoResults[panel.key].output ? (
-                          <div className="text-sm text-[#e2e8f0] whitespace-pre-wrap leading-relaxed">{cfoResults[panel.key].output}</div>
-                        ) : (
-                          <p className="text-sm text-[#64748b]">Click below to run analysis.</p>
-                        )}
-                      </div>
-                      <div className="p-4 border-t border-[#1e1e2e]">
-                        <button
-                          onClick={() => runCfoAgent(panel.key)}
-                          disabled={cfoResults[panel.key].loading}
-                          className={`w-full px-4 py-2.5 border rounded-lg text-sm font-medium disabled:opacity-50 transition-colors ${panel.btnClass}`}
-                        >
-                          {cfoResults[panel.key].loading ? "Running..." : cfoResults[panel.key].output ? "Re-run" : "Run Analysis"}
-                        </button>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              </div>
-
-              {/* ── CMO Agent ─────────────────────────── */}
-              <div className="bg-gradient-to-r from-[#ec4899]/10 to-[#f97316]/10 rounded-xl border border-[#ec4899]/30 p-4">
-                <div className="flex items-center gap-2 mb-1">
-                  <span className="text-lg">📣</span>
-                  <h3 className="text-lg font-bold text-white">CMO Agent</h3>
-                </div>
-                <p className="text-sm text-[#64748b]">Chief Marketing Officer — market analysis, content strategy, growth channels, and brand voice.</p>
-              </div>
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                {([
-                  { key: "market_analysis", icon: "🎯", name: "Market Analysis", desc: "Market size, audience, competitors, positioning", btnClass: "bg-pink-500/10 border-pink-500/30 text-pink-400 hover:bg-pink-500/20", borderClass: "border-pink-500/20" },
-                  { key: "content_strategy", icon: "📝", name: "Content Strategy", desc: "30-day content plan with channels and messaging", btnClass: "bg-orange-500/10 border-orange-500/30 text-orange-400 hover:bg-orange-500/20", borderClass: "border-orange-500/20" },
-                  { key: "growth_channels", icon: "📈", name: "Growth Channels", desc: "Top 5 channels with effort/impact scores", btnClass: "bg-fuchsia-500/10 border-fuchsia-500/30 text-fuchsia-400 hover:bg-fuchsia-500/20", borderClass: "border-fuchsia-500/20" },
-                  { key: "brand_voice", icon: "🎤", name: "Brand Voice", desc: "Voice, tone, messaging guidelines, and sample copy", btnClass: "bg-rose-500/10 border-rose-500/30 text-rose-400 hover:bg-rose-500/20", borderClass: "border-rose-500/20" },
-                ] as const).map((panel) => (
-                  <div key={panel.key} className={`bg-[#12121a] rounded-xl border ${cmoResults[panel.key].output ? panel.borderClass : "border-[#1e1e2e]"} flex flex-col`}>
-                    <div className="p-4 border-b border-[#1e1e2e]">
-                      <div className="flex items-center gap-2 mb-1">
-                        <span className="text-lg">{panel.icon}</span>
-                        <h4 className="text-sm font-bold text-white">{panel.name}</h4>
-                      </div>
-                      <p className="text-xs text-[#64748b]">{panel.desc}</p>
-                    </div>
-                    <div className="flex-1 p-4 min-h-[100px] max-h-[400px] overflow-y-auto">
-                      {cmoResults[panel.key].loading ? (
-                        <div className="text-sm text-[#64748b] animate-pulse">CMO is working...</div>
-                      ) : cmoResults[panel.key].output ? (
-                        <div className="text-sm text-[#e2e8f0] whitespace-pre-wrap leading-relaxed">{cmoResults[panel.key].output}</div>
-                      ) : (
-                        <p className="text-sm text-[#64748b]">Click below to run.</p>
-                      )}
-                    </div>
-                    <div className="p-4 border-t border-[#1e1e2e]">
-                      <button
-                        onClick={() => runCmo(panel.key)}
-                        disabled={cmoResults[panel.key].loading}
-                        className={`w-full px-4 py-2.5 border rounded-lg text-sm font-medium disabled:opacity-50 transition-colors ${panel.btnClass}`}
-                      >
-                        {cmoResults[panel.key].loading ? "Running..." : cmoResults[panel.key].output ? "Re-run" : "Run Analysis"}
-                      </button>
-                    </div>
-                  </div>
-                ))}
-              </div>
-
-              {/* ── CTO Agent ─────────────────────────── */}
-              <div className="bg-gradient-to-r from-[#3b82f6]/10 to-[#06b6d4]/10 rounded-xl border border-[#3b82f6]/30 p-4">
-                <div className="flex items-center gap-2 mb-1">
-                  <span className="text-lg">🛠️</span>
-                  <h3 className="text-lg font-bold text-white">CTO Agent</h3>
-                </div>
-                <p className="text-sm text-[#64748b]">Chief Technology Officer — tech stack, build roadmap, technical risks, and MVP scope.</p>
-              </div>
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                {([
-                  { key: "tech_stack", icon: "⚙️", name: "Tech Stack", desc: "Best stack for this project with justification", btnClass: "bg-blue-500/10 border-blue-500/30 text-blue-400 hover:bg-blue-500/20", borderClass: "border-blue-500/20" },
-                  { key: "build_roadmap", icon: "🗺️", name: "Build Roadmap", desc: "Phased technical roadmap with milestones", btnClass: "bg-cyan-500/10 border-cyan-500/30 text-cyan-400 hover:bg-cyan-500/20", borderClass: "border-cyan-500/20" },
-                  { key: "technical_risks", icon: "🚨", name: "Technical Risks", desc: "Top risks with severity, likelihood, and mitigation", btnClass: "bg-sky-500/10 border-sky-500/30 text-sky-400 hover:bg-sky-500/20", borderClass: "border-sky-500/20" },
-                  { key: "mvp_scope", icon: "🎯", name: "MVP Scope", desc: "Minimum viable product — what to build first", btnClass: "bg-teal-500/10 border-teal-500/30 text-teal-400 hover:bg-teal-500/20", borderClass: "border-teal-500/20" },
-                ] as const).map((panel) => (
-                  <div key={panel.key} className={`bg-[#12121a] rounded-xl border ${ctoResults[panel.key].output ? panel.borderClass : "border-[#1e1e2e]"} flex flex-col`}>
-                    <div className="p-4 border-b border-[#1e1e2e]">
-                      <div className="flex items-center gap-2 mb-1">
-                        <span className="text-lg">{panel.icon}</span>
-                        <h4 className="text-sm font-bold text-white">{panel.name}</h4>
-                      </div>
-                      <p className="text-xs text-[#64748b]">{panel.desc}</p>
-                    </div>
-                    <div className="flex-1 p-4 min-h-[100px] max-h-[400px] overflow-y-auto">
-                      {ctoResults[panel.key].loading ? (
-                        <div className="text-sm text-[#64748b] animate-pulse">CTO is working...</div>
-                      ) : ctoResults[panel.key].output ? (
-                        <div className="text-sm text-[#e2e8f0] whitespace-pre-wrap leading-relaxed">{ctoResults[panel.key].output}</div>
-                      ) : (
-                        <p className="text-sm text-[#64748b]">Click below to run.</p>
-                      )}
-                    </div>
-                    <div className="p-4 border-t border-[#1e1e2e]">
-                      <button
-                        onClick={() => runCto(panel.key)}
-                        disabled={ctoResults[panel.key].loading}
-                        className={`w-full px-4 py-2.5 border rounded-lg text-sm font-medium disabled:opacity-50 transition-colors ${panel.btnClass}`}
-                      >
-                        {ctoResults[panel.key].loading ? "Running..." : ctoResults[panel.key].output ? "Re-run" : "Run Analysis"}
-                      </button>
-                    </div>
-                  </div>
-                ))}
-              </div>
-
-              {/* ── COO Agent ──────────────────────────── */}
-              <div className="space-y-4">
-                <div className="bg-gradient-to-r from-sky-500/10 to-indigo-500/10 rounded-xl border border-sky-500/30 p-4">
-                  <div className="flex items-center gap-2 mb-1">
-                    <span className="text-lg">⚙️</span>
-                    <h3 className="text-lg font-bold text-white">COO Agent</h3>
-                  </div>
-                  <p className="text-sm text-[#64748b]">Operations strategy — plans, processes, hiring, and KPIs. Results saved to project notes.</p>
-                </div>
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                  {([
-                    { key: "operations_plan", icon: "📋", name: "Operations Plan", desc: "Day-to-day schedule, weekly cadence, automation", btnClass: "bg-sky-500/10 border-sky-500/30 text-sky-400 hover:bg-sky-500/20", borderClass: "border-sky-500/20" },
-                    { key: "hiring_plan", icon: "👥", name: "Hiring Plan", desc: "Roles needed, automate-first, hire triggers", btnClass: "bg-indigo-500/10 border-indigo-500/30 text-indigo-400 hover:bg-indigo-500/20", borderClass: "border-indigo-500/20" },
-                    { key: "process_map", icon: "🗺️", name: "Process Map", desc: "Customer journey, fulfillment, sales, support", btnClass: "bg-blue-500/10 border-blue-500/30 text-blue-400 hover:bg-blue-500/20", borderClass: "border-blue-500/20" },
-                    { key: "kpis", icon: "📊", name: "KPIs", desc: "5 key metrics with targets and red flags", btnClass: "bg-violet-500/10 border-violet-500/30 text-violet-400 hover:bg-violet-500/20", borderClass: "border-violet-500/20" },
-                  ] as const).map((panel) => (
-                    <div key={panel.key} className={`bg-[#12121a] rounded-xl border ${cooResults[panel.key].output ? panel.borderClass : "border-[#1e1e2e]"} flex flex-col`}>
-                      <div className="p-4 border-b border-[#1e1e2e]">
-                        <div className="flex items-center gap-2 mb-1">
-                          <span className="text-lg">{panel.icon}</span>
-                          <h4 className="text-sm font-bold text-white">{panel.name}</h4>
-                        </div>
-                        <p className="text-xs text-[#64748b]">{panel.desc}</p>
-                      </div>
-                      <div className="flex-1 p-4 min-h-[80px] max-h-[400px] overflow-y-auto">
-                        {cooResults[panel.key].loading ? (
-                          <div className="text-sm text-[#64748b] animate-pulse">Planning operations...</div>
-                        ) : cooResults[panel.key].output ? (
-                          <div className="text-sm text-[#e2e8f0] whitespace-pre-wrap leading-relaxed">{cooResults[panel.key].output}</div>
-                        ) : (
-                          <p className="text-sm text-[#64748b]">Click below to run analysis.</p>
-                        )}
-                      </div>
-                      <div className="p-4 border-t border-[#1e1e2e]">
-                        <button
-                          onClick={() => runCooAgent(panel.key)}
-                          disabled={cooResults[panel.key].loading}
-                          className={`w-full px-4 py-2.5 border rounded-lg text-sm font-medium disabled:opacity-50 transition-colors ${panel.btnClass}`}
-                        >
-                          {cooResults[panel.key].loading ? "Running..." : cooResults[panel.key].output ? "Re-run" : "Run Analysis"}
-                        </button>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              </div>
-
-              {/* ── CLO Agent ──────────────────────────── */}
-              <div className="space-y-4">
-                <div className="bg-gradient-to-r from-amber-500/10 to-orange-500/10 rounded-xl border border-amber-500/30 p-4">
-                  <div className="flex items-center gap-2 mb-1">
-                    <span className="text-lg">⚖️</span>
-                    <h3 className="text-lg font-bold text-white">CLO Agent</h3>
-                  </div>
-                  <p className="text-sm text-[#64748b]">Legal strategy — risks, entity structure, contracts, and compliance. Results saved to project notes.</p>
-                </div>
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                  {([
-                    { key: "legal_risks", icon: "⚠️", name: "Legal Risks", desc: "IP, liability, compliance, contract risks", btnClass: "bg-amber-500/10 border-amber-500/30 text-amber-400 hover:bg-amber-500/20", borderClass: "border-amber-500/20" },
-                    { key: "entity_structure", icon: "🏛️", name: "Entity Structure", desc: "LLC vs S-Corp vs C-Corp recommendation", btnClass: "bg-orange-500/10 border-orange-500/30 text-orange-400 hover:bg-orange-500/20", borderClass: "border-orange-500/20" },
-                    { key: "contracts_needed", icon: "📝", name: "Contracts Needed", desc: "All legal docs needed to launch and operate", btnClass: "bg-yellow-500/10 border-yellow-500/30 text-yellow-400 hover:bg-yellow-500/20", borderClass: "border-yellow-500/20" },
-                    { key: "compliance_checklist", icon: "✅", name: "Compliance Checklist", desc: "Regulatory requirements for your industry", btnClass: "bg-red-500/10 border-red-500/30 text-red-400 hover:bg-red-500/20", borderClass: "border-red-500/20" },
-                  ] as const).map((panel) => (
-                    <div key={panel.key} className={`bg-[#12121a] rounded-xl border ${cloResults[panel.key].output ? panel.borderClass : "border-[#1e1e2e]"} flex flex-col`}>
-                      <div className="p-4 border-b border-[#1e1e2e]">
-                        <div className="flex items-center gap-2 mb-1">
-                          <span className="text-lg">{panel.icon}</span>
-                          <h4 className="text-sm font-bold text-white">{panel.name}</h4>
-                        </div>
-                        <p className="text-xs text-[#64748b]">{panel.desc}</p>
-                      </div>
-                      <div className="flex-1 p-4 min-h-[80px] max-h-[400px] overflow-y-auto">
-                        {cloResults[panel.key].loading ? (
-                          <div className="text-sm text-[#64748b] animate-pulse">Analyzing legal landscape...</div>
-                        ) : cloResults[panel.key].output ? (
-                          <div className="text-sm text-[#e2e8f0] whitespace-pre-wrap leading-relaxed">{cloResults[panel.key].output}</div>
-                        ) : (
-                          <p className="text-sm text-[#64748b]">Click below to run analysis.</p>
-                        )}
-                      </div>
-                      <div className="p-4 border-t border-[#1e1e2e]">
-                        <button
-                          onClick={() => runCloAgent(panel.key)}
-                          disabled={cloResults[panel.key].loading}
-                          className={`w-full px-4 py-2.5 border rounded-lg text-sm font-medium disabled:opacity-50 transition-colors ${panel.btnClass}`}
-                        >
-                          {cloResults[panel.key].loading ? "Running..." : cloResults[panel.key].output ? "Re-run" : "Run Analysis"}
-                        </button>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              </div>
-
-              {/* ── CHRO Agent ─────────────────────────── */}
-              <div className="space-y-4">
-                <div className="bg-gradient-to-r from-rose-500/10 to-pink-500/10 rounded-xl border border-rose-500/30 p-4">
-                  <div className="flex items-center gap-2 mb-1">
-                    <span className="text-lg">👥</span>
-                    <h3 className="text-lg font-bold text-white">CHRO Agent</h3>
-                  </div>
-                  <p className="text-sm text-[#64748b]">People strategy — org structure, hiring, culture, and compensation. Results saved to project notes.</p>
-                </div>
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                  {([
-                    { key: "org_structure", icon: "🏗️", name: "Org Structure", desc: "Optimal team structure for current stage", btnClass: "bg-rose-500/10 border-rose-500/30 text-rose-400 hover:bg-rose-500/20", borderClass: "border-rose-500/20" },
-                    { key: "first_hires", icon: "🎯", name: "First 3 Hires", desc: "Who to hire or automate first and why", btnClass: "bg-pink-500/10 border-pink-500/30 text-pink-400 hover:bg-pink-500/20", borderClass: "border-pink-500/20" },
-                    { key: "culture_values", icon: "💎", name: "Culture & Values", desc: "Core values and operating principles", btnClass: "bg-fuchsia-500/10 border-fuchsia-500/30 text-fuchsia-400 hover:bg-fuchsia-500/20", borderClass: "border-fuchsia-500/20" },
-                    { key: "compensation_model", icon: "💰", name: "Compensation Model", desc: "Pay structure for early team members", btnClass: "bg-purple-500/10 border-purple-500/30 text-purple-400 hover:bg-purple-500/20", borderClass: "border-purple-500/20" },
-                  ] as const).map((panel) => (
-                    <div key={panel.key} className={`bg-[#12121a] rounded-xl border ${chroResults[panel.key].output ? panel.borderClass : "border-[#1e1e2e]"} flex flex-col`}>
-                      <div className="p-4 border-b border-[#1e1e2e]">
-                        <div className="flex items-center gap-2 mb-1">
-                          <span className="text-lg">{panel.icon}</span>
-                          <h4 className="text-sm font-bold text-white">{panel.name}</h4>
-                        </div>
-                        <p className="text-xs text-[#64748b]">{panel.desc}</p>
-                      </div>
-                      <div className="flex-1 p-4 min-h-[80px] max-h-[400px] overflow-y-auto">
-                        {chroResults[panel.key].loading ? (
-                          <div className="text-sm text-[#64748b] animate-pulse">Building people strategy...</div>
-                        ) : chroResults[panel.key].output ? (
-                          <div className="text-sm text-[#e2e8f0] whitespace-pre-wrap leading-relaxed">{chroResults[panel.key].output}</div>
-                        ) : (
-                          <p className="text-sm text-[#64748b]">Click below to run analysis.</p>
-                        )}
-                      </div>
-                      <div className="p-4 border-t border-[#1e1e2e]">
-                        <button
-                          onClick={() => runChroAgent(panel.key)}
-                          disabled={chroResults[panel.key].loading}
-                          className={`w-full px-4 py-2.5 border rounded-lg text-sm font-medium disabled:opacity-50 transition-colors ${panel.btnClass}`}
-                        >
-                          {chroResults[panel.key].loading ? "Running..." : chroResults[panel.key].output ? "Re-run" : "Run Analysis"}
-                        </button>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              </div>
-
-              {/* ── VP Product Agent ─────────────────────── */}
-              <div className="space-y-4">
-                <div className="bg-gradient-to-r from-purple-500/10 to-pink-500/10 rounded-xl border border-purple-500/30 p-4">
-                  <div className="flex items-center gap-2 mb-1">
-                    <span className="text-lg">🎯</span>
-                    <h3 className="text-lg font-bold text-white">VP of Product</h3>
-                  </div>
-                  <p className="text-sm text-[#64748b]">Product strategy — vision, roadmap, personas, and competitive positioning. Saved to notes.</p>
-                </div>
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                  {([
-                    { key: "product_vision", icon: "🔭", name: "Product Vision", desc: "Vision, mission, north star metric, principles", btnClass: "bg-purple-500/10 border-purple-500/30 text-purple-400 hover:bg-purple-500/20", borderClass: "border-purple-500/20" },
-                    { key: "feature_roadmap", icon: "🗓️", name: "Feature Roadmap", desc: "90-day RICE-scored prioritized roadmap", btnClass: "bg-pink-500/10 border-pink-500/30 text-pink-400 hover:bg-pink-500/20", borderClass: "border-pink-500/20" },
-                    { key: "user_personas", icon: "👤", name: "User Personas", desc: "3 detailed personas with goals and pain points", btnClass: "bg-fuchsia-500/10 border-fuchsia-500/30 text-fuchsia-400 hover:bg-fuchsia-500/20", borderClass: "border-fuchsia-500/20" },
-                    { key: "competitive_analysis", icon: "⚔️", name: "Competitive Analysis", desc: "3-5 competitors with feature gaps and positioning", btnClass: "bg-violet-500/10 border-violet-500/30 text-violet-400 hover:bg-violet-500/20", borderClass: "border-violet-500/20" },
-                  ] as const).map((panel) => (
-                    <div key={panel.key} className={`bg-[#12121a] rounded-xl border ${vpProductResults[panel.key].output ? panel.borderClass : "border-[#1e1e2e]"} flex flex-col`}>
-                      <div className="p-4 border-b border-[#1e1e2e]">
-                        <div className="flex items-center gap-2 mb-1">
-                          <span className="text-lg">{panel.icon}</span>
-                          <h4 className="text-sm font-bold text-white">{panel.name}</h4>
-                        </div>
-                        <p className="text-xs text-[#64748b]">{panel.desc}</p>
-                      </div>
-                      <div className="flex-1 p-4 min-h-[80px] max-h-[400px] overflow-y-auto">
-                        {vpProductResults[panel.key].loading ? (
-                          <div className="text-sm text-[#64748b] animate-pulse">Defining product strategy...</div>
-                        ) : vpProductResults[panel.key].output ? (
-                          <div className="text-sm text-[#e2e8f0] whitespace-pre-wrap leading-relaxed">{vpProductResults[panel.key].output}</div>
-                        ) : (
-                          <p className="text-sm text-[#64748b]">Click below to run analysis.</p>
-                        )}
-                      </div>
-                      <div className="p-4 border-t border-[#1e1e2e]">
-                        <button
-                          onClick={() => runVpProduct(panel.key)}
-                          disabled={vpProductResults[panel.key].loading}
-                          className={`w-full px-4 py-2.5 border rounded-lg text-sm font-medium disabled:opacity-50 transition-colors ${panel.btnClass}`}
-                        >
-                          {vpProductResults[panel.key].loading ? "Running..." : vpProductResults[panel.key].output ? "Re-run" : "Run Analysis"}
-                        </button>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              </div>
-
-              {/* ── VP Engineering Agent ──────────────────── */}
-              <div className="space-y-4">
-                <div className="bg-gradient-to-r from-orange-500/10 to-red-500/10 rounded-xl border border-orange-500/30 p-4">
-                  <div className="flex items-center gap-2 mb-1">
-                    <span className="text-lg">🔧</span>
-                    <h3 className="text-lg font-bold text-white">VP of Engineering</h3>
-                  </div>
-                  <p className="text-sm text-[#64748b]">Technical planning — architecture, sprints, tech debt prevention, API design. Saved to notes.</p>
-                </div>
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                  {([
-                    { key: "architecture_plan", icon: "🏗️", name: "Architecture Plan", desc: "System design, DB schema, data flow, infra", btnClass: "bg-orange-500/10 border-orange-500/30 text-orange-400 hover:bg-orange-500/20", borderClass: "border-orange-500/20" },
-                    { key: "sprint_plan", icon: "🏃", name: "Sprint Plan", desc: "2-week sprint with tasks and story points", btnClass: "bg-red-500/10 border-red-500/30 text-red-400 hover:bg-red-500/20", borderClass: "border-red-500/20" },
-                    { key: "tech_debt_audit", icon: "🧹", name: "Tech Debt Audit", desc: "Top 5 risks and prevention strategies", btnClass: "bg-amber-500/10 border-amber-500/30 text-amber-400 hover:bg-amber-500/20", borderClass: "border-amber-500/20" },
-                    { key: "api_design", icon: "🔌", name: "API Design", desc: "Core endpoints with schemas and examples", btnClass: "bg-yellow-500/10 border-yellow-500/30 text-yellow-400 hover:bg-yellow-500/20", borderClass: "border-yellow-500/20" },
-                  ] as const).map((panel) => (
-                    <div key={panel.key} className={`bg-[#12121a] rounded-xl border ${vpEngResults[panel.key].output ? panel.borderClass : "border-[#1e1e2e]"} flex flex-col`}>
-                      <div className="p-4 border-b border-[#1e1e2e]">
-                        <div className="flex items-center gap-2 mb-1">
-                          <span className="text-lg">{panel.icon}</span>
-                          <h4 className="text-sm font-bold text-white">{panel.name}</h4>
-                        </div>
-                        <p className="text-xs text-[#64748b]">{panel.desc}</p>
-                      </div>
-                      <div className="flex-1 p-4 min-h-[80px] max-h-[400px] overflow-y-auto">
-                        {vpEngResults[panel.key].loading ? (
-                          <div className="text-sm text-[#64748b] animate-pulse">Engineering planning...</div>
-                        ) : vpEngResults[panel.key].output ? (
-                          <div className="text-sm text-[#e2e8f0] whitespace-pre-wrap leading-relaxed">{vpEngResults[panel.key].output}</div>
-                        ) : (
-                          <p className="text-sm text-[#64748b]">Click below to run analysis.</p>
-                        )}
-                      </div>
-                      <div className="p-4 border-t border-[#1e1e2e]">
-                        <button
-                          onClick={() => runVpEng(panel.key)}
-                          disabled={vpEngResults[panel.key].loading}
-                          className={`w-full px-4 py-2.5 border rounded-lg text-sm font-medium disabled:opacity-50 transition-colors ${panel.btnClass}`}
-                        >
-                          {vpEngResults[panel.key].loading ? "Running..." : vpEngResults[panel.key].output ? "Re-run" : "Run Analysis"}
-                        </button>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              </div>
-
-              {/* ── CSO Agent ─────────────────────────── */}
-              <div className="bg-gradient-to-r from-[#f59e0b]/10 to-[#ef4444]/10 rounded-xl border border-[#f59e0b]/30 p-4">
-                <div className="flex items-center gap-2 mb-1">
-                  <span className="text-lg">💼</span>
-                  <h3 className="text-lg font-bold text-white">CSO Agent</h3>
-                </div>
-                <p className="text-sm text-[#64748b]">Chief Sales Officer — sales strategy, prospect list, outreach scripts, and pricing.</p>
-              </div>
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                {([
-                  { key: "sales_strategy", icon: "🎯", name: "Sales Strategy", desc: "GTM strategy, ICP, sales motion, and first 90 days", btnClass: "bg-amber-500/10 border-amber-500/30 text-amber-400 hover:bg-amber-500/20", borderClass: "border-amber-500/20" },
-                  { key: "prospect_list", icon: "📋", name: "Prospect List", desc: "10 ideal first customers with how to reach them", btnClass: "bg-yellow-500/10 border-yellow-500/30 text-yellow-400 hover:bg-yellow-500/20", borderClass: "border-yellow-500/20" },
-                  { key: "sales_script", icon: "✉️", name: "Sales Script", desc: "Cold email sequence, LinkedIn DM, and SMS scripts", btnClass: "bg-orange-500/10 border-orange-500/30 text-orange-400 hover:bg-orange-500/20", borderClass: "border-orange-500/20" },
-                  { key: "pricing_strategy", icon: "💲", name: "Pricing Strategy", desc: "Pricing tiers, anchoring, and discount guidelines", btnClass: "bg-red-500/10 border-red-500/30 text-red-400 hover:bg-red-500/20", borderClass: "border-red-500/20" },
-                ] as const).map((panel) => (
-                  <div key={panel.key} className={`bg-[#12121a] rounded-xl border ${csoResults[panel.key].output ? panel.borderClass : "border-[#1e1e2e]"} flex flex-col`}>
-                    <div className="p-4 border-b border-[#1e1e2e]">
-                      <div className="flex items-center gap-2 mb-1">
-                        <span className="text-lg">{panel.icon}</span>
-                        <h4 className="text-sm font-bold text-white">{panel.name}</h4>
-                      </div>
-                      <p className="text-xs text-[#64748b]">{panel.desc}</p>
-                    </div>
-                    <div className="flex-1 p-4 min-h-[100px] max-h-[400px] overflow-y-auto">
-                      {csoResults[panel.key].loading ? (
-                        <div className="text-sm text-[#64748b] animate-pulse">CSO is working...</div>
-                      ) : csoResults[panel.key].output ? (
-                        <div className="text-sm text-[#e2e8f0] whitespace-pre-wrap leading-relaxed">{csoResults[panel.key].output}</div>
-                      ) : (
-                        <p className="text-sm text-[#64748b]">Click below to run.</p>
-                      )}
-                    </div>
-                    <div className="p-4 border-t border-[#1e1e2e]">
-                      <button onClick={() => runCso(panel.key)} disabled={csoResults[panel.key].loading} className={`w-full px-4 py-2.5 border rounded-lg text-sm font-medium disabled:opacity-50 transition-colors ${panel.btnClass}`}>
-                        {csoResults[panel.key].loading ? "Running..." : csoResults[panel.key].output ? "Re-run" : "Run Analysis"}
-                      </button>
-                    </div>
-                  </div>
-                ))}
-              </div>
-
-              {/* ── VP Sales Agent ────────────────────────── */}
-              <div className="bg-gradient-to-r from-[#a855f7]/10 to-[#6366f1]/10 rounded-xl border border-[#a855f7]/30 p-4">
-                <div className="flex items-center gap-2 mb-1">
-                  <span className="text-lg">🤝</span>
-                  <h3 className="text-lg font-bold text-white">VP of Sales</h3>
-                </div>
-                <p className="text-sm text-[#64748b]">Pipeline design, objection handling, demo scripts, and closing playbooks.</p>
-              </div>
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                {([
-                  { key: "pipeline_structure", icon: "🔄", name: "Pipeline Structure", desc: "Sales stages with entry/exit criteria", btnClass: "bg-purple-500/10 border-purple-500/30 text-purple-400 hover:bg-purple-500/20", borderClass: "border-purple-500/20" },
-                  { key: "objection_handling", icon: "🛡️", name: "Objection Handling", desc: "Top 5 objections with word-for-word responses", btnClass: "bg-violet-500/10 border-violet-500/30 text-violet-400 hover:bg-violet-500/20", borderClass: "border-violet-500/20" },
-                  { key: "demo_script", icon: "🎬", name: "Demo Script", desc: "10-minute demo that converts prospects", btnClass: "bg-indigo-500/10 border-indigo-500/30 text-indigo-400 hover:bg-indigo-500/20", borderClass: "border-indigo-500/20" },
-                  { key: "close_playbook", icon: "🏆", name: "Close Playbook", desc: "Closing tactics for each deal stage", btnClass: "bg-fuchsia-500/10 border-fuchsia-500/30 text-fuchsia-400 hover:bg-fuchsia-500/20", borderClass: "border-fuchsia-500/20" },
-                ] as const).map((panel) => (
-                  <div key={panel.key} className={`bg-[#12121a] rounded-xl border ${vpSalesResults[panel.key].output ? panel.borderClass : "border-[#1e1e2e]"} flex flex-col`}>
-                    <div className="p-4 border-b border-[#1e1e2e]">
-                      <div className="flex items-center gap-2 mb-1">
-                        <span className="text-lg">{panel.icon}</span>
-                        <h4 className="text-sm font-bold text-white">{panel.name}</h4>
-                      </div>
-                      <p className="text-xs text-[#64748b]">{panel.desc}</p>
-                    </div>
-                    <div className="flex-1 p-4 min-h-[100px] max-h-[400px] overflow-y-auto">
-                      {vpSalesResults[panel.key].loading ? (
-                        <div className="text-sm text-[#64748b] animate-pulse">VP Sales is working...</div>
-                      ) : vpSalesResults[panel.key].output ? (
-                        <div className="text-sm text-[#e2e8f0] whitespace-pre-wrap leading-relaxed">{vpSalesResults[panel.key].output}</div>
-                      ) : (
-                        <p className="text-sm text-[#64748b]">Click below to run.</p>
-                      )}
-                    </div>
-                    <div className="p-4 border-t border-[#1e1e2e]">
-                      <button onClick={() => runVpSales(panel.key)} disabled={vpSalesResults[panel.key].loading} className={`w-full px-4 py-2.5 border rounded-lg text-sm font-medium disabled:opacity-50 transition-colors ${panel.btnClass}`}>
-                        {vpSalesResults[panel.key].loading ? "Running..." : vpSalesResults[panel.key].output ? "Re-run" : "Run Analysis"}
-                      </button>
-                    </div>
-                  </div>
-                ))}
-              </div>
-
-              {/* ── Head of CX Agent ─────────────────────── */}
-              <div className="space-y-4">
-                <div className="bg-gradient-to-r from-rose-500/10 to-pink-500/10 rounded-xl border border-rose-500/30 p-4">
-                  <div className="flex items-center gap-2 mb-1">
-                    <span className="text-lg">💬</span>
-                    <h3 className="text-lg font-bold text-white">Head of Customer Experience</h3>
-                  </div>
-                  <p className="text-sm text-[#64748b]">Customer experience — journey maps, NPS, support tools, and feedback programs. Saved to notes.</p>
-                </div>
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                  {([
-                    { key: "cx_strategy", icon: "🗺️", name: "CX Strategy", desc: "Full journey from first touch to advocate", btnClass: "bg-rose-500/10 border-rose-500/30 text-rose-400 hover:bg-rose-500/20", borderClass: "border-rose-500/20" },
-                    { key: "nps_program", icon: "📊", name: "NPS Program", desc: "Survey design, scoring, response playbooks", btnClass: "bg-pink-500/10 border-pink-500/30 text-pink-400 hover:bg-pink-500/20", borderClass: "border-pink-500/20" },
-                    { key: "support_stack", icon: "🛠️", name: "Support Stack", desc: "Tools by growth stage with cost analysis", btnClass: "bg-fuchsia-500/10 border-fuchsia-500/30 text-fuchsia-400 hover:bg-fuchsia-500/20", borderClass: "border-fuchsia-500/20" },
-                    { key: "voice_of_customer", icon: "🎙️", name: "Voice of Customer", desc: "Feedback capture, synthesis, and action pipeline", btnClass: "bg-purple-500/10 border-purple-500/30 text-purple-400 hover:bg-purple-500/20", borderClass: "border-purple-500/20" },
-                  ] as const).map((panel) => (
-                    <div key={panel.key} className={`bg-[#12121a] rounded-xl border ${headCxResults[panel.key].output ? panel.borderClass : "border-[#1e1e2e]"} flex flex-col`}>
-                      <div className="p-4 border-b border-[#1e1e2e]">
-                        <div className="flex items-center gap-2 mb-1">
-                          <span className="text-lg">{panel.icon}</span>
-                          <h4 className="text-sm font-bold text-white">{panel.name}</h4>
-                        </div>
-                        <p className="text-xs text-[#64748b]">{panel.desc}</p>
-                      </div>
-                      <div className="flex-1 p-4 min-h-[80px] max-h-[400px] overflow-y-auto">
-                        {headCxResults[panel.key].loading ? (
-                          <div className="text-sm text-[#64748b] animate-pulse">Designing experience...</div>
-                        ) : headCxResults[panel.key].output ? (
-                          <div className="text-sm text-[#e2e8f0] whitespace-pre-wrap leading-relaxed">{headCxResults[panel.key].output}</div>
-                        ) : (
-                          <p className="text-sm text-[#64748b]">Click below to run analysis.</p>
-                        )}
-                      </div>
-                      <div className="p-4 border-t border-[#1e1e2e]">
-                        <button
-                          onClick={() => runHeadCx(panel.key)}
-                          disabled={headCxResults[panel.key].loading}
-                          className={`w-full px-4 py-2.5 border rounded-lg text-sm font-medium disabled:opacity-50 transition-colors ${panel.btnClass}`}
-                        >
-                          {headCxResults[panel.key].loading ? "Running..." : headCxResults[panel.key].output ? "Re-run" : "Run Analysis"}
-                        </button>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              </div>
-
-              {/* ── VP Operations Agent ───────────────────── */}
-              <div className="space-y-4">
-                <div className="bg-gradient-to-r from-lime-500/10 to-green-500/10 rounded-xl border border-lime-500/30 p-4">
-                  <div className="flex items-center gap-2 mb-1">
-                    <span className="text-lg">🏭</span>
-                    <h3 className="text-lg font-bold text-white">VP of Operations</h3>
-                  </div>
-                  <p className="text-sm text-[#64748b]">Operational systems — tech stack, SOPs, vendor strategy, and scaling plans. Saved to notes.</p>
-                </div>
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                  {([
-                    { key: "operations_stack", icon: "🧰", name: "Operations Stack", desc: "Full tool recommendations by category", btnClass: "bg-lime-500/10 border-lime-500/30 text-lime-400 hover:bg-lime-500/20", borderClass: "border-lime-500/20" },
-                    { key: "sop_framework", icon: "📋", name: "SOP Framework", desc: "8 core SOPs with steps and owners", btnClass: "bg-green-500/10 border-green-500/30 text-green-400 hover:bg-green-500/20", borderClass: "border-green-500/20" },
-                    { key: "vendor_strategy", icon: "🤝", name: "Vendor Strategy", desc: "Key vendors, alternatives, negotiation tips", btnClass: "bg-emerald-500/10 border-emerald-500/30 text-emerald-400 hover:bg-emerald-500/20", borderClass: "border-emerald-500/20" },
-                    { key: "scale_plan", icon: "📈", name: "Scale Plan", desc: "Operations evolution from 0 to 1000 customers", btnClass: "bg-teal-500/10 border-teal-500/30 text-teal-400 hover:bg-teal-500/20", borderClass: "border-teal-500/20" },
-                  ] as const).map((panel) => (
-                    <div key={panel.key} className={`bg-[#12121a] rounded-xl border ${vpOpsResults[panel.key].output ? panel.borderClass : "border-[#1e1e2e]"} flex flex-col`}>
-                      <div className="p-4 border-b border-[#1e1e2e]">
-                        <div className="flex items-center gap-2 mb-1">
-                          <span className="text-lg">{panel.icon}</span>
-                          <h4 className="text-sm font-bold text-white">{panel.name}</h4>
-                        </div>
-                        <p className="text-xs text-[#64748b]">{panel.desc}</p>
-                      </div>
-                      <div className="flex-1 p-4 min-h-[80px] max-h-[400px] overflow-y-auto">
-                        {vpOpsResults[panel.key].loading ? (
-                          <div className="text-sm text-[#64748b] animate-pulse">Planning operations...</div>
-                        ) : vpOpsResults[panel.key].output ? (
-                          <div className="text-sm text-[#e2e8f0] whitespace-pre-wrap leading-relaxed">{vpOpsResults[panel.key].output}</div>
-                        ) : (
-                          <p className="text-sm text-[#64748b]">Click below to run analysis.</p>
-                        )}
-                      </div>
-                      <div className="p-4 border-t border-[#1e1e2e]">
-                        <button
-                          onClick={() => runVpOps(panel.key)}
-                          disabled={vpOpsResults[panel.key].loading}
-                          className={`w-full px-4 py-2.5 border rounded-lg text-sm font-medium disabled:opacity-50 transition-colors ${panel.btnClass}`}
-                        >
-                          {vpOpsResults[panel.key].loading ? "Running..." : vpOpsResults[panel.key].output ? "Re-run" : "Run Analysis"}
-                        </button>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              </div>
-
-              {/* ── VP Finance Agent ──────────────────────── */}
-              <div className="space-y-4">
-                <div className="bg-gradient-to-r from-emerald-500/10 to-teal-500/10 rounded-xl border border-emerald-500/30 p-4">
-                  <div className="flex items-center gap-2 mb-1">
-                    <span className="text-lg">💵</span>
-                    <h3 className="text-lg font-bold text-white">VP Finance</h3>
-                  </div>
-                  <p className="text-sm text-[#64748b]">Financial strategy — P&L projections, cash flow, pricing, and investor metrics. Results saved to project notes.</p>
-                </div>
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                  {([
-                    { key: "financial_model", icon: "📊", name: "Financial Model", desc: "12-month P&L with revenue, COGS, margins", btnClass: "bg-emerald-500/10 border-emerald-500/30 text-emerald-400 hover:bg-emerald-500/20", borderClass: "border-emerald-500/20" },
-                    { key: "cash_flow", icon: "💸", name: "Cash Flow Forecast", desc: "Runway, burn rate, and cash danger zones", btnClass: "bg-teal-500/10 border-teal-500/30 text-teal-400 hover:bg-teal-500/20", borderClass: "border-teal-500/20" },
-                    { key: "pricing_analysis", icon: "🏷️", name: "Pricing Analysis", desc: "Competitor benchmarking, value-based pricing", btnClass: "bg-green-500/10 border-green-500/30 text-green-400 hover:bg-green-500/20", borderClass: "border-green-500/20" },
-                    { key: "investor_metrics", icon: "📈", name: "Investor Metrics", desc: "ARR, NRR, CAC, LTV, churn benchmarks", btnClass: "bg-lime-500/10 border-lime-500/30 text-lime-400 hover:bg-lime-500/20", borderClass: "border-lime-500/20" },
-                  ] as const).map((panel) => (
-                    <div key={panel.key} className={`bg-[#12121a] rounded-xl border ${vpFinanceResults[panel.key].output ? panel.borderClass : "border-[#1e1e2e]"} flex flex-col`}>
-                      <div className="p-4 border-b border-[#1e1e2e]">
-                        <div className="flex items-center gap-2 mb-1">
-                          <span className="text-lg">{panel.icon}</span>
-                          <h4 className="text-sm font-bold text-white">{panel.name}</h4>
-                        </div>
-                        <p className="text-xs text-[#64748b]">{panel.desc}</p>
-                      </div>
-                      <div className="flex-1 p-4 min-h-[80px] max-h-[400px] overflow-y-auto">
-                        {vpFinanceResults[panel.key].loading ? (
-                          <div className="text-sm text-[#64748b] animate-pulse">Building financial projections...</div>
-                        ) : vpFinanceResults[panel.key].output ? (
-                          <div className="text-sm text-[#e2e8f0] whitespace-pre-wrap leading-relaxed">{vpFinanceResults[panel.key].output}</div>
-                        ) : (
-                          <p className="text-sm text-[#64748b]">Click below to run analysis.</p>
-                        )}
-                      </div>
-                      <div className="p-4 border-t border-[#1e1e2e]">
-                        <button
-                          onClick={() => runVpFinance(panel.key)}
-                          disabled={vpFinanceResults[panel.key].loading}
-                          className={`w-full px-4 py-2.5 border rounded-lg text-sm font-medium disabled:opacity-50 transition-colors ${panel.btnClass}`}
-                        >
-                          {vpFinanceResults[panel.key].loading ? "Running..." : vpFinanceResults[panel.key].output ? "Re-run" : "Run Analysis"}
-                        </button>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              </div>
-
-              {/* ── Data Analytics Agent ──────────────────── */}
-              <div className="space-y-4">
-                <div className="bg-gradient-to-r from-cyan-500/10 to-blue-500/10 rounded-xl border border-cyan-500/30 p-4">
-                  <div className="flex items-center gap-2 mb-1">
-                    <span className="text-lg">📉</span>
-                    <h3 className="text-lg font-bold text-white">Data Analytics</h3>
-                  </div>
-                  <p className="text-sm text-[#64748b]">Analytics strategy — metrics, dashboards, data stack, and experimentation. Results saved to project notes.</p>
-                </div>
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                  {([
-                    { key: "metrics_framework", icon: "🎯", name: "Metrics Framework", desc: "North star, input metrics, funnel, health", btnClass: "bg-cyan-500/10 border-cyan-500/30 text-cyan-400 hover:bg-cyan-500/20", borderClass: "border-cyan-500/20" },
-                    { key: "dashboard_design", icon: "📋", name: "Dashboard Design", desc: "10 most important charts for the business", btnClass: "bg-blue-500/10 border-blue-500/30 text-blue-400 hover:bg-blue-500/20", borderClass: "border-blue-500/20" },
-                    { key: "data_infrastructure", icon: "🗄️", name: "Data Infrastructure", desc: "Tracking, warehouse, BI tool recommendations", btnClass: "bg-indigo-500/10 border-indigo-500/30 text-indigo-400 hover:bg-indigo-500/20", borderClass: "border-indigo-500/20" },
-                    { key: "ab_testing_framework", icon: "🧪", name: "A/B Testing", desc: "Experimentation framework and prioritization", btnClass: "bg-violet-500/10 border-violet-500/30 text-violet-400 hover:bg-violet-500/20", borderClass: "border-violet-500/20" },
-                  ] as const).map((panel) => (
-                    <div key={panel.key} className={`bg-[#12121a] rounded-xl border ${dataAnalyticsResults[panel.key].output ? panel.borderClass : "border-[#1e1e2e]"} flex flex-col`}>
-                      <div className="p-4 border-b border-[#1e1e2e]">
-                        <div className="flex items-center gap-2 mb-1">
-                          <span className="text-lg">{panel.icon}</span>
-                          <h4 className="text-sm font-bold text-white">{panel.name}</h4>
-                        </div>
-                        <p className="text-xs text-[#64748b]">{panel.desc}</p>
-                      </div>
-                      <div className="flex-1 p-4 min-h-[80px] max-h-[400px] overflow-y-auto">
-                        {dataAnalyticsResults[panel.key].loading ? (
-                          <div className="text-sm text-[#64748b] animate-pulse">Analyzing data strategy...</div>
-                        ) : dataAnalyticsResults[panel.key].output ? (
-                          <div className="text-sm text-[#e2e8f0] whitespace-pre-wrap leading-relaxed">{dataAnalyticsResults[panel.key].output}</div>
-                        ) : (
-                          <p className="text-sm text-[#64748b]">Click below to run analysis.</p>
-                        )}
-                      </div>
-                      <div className="p-4 border-t border-[#1e1e2e]">
-                        <button
-                          onClick={() => runDataAnalytics(panel.key)}
-                          disabled={dataAnalyticsResults[panel.key].loading}
-                          className={`w-full px-4 py-2.5 border rounded-lg text-sm font-medium disabled:opacity-50 transition-colors ${panel.btnClass}`}
-                        >
-                          {dataAnalyticsResults[panel.key].loading ? "Running..." : dataAnalyticsResults[panel.key].output ? "Re-run" : "Run Analysis"}
-                        </button>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              </div>
-
-              {/* ── Investor Relations Agent ─────────────── */}
-              <div className="space-y-4">
-                <div className="bg-gradient-to-r from-blue-500/10 to-indigo-500/10 rounded-xl border border-blue-500/30 p-4">
-                  <div className="flex items-center gap-2 mb-1">
-                    <span className="text-lg">💎</span>
-                    <h3 className="text-lg font-bold text-white">Investor Relations</h3>
-                  </div>
-                  <p className="text-sm text-[#64748b]">Fundraising strategy — updates, pitch decks, cap tables, and timelines. Saved to notes.</p>
-                </div>
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                  {([
-                    { key: "investor_update", icon: "📧", name: "Investor Update", desc: "Monthly update email with KPIs and asks", btnClass: "bg-blue-500/10 border-blue-500/30 text-blue-400 hover:bg-blue-500/20", borderClass: "border-blue-500/20" },
-                    { key: "pitch_deck_outline", icon: "🎪", name: "Pitch Deck", desc: "12-slide deck with content and speaker notes", btnClass: "bg-indigo-500/10 border-indigo-500/30 text-indigo-400 hover:bg-indigo-500/20", borderClass: "border-indigo-500/20" },
-                    { key: "cap_table_strategy", icon: "📐", name: "Cap Table", desc: "Equity structure, dilution, and option pool", btnClass: "bg-violet-500/10 border-violet-500/30 text-violet-400 hover:bg-violet-500/20", borderClass: "border-violet-500/20" },
-                    { key: "fundraising_timeline", icon: "🗓️", name: "Fundraise Timeline", desc: "Process from prep to close with investor targets", btnClass: "bg-purple-500/10 border-purple-500/30 text-purple-400 hover:bg-purple-500/20", borderClass: "border-purple-500/20" },
-                  ] as const).map((panel) => (
-                    <div key={panel.key} className={`bg-[#12121a] rounded-xl border ${irResults[panel.key].output ? panel.borderClass : "border-[#1e1e2e]"} flex flex-col`}>
-                      <div className="p-4 border-b border-[#1e1e2e]">
-                        <div className="flex items-center gap-2 mb-1">
-                          <span className="text-lg">{panel.icon}</span>
-                          <h4 className="text-sm font-bold text-white">{panel.name}</h4>
-                        </div>
-                        <p className="text-xs text-[#64748b]">{panel.desc}</p>
-                      </div>
-                      <div className="flex-1 p-4 min-h-[80px] max-h-[400px] overflow-y-auto">
-                        {irResults[panel.key].loading ? (
-                          <div className="text-sm text-[#64748b] animate-pulse">Preparing...</div>
-                        ) : irResults[panel.key].output ? (
-                          <div className="text-sm text-[#e2e8f0] whitespace-pre-wrap leading-relaxed">{irResults[panel.key].output}</div>
-                        ) : (
-                          <p className="text-sm text-[#64748b]">Click below to run.</p>
-                        )}
-                      </div>
-                      <div className="p-4 border-t border-[#1e1e2e]">
-                        <button onClick={() => runIr(panel.key)} disabled={irResults[panel.key].loading} className={`w-full px-4 py-2.5 border rounded-lg text-sm font-medium disabled:opacity-50 transition-colors ${panel.btnClass}`}>
-                          {irResults[panel.key].loading ? "Running..." : irResults[panel.key].output ? "Re-run" : "Run Analysis"}
-                        </button>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              </div>
-
-              {/* ── Head of Recruiting Agent ──────────────── */}
-              <div className="space-y-4">
-                <div className="bg-gradient-to-r from-teal-500/10 to-cyan-500/10 rounded-xl border border-teal-500/30 p-4">
-                  <div className="flex items-center gap-2 mb-1">
-                    <span className="text-lg">🎯</span>
-                    <h3 className="text-lg font-bold text-white">Head of Recruiting</h3>
-                  </div>
-                  <p className="text-sm text-[#64748b]">Talent strategy — job descriptions, hiring process, culture questions, and employer brand. Saved to notes.</p>
-                </div>
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                  {([
-                    { key: "job_descriptions", icon: "📝", name: "Job Descriptions", desc: "Top 3 roles with compelling copy", btnClass: "bg-teal-500/10 border-teal-500/30 text-teal-400 hover:bg-teal-500/20", borderClass: "border-teal-500/20" },
-                    { key: "hiring_process", icon: "🔄", name: "Hiring Process", desc: "End-to-end process in under 14 days", btnClass: "bg-cyan-500/10 border-cyan-500/30 text-cyan-400 hover:bg-cyan-500/20", borderClass: "border-cyan-500/20" },
-                    { key: "culture_fit_questions", icon: "🤝", name: "Culture Fit", desc: "12 interview questions with scoring rubric", btnClass: "bg-sky-500/10 border-sky-500/30 text-sky-400 hover:bg-sky-500/20", borderClass: "border-sky-500/20" },
-                    { key: "employer_brand", icon: "🏷️", name: "Employer Brand", desc: "EVP, culture pillars, and careers copy", btnClass: "bg-blue-500/10 border-blue-500/30 text-blue-400 hover:bg-blue-500/20", borderClass: "border-blue-500/20" },
-                  ] as const).map((panel) => (
-                    <div key={panel.key} className={`bg-[#12121a] rounded-xl border ${recruitingResults[panel.key].output ? panel.borderClass : "border-[#1e1e2e]"} flex flex-col`}>
-                      <div className="p-4 border-b border-[#1e1e2e]">
-                        <div className="flex items-center gap-2 mb-1">
-                          <span className="text-lg">{panel.icon}</span>
-                          <h4 className="text-sm font-bold text-white">{panel.name}</h4>
-                        </div>
-                        <p className="text-xs text-[#64748b]">{panel.desc}</p>
-                      </div>
-                      <div className="flex-1 p-4 min-h-[80px] max-h-[400px] overflow-y-auto">
-                        {recruitingResults[panel.key].loading ? (
-                          <div className="text-sm text-[#64748b] animate-pulse">Recruiting...</div>
-                        ) : recruitingResults[panel.key].output ? (
-                          <div className="text-sm text-[#e2e8f0] whitespace-pre-wrap leading-relaxed">{recruitingResults[panel.key].output}</div>
-                        ) : (
-                          <p className="text-sm text-[#64748b]">Click below to run.</p>
-                        )}
-                      </div>
-                      <div className="p-4 border-t border-[#1e1e2e]">
-                        <button onClick={() => runRecruiting(panel.key)} disabled={recruitingResults[panel.key].loading} className={`w-full px-4 py-2.5 border rounded-lg text-sm font-medium disabled:opacity-50 transition-colors ${panel.btnClass}`}>
-                          {recruitingResults[panel.key].loading ? "Running..." : recruitingResults[panel.key].output ? "Re-run" : "Run Analysis"}
-                        </button>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              </div>
-
-              {/* ── Research Agent ──────────────────────── */}
-              <div className="bg-[#12121a] rounded-xl border border-[#1e1e2e] p-4">
-                <div className="flex items-center gap-2 mb-1">
-                  <span className="text-lg">🔍</span>
-                  <h3 className="text-lg font-bold text-white">Research</h3>
-                </div>
-                <p className="text-sm text-[#64748b] mb-3">Get real-time web research powered by Perplexity. Results are saved to project notes.</p>
-                <div className="flex gap-2">
-                  <input
-                    type="text"
-                    value={researchQuery}
-                    onChange={(e) => setResearchQuery(e.target.value)}
-                    onKeyDown={(e) => e.key === "Enter" && !researchLoading && runResearch()}
-                    placeholder="e.g. Utah real estate market trends 2026..."
-                    className="flex-1 bg-[#0a0a0f] border border-[#1e1e2e] rounded-lg px-4 py-2.5 text-sm text-[#e2e8f0] placeholder-[#64748b] focus:outline-none focus:border-[#6366f1]"
-                  />
-                  <button
-                    onClick={runResearch}
-                    disabled={researchLoading || !researchQuery.trim()}
-                    className="px-4 py-2.5 bg-[#6366f1] hover:bg-[#5558e6] text-white text-sm font-medium rounded-lg disabled:opacity-50 transition-colors whitespace-nowrap"
-                  >
-                    {researchLoading ? "Researching..." : "Research"}
-                  </button>
-                </div>
-                {researchResult && (
-                  <div className="mt-4 p-4 bg-[#0a0a0f] border border-[#1e1e2e] rounded-lg max-h-[400px] overflow-y-auto">
-                    <div className="text-sm text-[#e2e8f0] whitespace-pre-wrap leading-relaxed">{researchResult}</div>
-                  </div>
-                )}
-              </div>
-
-              {/* ── Deploy All Agents ─────────────────────── */}
-              <div className="bg-gradient-to-r from-[#6366f1]/10 to-[#8b5cf6]/10 rounded-xl border border-[#6366f1]/30 p-6">
-                <div className="flex items-center justify-between mb-3">
+              {/* ── Deploy Button ───────────────────── */}
+              <div className="bg-gradient-to-r from-purple-500/10 via-violet-500/10 to-indigo-500/10 rounded-xl border border-purple-500/30 p-6">
+                <div className="flex items-center justify-between">
                   <div>
-                    <div className="flex items-center gap-2 mb-1">
-                      <span className="text-lg">🚀</span>
-                      <h3 className="text-lg font-bold text-white">Deploy All Agents</h3>
-                    </div>
-                    <p className="text-sm text-[#64748b]">Run the entire 21-agent executive team and get a synthesized Jarvis Summary.</p>
+                    <h3 className="text-xl font-bold text-white mb-1">War Room</h3>
+                    <p className="text-sm text-[#94a3b8]">Deploy 21 AI agents in two waves. Wave 1 (CFO, CTO, CLO, COO) builds the foundation. Wave 2 uses that briefing as context.</p>
                   </div>
                   <button
                     onClick={deployWarRoom}
-                    disabled={deployLoading}
-                    className="px-6 py-3 bg-[#6366f1] text-white rounded-lg text-sm font-medium hover:bg-[#5558e6] disabled:opacity-50 transition-colors whitespace-nowrap"
+                    disabled={warRoomDeploying}
+                    className="px-6 py-3 bg-purple-600 hover:bg-purple-700 text-white rounded-lg font-semibold transition-colors disabled:opacity-50 whitespace-nowrap ml-4"
                   >
-                    {deployLoading ? "Deploying agents..." : deploySummary ? "Re-deploy All" : "Deploy War Room"}
+                    {warRoomDeploying ? "Deploying..." : warRoomAgents.length > 0 ? "Re-deploy War Room" : "Deploy Full War Room"}
                   </button>
                 </div>
-                {deployLoading && (
-                  <div className="flex items-center gap-3 mt-3 p-3 bg-[#0a0a0f] rounded-lg">
-                    <div className="w-4 h-4 border-2 border-[#6366f1] border-t-transparent rounded-full animate-spin" />
-                    <span className="text-sm text-[#64748b]">Running Wave 1 (C-Suite) then Wave 2 (VPs & Specialists)... this takes 30-60 seconds.</span>
+                {warRoomDeploying && (
+                  <div className="mt-4 flex items-center gap-3">
+                    <div className="w-4 h-4 border-2 border-purple-400 border-t-transparent rounded-full animate-spin" />
+                    <span className="text-sm text-purple-300">Running 21 agents in 2 waves... estimated ~2 minutes</span>
                   </div>
+                )}
+                {warRoomDeployError && (
+                  <div className="mt-3 text-sm text-red-400 bg-red-500/10 border border-red-500/20 rounded-lg px-4 py-2">{warRoomDeployError}</div>
                 )}
               </div>
 
-              {/* ── Jarvis Summary ─────────────────────────── */}
-              {deploySummary && (
-                <div className="bg-[#12121a] rounded-xl border border-[#6366f1]/30 overflow-hidden">
-                  <div className="p-4 bg-gradient-to-r from-[#6366f1]/10 to-transparent border-b border-[#1e1e2e]">
-                    <div className="flex items-center justify-between">
-                      <div className="flex items-center gap-2">
-                        <div className="w-8 h-8 bg-[#6366f1] rounded-full flex items-center justify-center text-white text-xs font-bold">J</div>
-                        <div>
-                          <h3 className="text-sm font-bold text-white">Jarvis Executive Summary</h3>
-                          <p className="text-xs text-[#64748b]">{deployAgentCount} agents reported</p>
-                        </div>
-                      </div>
-                      <div className="flex items-center gap-2">
-                        <span className="text-xs text-[#64748b]">Confidence</span>
-                        <span className={`text-lg font-bold ${deploySummary.confidence_score >= 7 ? "text-[#22c55e]" : deploySummary.confidence_score >= 4 ? "text-[#eab308]" : "text-[#ef4444]"}`}>
-                          {deploySummary.confidence_score}/10
-                        </span>
-                      </div>
-                    </div>
-                  </div>
-                  <div className="p-4 space-y-4">
+              {/* ── JARVIS Summary ──────────────────── */}
+              {warRoomSummary && (
+                <div className="bg-gradient-to-br from-purple-900/40 to-indigo-900/40 rounded-xl border border-purple-500/30 p-6">
+                  <div className="flex items-center gap-2 mb-4">
+                    <div className="w-8 h-8 bg-purple-600 rounded-lg flex items-center justify-center text-white font-bold text-sm">J</div>
                     <div>
-                      <h4 className="text-xs font-semibold text-[#6366f1] uppercase mb-2">Verdict</h4>
-                      <p className="text-sm text-[#e2e8f0] leading-relaxed">{deploySummary.verdict}</p>
+                      <h3 className="text-lg font-bold text-white">JARVIS Summary</h3>
+                      <p className="text-xs text-purple-300">Synthesized from all 21 agent analyses</p>
                     </div>
-                    {deploySummary.consensus.length > 0 && (
-                      <div>
-                        <h4 className="text-xs font-semibold text-[#22c55e] uppercase mb-2">Consensus</h4>
-                        <ul className="space-y-1">
-                          {deploySummary.consensus.map((item, i) => (
-                            <li key={i} className="text-sm text-[#e2e8f0] flex items-start gap-2">
-                              <span className="text-[#22c55e] mt-0.5">✓</span>
-                              <span>{item}</span>
-                            </li>
-                          ))}
-                        </ul>
-                      </div>
-                    )}
-                    {deploySummary.conflicts.length > 0 && (
-                      <div>
-                        <h4 className="text-xs font-semibold text-[#eab308] uppercase mb-2">Conflicts</h4>
-                        <ul className="space-y-1">
-                          {deploySummary.conflicts.map((item, i) => (
-                            <li key={i} className="text-sm text-[#e2e8f0] flex items-start gap-2">
-                              <span className="text-[#eab308] mt-0.5">⚡</span>
-                              <span>{item}</span>
-                            </li>
-                          ))}
-                        </ul>
-                      </div>
-                    )}
-                    {deploySummary.recommendations.length > 0 && (
-                      <div>
-                        <h4 className="text-xs font-semibold text-[#6366f1] uppercase mb-2">Top Recommendations</h4>
-                        <ol className="space-y-1">
-                          {deploySummary.recommendations.map((item, i) => (
-                            <li key={i} className="text-sm text-[#e2e8f0] flex items-start gap-2">
-                              <span className="text-[#6366f1] font-bold text-xs mt-0.5 w-4 shrink-0">{i + 1}.</span>
-                              <span>{item}</span>
-                            </li>
-                          ))}
-                        </ol>
-                      </div>
-                    )}
                   </div>
+                  <div className="text-sm text-[#e2e8f0] whitespace-pre-wrap leading-relaxed">{warRoomSummary}</div>
                 </div>
               )}
 
-              {/* ── War Room Live Chat ────────────────────── */}
-              <div className="bg-[#12121a] rounded-xl border border-[#1e1e2e] overflow-hidden">
-                <div className="p-4 border-b border-[#1e1e2e] flex items-center gap-2">
-                  <div className="w-6 h-6 bg-[#6366f1] rounded-full flex items-center justify-center text-white text-[10px] font-bold">J</div>
-                  <span className="text-sm font-bold text-white">War Room Chat</span>
-                  <span className="w-1.5 h-1.5 rounded-full bg-[#22c55e] animate-[pulse-dot_2s_ease-in-out_infinite]" />
-                  <span className="text-xs text-[#64748b]">Ask Jarvis about the analysis</span>
-                </div>
-                <div className="h-[300px] overflow-y-auto p-4 space-y-3">
-                  {warRoomChatMessages.length === 0 && (
-                    <div className="text-center py-8">
-                      <p className="text-sm text-[#64748b] mb-3">{warRoomContext ? "Ask me anything about the agent reports." : "Deploy the War Room first, then ask me questions."}</p>
-                      {warRoomContext && (
-                        <div className="flex flex-wrap justify-center gap-2">
-                          {["What's the biggest risk?", "Where do agents disagree?", "What should I build first?"].map((q) => (
-                            <button key={q} onClick={() => { setWarRoomChatInput(q); }} className="text-xs px-3 py-1.5 rounded-lg bg-[#1e1e2e] text-[#64748b] hover:text-[#e2e8f0] hover:border-[#6366f1]/30 transition-colors">{q}</button>
-                          ))}
-                        </div>
-                      )}
+              {/* ── Org Chart Layout ────────────────── */}
+              {warRoomAgents.length > 0 && (
+                <>
+                  {/* C-Suite Row */}
+                  <div>
+                    <div className="flex items-center gap-2 mb-3">
+                      <div className="h-px flex-1 bg-gradient-to-r from-yellow-500/30 to-transparent" />
+                      <span className="text-xs font-bold text-yellow-400 uppercase tracking-wider">C-Suite</span>
+                      <div className="h-px flex-1 bg-gradient-to-l from-yellow-500/30 to-transparent" />
                     </div>
-                  )}
-                  {warRoomChatMessages.map((msg, i) => (
-                    <div key={i} className={`flex ${msg.role === "user" ? "justify-end" : "justify-start"}`}>
-                      <div className={`max-w-[80%] rounded-xl px-4 py-2.5 text-sm whitespace-pre-wrap ${msg.role === "user" ? "bg-[#6366f1] text-white" : "bg-[#1e1e2e] text-[#e2e8f0]"}`}>
-                        {msg.content}
-                      </div>
+                    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
+                      {warRoomAgents.filter((a) => a.tier === "c-suite").map((agent) => {
+                        const isExpanded = warRoomExpanded.has(agent.key);
+                        const isRerunning = warRoomRerunning.has(agent.key);
+                        const preview = agent.result.split(/[.!?]\s/).slice(0, 2).join(". ") + ".";
+                        return (
+                          <div key={agent.key} className="bg-[#12121a] rounded-xl border border-yellow-500/20 flex flex-col">
+                            <button
+                              onClick={() => setWarRoomExpanded((prev) => { const next = new Set(prev); next.has(agent.key) ? next.delete(agent.key) : next.add(agent.key); return next; })}
+                              className="p-4 text-left w-full"
+                            >
+                              <div className="flex items-center gap-2 mb-1">
+                                <span className="text-lg">{TIER_ICONS[agent.key] || "🏢"}</span>
+                                <h4 className="text-sm font-bold text-white">{agent.name}</h4>
+                                <span className="ml-auto text-[10px] text-yellow-500">{isExpanded ? "▲" : "▼"}</span>
+                              </div>
+                              <p className="text-[10px] text-[#64748b] uppercase tracking-wider mb-2">{agent.role}</p>
+                              {!isExpanded && <p className="text-xs text-[#94a3b8] line-clamp-2">{preview}</p>}
+                            </button>
+                            {isExpanded && (
+                              <div className="px-4 pb-4">
+                                <div className="text-sm text-[#e2e8f0] whitespace-pre-wrap leading-relaxed max-h-[400px] overflow-y-auto border-t border-[#1e1e2e] pt-3">{agent.result}</div>
+                                <button
+                                  onClick={() => rerunAgent(agent.key)}
+                                  disabled={isRerunning}
+                                  className="mt-3 w-full px-3 py-1.5 text-xs border border-yellow-500/30 text-yellow-400 rounded-lg hover:bg-yellow-500/10 disabled:opacity-50 transition-colors"
+                                >
+                                  {isRerunning ? "Re-running..." : "Re-run"}
+                                </button>
+                              </div>
+                            )}
+                          </div>
+                        );
+                      })}
                     </div>
-                  ))}
-                  {warRoomChatLoading && (
-                    <div className="flex justify-start"><div className="bg-[#1e1e2e] rounded-xl px-4 py-2.5 text-sm text-[#64748b]">Thinking...</div></div>
-                  )}
-                  <div ref={warRoomChatEndRef} />
-                </div>
-                <div className="p-3 border-t border-[#1e1e2e]">
-                  <div className="flex gap-2">
-                    <input
-                      type="text"
-                      value={warRoomChatInput}
-                      onChange={(e) => setWarRoomChatInput(e.target.value)}
-                      onKeyDown={(e) => e.key === "Enter" && !warRoomChatLoading && sendWarRoomChat()}
-                      placeholder={warRoomContext ? "Ask about the agent reports..." : "Deploy War Room first..."}
-                      disabled={!warRoomContext || warRoomChatLoading}
-                      className="flex-1 bg-[#0a0a0f] border border-[#1e1e2e] rounded-lg px-4 py-2.5 text-sm text-[#e2e8f0] placeholder-[#64748b] focus:outline-none focus:border-[#6366f1] disabled:opacity-50"
-                    />
-                    <button
-                      onClick={sendWarRoomChat}
-                      disabled={!warRoomContext || warRoomChatLoading || !warRoomChatInput.trim()}
-                      className="px-4 py-2.5 bg-[#6366f1] hover:bg-[#5558e6] text-white text-sm font-medium rounded-lg disabled:opacity-50 transition-colors"
-                    >
-                      Send
-                    </button>
                   </div>
-                </div>
-              </div>
 
-              {/* ── War Room Refresh ──────────────────────── */}
-              <div className="bg-[#12121a] rounded-xl border border-[#1e1e2e] p-4 space-y-3">
-                <div className="flex items-center gap-2 mb-1">
-                  <span className="text-lg">🔄</span>
-                  <h3 className="text-sm font-bold text-white">Refresh War Room</h3>
-                  <span className="text-xs text-[#64748b]">Re-run all 21 agents with new context</span>
-                </div>
-                <textarea
-                  value={refreshContext}
-                  onChange={(e) => setRefreshContext(e.target.value)}
-                  placeholder="Add new context for the refresh (recent conversations, new data, pivots, market changes)..."
-                  rows={2}
-                  className="w-full bg-[#0a0a0f] border border-[#1e1e2e] rounded-lg p-3 text-sm text-[#e2e8f0] placeholder-[#64748b] resize-none focus:outline-none focus:border-[#6366f1]"
-                />
-                <div className="flex items-center gap-3 flex-wrap">
-                  <button
-                    onClick={runWarRoomRefresh}
-                    disabled={refreshLoading}
-                    className="px-5 py-2.5 bg-[#6366f1] text-white rounded-lg text-sm font-medium hover:bg-[#5558e6] disabled:opacity-50 transition-colors"
-                  >
-                    {refreshLoading ? "Refreshing 21 agents..." : "Refresh War Room"}
-                  </button>
-                  {refreshResults && !pdfLoading && !pdfReports && (
-                    <button
-                      onClick={generatePdfReports}
-                      className="px-5 py-2.5 bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 rounded-lg text-sm font-medium hover:bg-emerald-500/30 transition-colors"
-                    >
-                      Generate {Object.keys(refreshResults.results).length + 1} Reports
-                    </button>
-                  )}
-                  {pdfLoading && (
-                    <div className="flex items-center gap-2 text-sm text-[#64748b]">
-                      <div className="w-4 h-4 border-2 border-[#6366f1] border-t-transparent rounded-full animate-spin" />
-                      Generating {Object.keys(refreshResults?.results || {}).length + 1} reports...
+                  {/* VP Layer Row */}
+                  <div>
+                    <div className="flex items-center gap-2 mb-3">
+                      <div className="h-px flex-1 bg-gradient-to-r from-blue-500/30 to-transparent" />
+                      <span className="text-xs font-bold text-blue-400 uppercase tracking-wider">VP Layer</span>
+                      <div className="h-px flex-1 bg-gradient-to-l from-blue-500/30 to-transparent" />
                     </div>
-                  )}
-                </div>
-                {refreshLoading && (
-                  <div className="flex items-center gap-3 p-3 bg-[#0a0a0f] rounded-lg">
-                    <div className="w-4 h-4 border-2 border-[#6366f1] border-t-transparent rounded-full animate-spin" />
-                    <span className="text-sm text-[#64748b]">Wave 1 (CFO/CTO/CLO/COO) → Wave 2 (17 agents) → Jarvis Summary... ~60 seconds</span>
-                  </div>
-                )}
-                {refreshResults && (
-                  <div className="p-3 bg-emerald-500/10 border border-emerald-500/20 rounded-lg">
-                    <p className="text-sm text-emerald-400">
-                      {Object.keys(refreshResults.results).length} agents refreshed. Results saved to project notes.
-                    </p>
-                  </div>
-                )}
-                {refreshResults?.jarvisSummary && (
-                  <div className="p-4 bg-[#0a0a0f] border border-[#6366f1]/20 rounded-lg">
-                    <div className="flex items-center gap-2 mb-2">
-                      <div className="w-6 h-6 bg-[#6366f1] rounded-full flex items-center justify-center text-white text-[10px] font-bold">J</div>
-                      <span className="text-sm font-bold text-white">Refreshed Jarvis Summary</span>
-                    </div>
-                    <div className="text-sm text-[#e2e8f0] whitespace-pre-wrap leading-relaxed max-h-[300px] overflow-y-auto">{refreshResults.jarvisSummary}</div>
-                  </div>
-                )}
-                {pdfReports && (
-                  <div className="p-3 bg-[#0a0a0f] border border-[#1e1e2e] rounded-lg space-y-2">
-                    <p className="text-sm font-semibold text-white">{pdfReports.length} reports generated</p>
-                    <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
-                      {pdfReports.map((r, i) => (
-                        <a key={i} href={r.url} target="_blank" rel="noreferrer" className="text-xs px-3 py-2 bg-[#1e1e2e] rounded-lg text-[#6366f1] hover:bg-[#6366f1]/10 transition-colors truncate">
-                          {r.agentName}
-                        </a>
-                      ))}
+                    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+                      {warRoomAgents.filter((a) => a.tier === "vp").map((agent) => {
+                        const isExpanded = warRoomExpanded.has(agent.key);
+                        const isRerunning = warRoomRerunning.has(agent.key);
+                        const preview = agent.result.split(/[.!?]\s/).slice(0, 2).join(". ") + ".";
+                        return (
+                          <div key={agent.key} className="bg-[#12121a] rounded-xl border border-blue-500/20 flex flex-col">
+                            <button
+                              onClick={() => setWarRoomExpanded((prev) => { const next = new Set(prev); next.has(agent.key) ? next.delete(agent.key) : next.add(agent.key); return next; })}
+                              className="p-4 text-left w-full"
+                            >
+                              <div className="flex items-center gap-2 mb-1">
+                                <span className="text-lg">{TIER_ICONS[agent.key] || "🏢"}</span>
+                                <h4 className="text-sm font-bold text-white">{agent.name}</h4>
+                                <span className="ml-auto text-[10px] text-blue-500">{isExpanded ? "▲" : "▼"}</span>
+                              </div>
+                              <p className="text-[10px] text-[#64748b] uppercase tracking-wider mb-2">{agent.role}</p>
+                              {!isExpanded && <p className="text-xs text-[#94a3b8] line-clamp-2">{preview}</p>}
+                            </button>
+                            {isExpanded && (
+                              <div className="px-4 pb-4">
+                                <div className="text-sm text-[#e2e8f0] whitespace-pre-wrap leading-relaxed max-h-[400px] overflow-y-auto border-t border-[#1e1e2e] pt-3">{agent.result}</div>
+                                <button
+                                  onClick={() => rerunAgent(agent.key)}
+                                  disabled={isRerunning}
+                                  className="mt-3 w-full px-3 py-1.5 text-xs border border-blue-500/30 text-blue-400 rounded-lg hover:bg-blue-500/10 disabled:opacity-50 transition-colors"
+                                >
+                                  {isRerunning ? "Re-running..." : "Re-run"}
+                                </button>
+                              </div>
+                            )}
+                          </div>
+                        );
+                      })}
                     </div>
                   </div>
-                )}
-              </div>
 
-              {/* ── Move to Build ──────────────────────────── */}
-              {hasWarRoomRun && project && project.status !== "Building" && project.status !== "Launched" && project.status !== "Revenue" && (
-                <div className="mt-8">
+                  {/* Specialists Row */}
+                  <div>
+                    <div className="flex items-center gap-2 mb-3">
+                      <div className="h-px flex-1 bg-gradient-to-r from-emerald-500/30 to-transparent" />
+                      <span className="text-xs font-bold text-emerald-400 uppercase tracking-wider">Specialists</span>
+                      <div className="h-px flex-1 bg-gradient-to-l from-emerald-500/30 to-transparent" />
+                    </div>
+                    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+                      {warRoomAgents.filter((a) => a.tier === "specialist").map((agent) => {
+                        const isExpanded = warRoomExpanded.has(agent.key);
+                        const isRerunning = warRoomRerunning.has(agent.key);
+                        const preview = agent.result.split(/[.!?]\s/).slice(0, 2).join(". ") + ".";
+                        return (
+                          <div key={agent.key} className="bg-[#12121a] rounded-xl border border-emerald-500/20 flex flex-col">
+                            <button
+                              onClick={() => setWarRoomExpanded((prev) => { const next = new Set(prev); next.has(agent.key) ? next.delete(agent.key) : next.add(agent.key); return next; })}
+                              className="p-4 text-left w-full"
+                            >
+                              <div className="flex items-center gap-2 mb-1">
+                                <span className="text-lg">{TIER_ICONS[agent.key] || "🏢"}</span>
+                                <h4 className="text-sm font-bold text-white">{agent.name}</h4>
+                                <span className="ml-auto text-[10px] text-emerald-500">{isExpanded ? "▲" : "▼"}</span>
+                              </div>
+                              <p className="text-[10px] text-[#64748b] uppercase tracking-wider mb-2">{agent.role}</p>
+                              {!isExpanded && <p className="text-xs text-[#94a3b8] line-clamp-2">{preview}</p>}
+                            </button>
+                            {isExpanded && (
+                              <div className="px-4 pb-4">
+                                <div className="text-sm text-[#e2e8f0] whitespace-pre-wrap leading-relaxed max-h-[400px] overflow-y-auto border-t border-[#1e1e2e] pt-3">{agent.result}</div>
+                                <button
+                                  onClick={() => rerunAgent(agent.key)}
+                                  disabled={isRerunning}
+                                  className="mt-3 w-full px-3 py-1.5 text-xs border border-emerald-500/30 text-emerald-400 rounded-lg hover:bg-emerald-500/10 disabled:opacity-50 transition-colors"
+                                >
+                                  {isRerunning ? "Re-running..." : "Re-run"}
+                                </button>
+                              </div>
+                            )}
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </div>
+                </>
+              )}
+
+              {/* ── Empty state ─────────────────────── */}
+              {!warRoomDeploying && warRoomAgents.length === 0 && !warRoomSummary && (
+                <div className="text-center py-16">
+                  <div className="text-4xl mb-4">🏛️</div>
+                  <h3 className="text-lg font-bold text-white mb-2">War Room Ready</h3>
+                  <p className="text-sm text-[#64748b] max-w-md mx-auto">Deploy the full War Room to get comprehensive analysis from 21 specialized AI agents. Wave 1 builds the financial, technical, legal, and operational foundation. Wave 2 uses that briefing to provide informed recommendations across every function.</p>
+                </div>
+              )}
+
+              {/* ── Move to Build ───────────────────── */}
+              {warRoomAgents.length > 0 && (
+                <div className="bg-[#12121a] rounded-xl border border-[#1e1e2e] p-4">
                   {!showBuildConfirm ? (
-                    <button
-                      onClick={() => setShowBuildConfirm(true)}
-                      className="w-full px-6 py-4 bg-gradient-to-r from-[#6366f1] to-[#8b5cf6] text-white rounded-xl text-sm font-bold hover:from-[#5558e6] hover:to-[#7c3aed] transition-all shadow-lg shadow-[#6366f1]/20"
-                    >
-                      Move to Build Stage
+                    <button onClick={() => setShowBuildConfirm(true)} className="w-full px-4 py-3 bg-green-600 hover:bg-green-700 text-white rounded-lg font-semibold transition-colors">
+                      War Room Complete — Move to Build
                     </button>
                   ) : (
-                    <div className="bg-[#12121a] rounded-xl border border-[#6366f1]/40 p-6">
-                      <h3 className="text-lg font-bold text-white mb-2">Move {project.title} to Build Stage?</h3>
-                      <p className="text-sm text-[#64748b] mb-6">This means you are committing to building this business. Your team is ready.</p>
+                    <div className="space-y-3">
+                      <p className="text-sm text-white">Move this project to <span className="font-bold text-green-400">Build</span> status? This marks the War Room as complete.</p>
                       <div className="flex gap-3">
-                        <button
-                          onClick={moveToBuild}
-                          disabled={moveToBuildLoading}
-                          className="flex-1 px-4 py-3 bg-[#6366f1] text-white rounded-lg text-sm font-medium hover:bg-[#5558e6] disabled:opacity-50 transition-colors"
-                        >
-                          {moveToBuildLoading ? "Moving..." : "Confirm — Start Building"}
-                        </button>
-                        <button
-                          onClick={() => setShowBuildConfirm(false)}
-                          className="px-4 py-3 bg-[#1e1e2e] text-[#64748b] rounded-lg text-sm font-medium hover:text-white transition-colors"
-                        >
-                          Cancel
-                        </button>
+                        <button onClick={() => setShowBuildConfirm(false)} className="flex-1 px-4 py-2 border border-[#1e1e2e] text-[#94a3b8] rounded-lg hover:bg-[#1e1e2e] transition-colors">Cancel</button>
+                        <button onClick={moveToBuild} disabled={moveToBuildLoading} className="flex-1 px-4 py-2 bg-green-600 hover:bg-green-700 text-white rounded-lg disabled:opacity-50 transition-colors">{moveToBuildLoading ? "Moving..." : "Confirm"}</button>
                       </div>
                     </div>
                   )}
