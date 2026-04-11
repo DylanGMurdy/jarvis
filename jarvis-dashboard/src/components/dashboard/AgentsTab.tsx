@@ -22,6 +22,8 @@ const AGENTS = [
   { name: "Head of Content", status: "active" as const, desc: "Content strategy — 30-day calendars, SEO strategy, content pillars, and viral hooks. Available in every project War Room.", lastAction: "Built content calendar for Lindy Agent Business" },
   { name: "Head of Design", status: "active" as const, desc: "Design leadership — design systems, brand assets, UX principles, and landing page copy. Available in every project War Room.", lastAction: "Defined design system for Lindy Agent Business" },
   { name: "Customer Success Manager", status: "active" as const, desc: "Customer success — onboarding flows, support playbooks, churn prevention, and upsell strategies. Available in every project War Room.", lastAction: "Created onboarding flow for Lindy Agent Business" },
+  { name: "Head of CX", status: "active" as const, desc: "Customer experience — journey maps, NPS programs, support stack recommendations, and voice of customer programs. Available in every project War Room.", lastAction: "Designed CX strategy for Lindy Agent Business" },
+  { name: "VP of Operations", status: "active" as const, desc: "Operational systems — tech stack, SOPs, vendor strategy, and scaling plans from 0 to 1000 customers. Available in every project War Room.", lastAction: "Built scale plan for Lindy Agent Business" },
 ];
 
 const StatusDot = ({ status }: { status: "active" | "idle" | "error" }) => (

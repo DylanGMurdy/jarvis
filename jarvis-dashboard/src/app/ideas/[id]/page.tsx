@@ -395,6 +395,102 @@ export default function ProjectDetailPage({ params }: { params: Promise<{ id: st
     }
   }
 
+  // VP Finance Agent state
+  const [vpFinanceResults, setVpFinanceResults] = useState<Record<string, { loading: boolean; output: string | null }>>({
+    financial_model: { loading: false, output: null },
+    cash_flow: { loading: false, output: null },
+    pricing_analysis: { loading: false, output: null },
+    investor_metrics: { loading: false, output: null },
+  });
+
+  async function runVpFinance(action: string) {
+    setVpFinanceResults((prev) => ({ ...prev, [action]: { loading: true, output: null } }));
+    try {
+      const res = await fetch("/api/agents/vp_finance", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action, projectId: id, projectTitle: project?.title, projectDescription: project?.description }),
+      });
+      const data = await res.json();
+      setVpFinanceResults((prev) => ({ ...prev, [action]: { loading: false, output: data.ok ? data.result : data.error || "Failed" } }));
+      if (data.ok) loadData();
+    } catch {
+      setVpFinanceResults((prev) => ({ ...prev, [action]: { loading: false, output: "Connection error" } }));
+    }
+  }
+
+  // Data Analytics Agent state
+  const [dataAnalyticsResults, setDataAnalyticsResults] = useState<Record<string, { loading: boolean; output: string | null }>>({
+    metrics_framework: { loading: false, output: null },
+    dashboard_design: { loading: false, output: null },
+    data_infrastructure: { loading: false, output: null },
+    ab_testing_framework: { loading: false, output: null },
+  });
+
+  async function runDataAnalytics(action: string) {
+    setDataAnalyticsResults((prev) => ({ ...prev, [action]: { loading: true, output: null } }));
+    try {
+      const res = await fetch("/api/agents/data_analytics", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action, projectId: id, projectTitle: project?.title, projectDescription: project?.description }),
+      });
+      const data = await res.json();
+      setDataAnalyticsResults((prev) => ({ ...prev, [action]: { loading: false, output: data.ok ? data.result : data.error || "Failed" } }));
+      if (data.ok) loadData();
+    } catch {
+      setDataAnalyticsResults((prev) => ({ ...prev, [action]: { loading: false, output: "Connection error" } }));
+    }
+  }
+
+  // Head of CX Agent state
+  const [headCxResults, setHeadCxResults] = useState<Record<string, { loading: boolean; output: string | null }>>({
+    cx_strategy: { loading: false, output: null },
+    nps_program: { loading: false, output: null },
+    support_stack: { loading: false, output: null },
+    voice_of_customer: { loading: false, output: null },
+  });
+
+  async function runHeadCx(action: string) {
+    setHeadCxResults((prev) => ({ ...prev, [action]: { loading: true, output: null } }));
+    try {
+      const res = await fetch("/api/agents/head_cx", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action, projectId: id, projectTitle: project?.title, projectDescription: project?.description }),
+      });
+      const data = await res.json();
+      setHeadCxResults((prev) => ({ ...prev, [action]: { loading: false, output: data.ok ? data.result : data.error || "Failed" } }));
+      if (data.ok) loadData();
+    } catch {
+      setHeadCxResults((prev) => ({ ...prev, [action]: { loading: false, output: "Connection error" } }));
+    }
+  }
+
+  // VP Operations Agent state
+  const [vpOpsResults, setVpOpsResults] = useState<Record<string, { loading: boolean; output: string | null }>>({
+    operations_stack: { loading: false, output: null },
+    sop_framework: { loading: false, output: null },
+    vendor_strategy: { loading: false, output: null },
+    scale_plan: { loading: false, output: null },
+  });
+
+  async function runVpOps(action: string) {
+    setVpOpsResults((prev) => ({ ...prev, [action]: { loading: true, output: null } }));
+    try {
+      const res = await fetch("/api/agents/vp_operations", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action, projectId: id, projectTitle: project?.title, projectDescription: project?.description }),
+      });
+      const data = await res.json();
+      setVpOpsResults((prev) => ({ ...prev, [action]: { loading: false, output: data.ok ? data.result : data.error || "Failed" } }));
+      if (data.ok) loadData();
+    } catch {
+      setVpOpsResults((prev) => ({ ...prev, [action]: { loading: false, output: "Connection error" } }));
+    }
+  }
+
   async function runAnalysis(analyst: string) {
     setWarRoomResults((prev) => ({ ...prev, [analyst]: { loading: true, analysis: null } }));
     try {
@@ -1538,6 +1634,100 @@ curl -X POST ${typeof window !== "undefined" ? window.location.origin : ""}/api/
                     </div>
                   </div>
                 ))}
+              </div>
+
+              {/* ── Head of CX Agent ─────────────────────── */}
+              <div className="space-y-4">
+                <div className="bg-gradient-to-r from-rose-500/10 to-pink-500/10 rounded-xl border border-rose-500/30 p-4">
+                  <div className="flex items-center gap-2 mb-1">
+                    <span className="text-lg">💬</span>
+                    <h3 className="text-lg font-bold text-white">Head of Customer Experience</h3>
+                  </div>
+                  <p className="text-sm text-[#64748b]">Customer experience — journey maps, NPS, support tools, and feedback programs. Saved to notes.</p>
+                </div>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                  {([
+                    { key: "cx_strategy", icon: "🗺️", name: "CX Strategy", desc: "Full journey from first touch to advocate", btnClass: "bg-rose-500/10 border-rose-500/30 text-rose-400 hover:bg-rose-500/20", borderClass: "border-rose-500/20" },
+                    { key: "nps_program", icon: "📊", name: "NPS Program", desc: "Survey design, scoring, response playbooks", btnClass: "bg-pink-500/10 border-pink-500/30 text-pink-400 hover:bg-pink-500/20", borderClass: "border-pink-500/20" },
+                    { key: "support_stack", icon: "🛠️", name: "Support Stack", desc: "Tools by growth stage with cost analysis", btnClass: "bg-fuchsia-500/10 border-fuchsia-500/30 text-fuchsia-400 hover:bg-fuchsia-500/20", borderClass: "border-fuchsia-500/20" },
+                    { key: "voice_of_customer", icon: "🎙️", name: "Voice of Customer", desc: "Feedback capture, synthesis, and action pipeline", btnClass: "bg-purple-500/10 border-purple-500/30 text-purple-400 hover:bg-purple-500/20", borderClass: "border-purple-500/20" },
+                  ] as const).map((panel) => (
+                    <div key={panel.key} className={`bg-[#12121a] rounded-xl border ${headCxResults[panel.key].output ? panel.borderClass : "border-[#1e1e2e]"} flex flex-col`}>
+                      <div className="p-4 border-b border-[#1e1e2e]">
+                        <div className="flex items-center gap-2 mb-1">
+                          <span className="text-lg">{panel.icon}</span>
+                          <h4 className="text-sm font-bold text-white">{panel.name}</h4>
+                        </div>
+                        <p className="text-xs text-[#64748b]">{panel.desc}</p>
+                      </div>
+                      <div className="flex-1 p-4 min-h-[80px] max-h-[400px] overflow-y-auto">
+                        {headCxResults[panel.key].loading ? (
+                          <div className="text-sm text-[#64748b] animate-pulse">Designing experience...</div>
+                        ) : headCxResults[panel.key].output ? (
+                          <div className="text-sm text-[#e2e8f0] whitespace-pre-wrap leading-relaxed">{headCxResults[panel.key].output}</div>
+                        ) : (
+                          <p className="text-sm text-[#64748b]">Click below to run analysis.</p>
+                        )}
+                      </div>
+                      <div className="p-4 border-t border-[#1e1e2e]">
+                        <button
+                          onClick={() => runHeadCx(panel.key)}
+                          disabled={headCxResults[panel.key].loading}
+                          className={`w-full px-4 py-2.5 border rounded-lg text-sm font-medium disabled:opacity-50 transition-colors ${panel.btnClass}`}
+                        >
+                          {headCxResults[panel.key].loading ? "Running..." : headCxResults[panel.key].output ? "Re-run" : "Run Analysis"}
+                        </button>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+
+              {/* ── VP Operations Agent ───────────────────── */}
+              <div className="space-y-4">
+                <div className="bg-gradient-to-r from-lime-500/10 to-green-500/10 rounded-xl border border-lime-500/30 p-4">
+                  <div className="flex items-center gap-2 mb-1">
+                    <span className="text-lg">🏭</span>
+                    <h3 className="text-lg font-bold text-white">VP of Operations</h3>
+                  </div>
+                  <p className="text-sm text-[#64748b]">Operational systems — tech stack, SOPs, vendor strategy, and scaling plans. Saved to notes.</p>
+                </div>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                  {([
+                    { key: "operations_stack", icon: "🧰", name: "Operations Stack", desc: "Full tool recommendations by category", btnClass: "bg-lime-500/10 border-lime-500/30 text-lime-400 hover:bg-lime-500/20", borderClass: "border-lime-500/20" },
+                    { key: "sop_framework", icon: "📋", name: "SOP Framework", desc: "8 core SOPs with steps and owners", btnClass: "bg-green-500/10 border-green-500/30 text-green-400 hover:bg-green-500/20", borderClass: "border-green-500/20" },
+                    { key: "vendor_strategy", icon: "🤝", name: "Vendor Strategy", desc: "Key vendors, alternatives, negotiation tips", btnClass: "bg-emerald-500/10 border-emerald-500/30 text-emerald-400 hover:bg-emerald-500/20", borderClass: "border-emerald-500/20" },
+                    { key: "scale_plan", icon: "📈", name: "Scale Plan", desc: "Operations evolution from 0 to 1000 customers", btnClass: "bg-teal-500/10 border-teal-500/30 text-teal-400 hover:bg-teal-500/20", borderClass: "border-teal-500/20" },
+                  ] as const).map((panel) => (
+                    <div key={panel.key} className={`bg-[#12121a] rounded-xl border ${vpOpsResults[panel.key].output ? panel.borderClass : "border-[#1e1e2e]"} flex flex-col`}>
+                      <div className="p-4 border-b border-[#1e1e2e]">
+                        <div className="flex items-center gap-2 mb-1">
+                          <span className="text-lg">{panel.icon}</span>
+                          <h4 className="text-sm font-bold text-white">{panel.name}</h4>
+                        </div>
+                        <p className="text-xs text-[#64748b]">{panel.desc}</p>
+                      </div>
+                      <div className="flex-1 p-4 min-h-[80px] max-h-[400px] overflow-y-auto">
+                        {vpOpsResults[panel.key].loading ? (
+                          <div className="text-sm text-[#64748b] animate-pulse">Planning operations...</div>
+                        ) : vpOpsResults[panel.key].output ? (
+                          <div className="text-sm text-[#e2e8f0] whitespace-pre-wrap leading-relaxed">{vpOpsResults[panel.key].output}</div>
+                        ) : (
+                          <p className="text-sm text-[#64748b]">Click below to run analysis.</p>
+                        )}
+                      </div>
+                      <div className="p-4 border-t border-[#1e1e2e]">
+                        <button
+                          onClick={() => runVpOps(panel.key)}
+                          disabled={vpOpsResults[panel.key].loading}
+                          className={`w-full px-4 py-2.5 border rounded-lg text-sm font-medium disabled:opacity-50 transition-colors ${panel.btnClass}`}
+                        >
+                          {vpOpsResults[panel.key].loading ? "Running..." : vpOpsResults[panel.key].output ? "Re-run" : "Run Analysis"}
+                        </button>
+                      </div>
+                    </div>
+                  ))}
+                </div>
               </div>
 
               {/* ── Research Agent ──────────────────────── */}
