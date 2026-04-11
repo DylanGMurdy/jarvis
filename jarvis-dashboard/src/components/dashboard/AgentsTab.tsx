@@ -1,5 +1,6 @@
 "use client";
 
+import { useState } from "react";
 import dynamic from "next/dynamic";
 
 const OrgChart = dynamic(() => import("@/components/OrgChart"), { ssr: false });
@@ -24,6 +25,29 @@ interface AgentsTabProps {
 }
 
 export default function AgentsTab({ openModal, closeModal }: AgentsTabProps) {
+  const [running, setRunning] = useState(false);
+  const [result, setResult] = useState<{ projectsProcessed: number; tasksGenerated: number } | null>(null);
+  const [error, setError] = useState<string | null>(null);
+
+  async function triggerDailyAgent() {
+    setRunning(true);
+    setResult(null);
+    setError(null);
+    try {
+      const res = await fetch("/api/agents/run", { method: "POST" });
+      const data = await res.json();
+      if (!res.ok || !data.ok) {
+        setError(data.error || "Agent run failed");
+      } else {
+        setResult({ projectsProcessed: data.projectsProcessed, tasksGenerated: data.tasksGenerated });
+      }
+    } catch {
+      setError("Network error");
+    } finally {
+      setRunning(false);
+    }
+  }
+
   return (
     <div className="space-y-6 animate-[slideUp_0.3s_ease-out]">
       {/* Org Chart */}
@@ -42,15 +66,36 @@ export default function AgentsTab({ openModal, closeModal }: AgentsTabProps) {
         <OrgChart />
       </div>
 
-      {/* Agent Fleet List */}
+      {/* Agent Activity */}
       <div>
         <div className="flex items-center justify-between mb-3">
           <h3 className="text-sm font-semibold text-jarvis-muted">Agent Activity</h3>
-          <div className="flex items-center gap-2 text-xs text-jarvis-muted">
-            <StatusDot status="active" /> {AGENTS.filter((a) => a.status === "active").length} Active
-            <StatusDot status="idle" /> {AGENTS.filter((a) => a.status === "idle").length} Idle
+          <div className="flex items-center gap-3">
+            <button
+              onClick={triggerDailyAgent}
+              disabled={running}
+              className="text-xs px-3 py-1.5 rounded-lg bg-jarvis-accent/20 text-jarvis-accent hover:bg-jarvis-accent/30 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+            >
+              {running ? "Running..." : "Run Daily Agent"}
+            </button>
+            <div className="flex items-center gap-2 text-xs text-jarvis-muted">
+              <StatusDot status="active" /> {AGENTS.filter((a) => a.status === "active").length} Active
+              <StatusDot status="idle" /> {AGENTS.filter((a) => a.status === "idle").length} Idle
+            </div>
           </div>
         </div>
+
+        {result && (
+          <div className="mb-3 p-3 rounded-lg bg-jarvis-green/10 border border-jarvis-green/30 text-sm text-jarvis-green">
+            Processed {result.projectsProcessed} projects, generated {result.tasksGenerated} tasks
+          </div>
+        )}
+        {error && (
+          <div className="mb-3 p-3 rounded-lg bg-jarvis-red/10 border border-jarvis-red/30 text-sm text-jarvis-red">
+            {error}
+          </div>
+        )}
+
         <div className="space-y-2">
           {AGENTS.map((agent, i) => (
             <button key={i} onClick={() => openModal({ title: agent.name, body: `Status: ${agent.status.toUpperCase()}\n\n${agent.desc}\n\nLast Action: ${agent.lastAction}`, actions: [{ label: agent.status === "active" ? "Pause Agent" : "Activate Agent", onClick: closeModal }, { label: "View Logs", onClick: closeModal }, { label: "Configure", onClick: closeModal }] })} className="w-full bg-jarvis-card border border-jarvis-border rounded-xl p-4 text-left hover:border-jarvis-accent/50 transition-all cursor-pointer">
