@@ -45,6 +45,10 @@ const AGENTS = [
   { name: "Head of Growth", status: "idle" as const, desc: "Growth loops, acquisition channels, retention strategy, experiments.", lastAction: "Awaiting first project analysis" },
   { name: "SDR Agent", status: "active" as const, desc: "Cold outreach sequences, lead qualification, follow-ups, personalization.", lastAction: "Wrote 5-touch outreach for Lindy Agents" },
   { name: "Partnerships", status: "active" as const, desc: "Partnership targets, pitch decks, affiliate programs, integrations.", lastAction: "Identified 10 partnership targets" },
+  { name: "VP Finance", status: "idle" as const, desc: "Financial models, cash flow, pricing analysis, investor metrics.", lastAction: "Awaiting first project analysis" },
+  { name: "Data Analytics", status: "idle" as const, desc: "Metrics framework, dashboard design, data stack, A/B testing.", lastAction: "Awaiting first project analysis" },
+  { name: "Head of Content", status: "active" as const, desc: "Content calendars, SEO strategy, content pillars, viral hooks.", lastAction: "Built content calendar for Lindy Agent Business" },
+  { name: "Head of Design", status: "active" as const, desc: "Design systems, brand assets, UX principles, landing page copy.", lastAction: "Defined design system for Lindy Agent Business" },
 ];
 
 const StatusDot = ({ status }: { status: "active" | "idle" | "error" }) => (

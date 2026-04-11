@@ -1730,6 +1730,100 @@ curl -X POST ${typeof window !== "undefined" ? window.location.origin : ""}/api/
                 </div>
               </div>
 
+              {/* ── VP Finance Agent ──────────────────────── */}
+              <div className="space-y-4">
+                <div className="bg-gradient-to-r from-emerald-500/10 to-teal-500/10 rounded-xl border border-emerald-500/30 p-4">
+                  <div className="flex items-center gap-2 mb-1">
+                    <span className="text-lg">💵</span>
+                    <h3 className="text-lg font-bold text-white">VP Finance</h3>
+                  </div>
+                  <p className="text-sm text-[#64748b]">Financial strategy — P&L projections, cash flow, pricing, and investor metrics. Results saved to project notes.</p>
+                </div>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                  {([
+                    { key: "financial_model", icon: "📊", name: "Financial Model", desc: "12-month P&L with revenue, COGS, margins", btnClass: "bg-emerald-500/10 border-emerald-500/30 text-emerald-400 hover:bg-emerald-500/20", borderClass: "border-emerald-500/20" },
+                    { key: "cash_flow", icon: "💸", name: "Cash Flow Forecast", desc: "Runway, burn rate, and cash danger zones", btnClass: "bg-teal-500/10 border-teal-500/30 text-teal-400 hover:bg-teal-500/20", borderClass: "border-teal-500/20" },
+                    { key: "pricing_analysis", icon: "🏷️", name: "Pricing Analysis", desc: "Competitor benchmarking, value-based pricing", btnClass: "bg-green-500/10 border-green-500/30 text-green-400 hover:bg-green-500/20", borderClass: "border-green-500/20" },
+                    { key: "investor_metrics", icon: "📈", name: "Investor Metrics", desc: "ARR, NRR, CAC, LTV, churn benchmarks", btnClass: "bg-lime-500/10 border-lime-500/30 text-lime-400 hover:bg-lime-500/20", borderClass: "border-lime-500/20" },
+                  ] as const).map((panel) => (
+                    <div key={panel.key} className={`bg-[#12121a] rounded-xl border ${vpFinanceResults[panel.key].output ? panel.borderClass : "border-[#1e1e2e]"} flex flex-col`}>
+                      <div className="p-4 border-b border-[#1e1e2e]">
+                        <div className="flex items-center gap-2 mb-1">
+                          <span className="text-lg">{panel.icon}</span>
+                          <h4 className="text-sm font-bold text-white">{panel.name}</h4>
+                        </div>
+                        <p className="text-xs text-[#64748b]">{panel.desc}</p>
+                      </div>
+                      <div className="flex-1 p-4 min-h-[80px] max-h-[400px] overflow-y-auto">
+                        {vpFinanceResults[panel.key].loading ? (
+                          <div className="text-sm text-[#64748b] animate-pulse">Building financial projections...</div>
+                        ) : vpFinanceResults[panel.key].output ? (
+                          <div className="text-sm text-[#e2e8f0] whitespace-pre-wrap leading-relaxed">{vpFinanceResults[panel.key].output}</div>
+                        ) : (
+                          <p className="text-sm text-[#64748b]">Click below to run analysis.</p>
+                        )}
+                      </div>
+                      <div className="p-4 border-t border-[#1e1e2e]">
+                        <button
+                          onClick={() => runVpFinance(panel.key)}
+                          disabled={vpFinanceResults[panel.key].loading}
+                          className={`w-full px-4 py-2.5 border rounded-lg text-sm font-medium disabled:opacity-50 transition-colors ${panel.btnClass}`}
+                        >
+                          {vpFinanceResults[panel.key].loading ? "Running..." : vpFinanceResults[panel.key].output ? "Re-run" : "Run Analysis"}
+                        </button>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+
+              {/* ── Data Analytics Agent ──────────────────── */}
+              <div className="space-y-4">
+                <div className="bg-gradient-to-r from-cyan-500/10 to-blue-500/10 rounded-xl border border-cyan-500/30 p-4">
+                  <div className="flex items-center gap-2 mb-1">
+                    <span className="text-lg">📉</span>
+                    <h3 className="text-lg font-bold text-white">Data Analytics</h3>
+                  </div>
+                  <p className="text-sm text-[#64748b]">Analytics strategy — metrics, dashboards, data stack, and experimentation. Results saved to project notes.</p>
+                </div>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                  {([
+                    { key: "metrics_framework", icon: "🎯", name: "Metrics Framework", desc: "North star, input metrics, funnel, health", btnClass: "bg-cyan-500/10 border-cyan-500/30 text-cyan-400 hover:bg-cyan-500/20", borderClass: "border-cyan-500/20" },
+                    { key: "dashboard_design", icon: "📋", name: "Dashboard Design", desc: "10 most important charts for the business", btnClass: "bg-blue-500/10 border-blue-500/30 text-blue-400 hover:bg-blue-500/20", borderClass: "border-blue-500/20" },
+                    { key: "data_infrastructure", icon: "🗄️", name: "Data Infrastructure", desc: "Tracking, warehouse, BI tool recommendations", btnClass: "bg-indigo-500/10 border-indigo-500/30 text-indigo-400 hover:bg-indigo-500/20", borderClass: "border-indigo-500/20" },
+                    { key: "ab_testing_framework", icon: "🧪", name: "A/B Testing", desc: "Experimentation framework and prioritization", btnClass: "bg-violet-500/10 border-violet-500/30 text-violet-400 hover:bg-violet-500/20", borderClass: "border-violet-500/20" },
+                  ] as const).map((panel) => (
+                    <div key={panel.key} className={`bg-[#12121a] rounded-xl border ${dataAnalyticsResults[panel.key].output ? panel.borderClass : "border-[#1e1e2e]"} flex flex-col`}>
+                      <div className="p-4 border-b border-[#1e1e2e]">
+                        <div className="flex items-center gap-2 mb-1">
+                          <span className="text-lg">{panel.icon}</span>
+                          <h4 className="text-sm font-bold text-white">{panel.name}</h4>
+                        </div>
+                        <p className="text-xs text-[#64748b]">{panel.desc}</p>
+                      </div>
+                      <div className="flex-1 p-4 min-h-[80px] max-h-[400px] overflow-y-auto">
+                        {dataAnalyticsResults[panel.key].loading ? (
+                          <div className="text-sm text-[#64748b] animate-pulse">Analyzing data strategy...</div>
+                        ) : dataAnalyticsResults[panel.key].output ? (
+                          <div className="text-sm text-[#e2e8f0] whitespace-pre-wrap leading-relaxed">{dataAnalyticsResults[panel.key].output}</div>
+                        ) : (
+                          <p className="text-sm text-[#64748b]">Click below to run analysis.</p>
+                        )}
+                      </div>
+                      <div className="p-4 border-t border-[#1e1e2e]">
+                        <button
+                          onClick={() => runDataAnalytics(panel.key)}
+                          disabled={dataAnalyticsResults[panel.key].loading}
+                          className={`w-full px-4 py-2.5 border rounded-lg text-sm font-medium disabled:opacity-50 transition-colors ${panel.btnClass}`}
+                        >
+                          {dataAnalyticsResults[panel.key].loading ? "Running..." : dataAnalyticsResults[panel.key].output ? "Re-run" : "Run Analysis"}
+                        </button>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+
               {/* ── Research Agent ──────────────────────── */}
               <div className="bg-[#12121a] rounded-xl border border-[#1e1e2e] p-4">
                 <div className="flex items-center gap-2 mb-1">
