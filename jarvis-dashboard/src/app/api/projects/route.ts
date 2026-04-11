@@ -1,72 +1,31 @@
-import { NextRequest, NextResponse } from 'next/server';
-import { validateApiSecret, unauthorized } from '@/lib/auth';
-import { isRateLimited, getRateLimitResponse } from '@/lib/rateLimit';
+import { getSupabase } from "@/lib/supabase";
 
-interface Project {
-  id: string;
-  name: string;
-  description: string;
-  status: 'active' | 'completed' | 'on-hold';
-  createdAt: string;
-  updatedAt: string;
+export async function GET() {
+  const sb = getSupabase();
+  if (!sb) return Response.json({ data: [], error: "Supabase not configured" });
+
+  const { data, error } = await sb
+    .from("projects")
+    .select("*")
+    .order("created_at", { ascending: true });
+
+  if (error) return Response.json({ data: [], error: error.message }, { status: 500 });
+  return Response.json({ data: data || [] });
 }
 
-// In-memory storage (replace with actual database)
-let projects: Project[] = [
-  {
-    id: '1',
-    name: 'Jarvis Dashboard',
-    description: 'AI-powered dashboard for managing tasks and conversations',
-    status: 'active',
-    createdAt: '2024-01-01T00:00:00Z',
-    updatedAt: new Date().toISOString()
-  }
-];
+export async function POST(request: Request) {
+  const sb = getSupabase();
+  if (!sb) return Response.json({ error: "Supabase not configured" }, { status: 500 });
 
-export async function GET(request: NextRequest) {
-  if (!validateApiSecret(request)) {
-    return unauthorized();
-  }
-  
-  const ip = request.headers.get('x-forwarded-for')?.split(',')[0] || 'unknown';
-  if (isRateLimited(ip)) {
-    return getRateLimitResponse();
-  }
+  const body = await request.json();
+  const id = body.id || crypto.randomUUID();
 
-  return NextResponse.json({ projects });
-}
+  const { data, error } = await sb
+    .from("projects")
+    .insert({ ...body, id, created_at: body.created_at || new Date().toISOString() })
+    .select()
+    .single();
 
-export async function POST(request: NextRequest) {
-  if (!validateApiSecret(request)) {
-    return unauthorized();
-  }
-  
-  const ip = request.headers.get('x-forwarded-for')?.split(',')[0] || 'unknown';
-  if (isRateLimited(ip)) {
-    return getRateLimitResponse();
-  }
-
-  try {
-    const body = await request.json();
-    const { name, description, status = 'active' } = body;
-
-    if (!name) {
-      return NextResponse.json({ error: 'Name is required' }, { status: 400 });
-    }
-
-    const project: Project = {
-      id: crypto.randomUUID(),
-      name,
-      description: description || '',
-      status,
-      createdAt: new Date().toISOString(),
-      updatedAt: new Date().toISOString()
-    };
-
-    projects.push(project);
-
-    return NextResponse.json({ success: true, project });
-  } catch (error) {
-    return NextResponse.json({ error: 'Invalid JSON' }, { status: 400 });
-  }
+  if (error) return Response.json({ error: error.message }, { status: 500 });
+  return Response.json({ data });
 }

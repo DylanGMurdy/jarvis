@@ -1,79 +1,91 @@
-import { NextRequest, NextResponse } from 'next/server';
-import { validateApiSecret, unauthorized } from '@/lib/auth';
-import { isRateLimited, getRateLimitResponse } from '@/lib/rateLimit';
+import { createClient } from "@supabase/supabase-js";
 
-interface Memory {
-  id: string;
-  timestamp: string;
-  type: 'conversation' | 'action' | 'observation';
-  content: string;
-  metadata?: Record<string, any>;
+function getSupabase() {
+  const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
+  const key = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
+  if (!url || !key) return null;
+  return createClient(url, key);
 }
 
-// In-memory storage (replace with actual database)
-let memories: Memory[] = [];
-
-export async function GET(request: NextRequest) {
-  if (!validateApiSecret(request)) {
-    return unauthorized();
-  }
-  
-  const ip = request.headers.get('x-forwarded-for')?.split(',')[0] || 'unknown';
-  if (isRateLimited(ip)) {
-    return getRateLimitResponse();
+// GET — fetch all memories (or top N most recent)
+export async function GET(request: Request) {
+  const supabase = getSupabase();
+  if (!supabase) {
+    return Response.json({ memories: [], error: "Supabase not configured" });
   }
 
-  const url = new URL(request.url);
-  const limit = parseInt(url.searchParams.get('limit') || '50');
-  const type = url.searchParams.get('type');
+  const { searchParams } = new URL(request.url);
+  const limit = parseInt(searchParams.get("limit") || "200");
+  const category = searchParams.get("category");
 
-  let filteredMemories = memories;
-  if (type) {
-    filteredMemories = memories.filter(m => m.type === type);
+  let query = supabase
+    .from("memories")
+    .select("*")
+    .order("created_at", { ascending: false })
+    .limit(limit);
+
+  if (category && category !== "all") {
+    query = query.eq("category", category);
   }
 
-  const recentMemories = filteredMemories
-    .sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime())
-    .slice(0, limit);
+  const { data, error } = await query;
 
-  return NextResponse.json({ memories: recentMemories });
+  if (error) {
+    return Response.json({ memories: [], error: error.message }, { status: 500 });
+  }
+
+  return Response.json({ memories: data || [] });
 }
 
-export async function POST(request: NextRequest) {
-  if (!validateApiSecret(request)) {
-    return unauthorized();
-  }
-  
-  const ip = request.headers.get('x-forwarded-for')?.split(',')[0] || 'unknown';
-  if (isRateLimited(ip)) {
-    return getRateLimitResponse();
+// POST — add a new memory manually
+export async function POST(request: Request) {
+  const supabase = getSupabase();
+  if (!supabase) {
+    return Response.json({ error: "Supabase not configured" }, { status: 500 });
   }
 
-  try {
-    const body = await request.json();
-    const { type, content, metadata } = body;
+  const { fact, category, source, confidence } = await request.json();
 
-    if (!type || !content) {
-      return NextResponse.json({ error: 'Type and content are required' }, { status: 400 });
-    }
-
-    const memory: Memory = {
-      id: crypto.randomUUID(),
-      timestamp: new Date().toISOString(),
-      type,
-      content,
-      metadata
-    };
-
-    memories.push(memory);
-
-    // Keep only last 1000 memories to prevent memory leaks
-    if (memories.length > 1000) {
-      memories = memories.slice(-1000);
-    }
-
-    return NextResponse.json({ success: true, memory });
-  } catch (error) {
-    return NextResponse.json({ error: 'Invalid JSON' }, { status: 400 });
+  if (!fact || !category) {
+    return Response.json({ error: "fact and category required" }, { status: 400 });
   }
+
+  const { data, error } = await supabase
+    .from("memories")
+    .insert({
+      fact,
+      category,
+      source: source || "manual",
+      confidence: confidence || 1.0,
+    })
+    .select()
+    .single();
+
+  if (error) {
+    return Response.json({ error: error.message }, { status: 500 });
+  }
+
+  return Response.json({ ok: true, id: data.id, memory: data });
+}
+
+// DELETE — remove a memory by id
+export async function DELETE(request: Request) {
+  const supabase = getSupabase();
+  if (!supabase) {
+    return Response.json({ error: "Supabase not configured" }, { status: 500 });
+  }
+
+  const { id } = await request.json();
+
+  if (!id) {
+    return Response.json({ error: "id required" }, { status: 400 });
+  }
+
+  const { error } = await supabase.from("memories").delete().eq("id", id);
+
+  if (error) {
+    return Response.json({ error: error.message }, { status: 500 });
+  }
+
+  return Response.json({ success: true });
 }
