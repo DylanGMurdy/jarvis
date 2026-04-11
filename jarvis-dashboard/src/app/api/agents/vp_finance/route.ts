@@ -181,7 +181,6 @@ ${notes.map((n: { content: string }) => n.content).join("\n---\n") || "None"}`;
     await sb.from("project_notes").insert({
       project_id: projectId,
       content: `[VP Finance — ${VP_FINANCE_ACTIONS[action].name}]\n\n${result}`,
-      source: "vp_finance_agent",
     });
 
     return Response.json({ ok: true, result, action: VP_FINANCE_ACTIONS[action].name });

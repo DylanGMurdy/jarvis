@@ -202,7 +202,6 @@ ${notes.map((n: { content: string }) => n.content).join("\n---\n") || "None"}`;
     await sb.from("project_notes").insert({
       project_id: projectId,
       content: `[Data Analytics — ${DATA_ANALYTICS_ACTIONS[action].name}]\n\n${result}`,
-      source: "data_analytics_agent",
     });
 
     return Response.json({ ok: true, result, action: DATA_ANALYTICS_ACTIONS[action].name });

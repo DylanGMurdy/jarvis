@@ -379,7 +379,7 @@ export default function Dashboard() {
       />
     ),
     ideas: () => <IdeasTab projects={projects} openModal={openModal} closeModal={closeModal} />,
-    agents: () => <AgentsTab openModal={openModal} closeModal={closeModal} />,
+    agents: () => <AgentsTab openModal={openModal} closeModal={closeModal} projects={projects} />,
     goals: () => <GoalsTab goals={goals} />,
     memory: () => (
       <MemoryTab
