@@ -12,9 +12,10 @@ import AgentsTab from "@/components/dashboard/AgentsTab";
 import GoalsTab from "@/components/dashboard/GoalsTab";
 import MemoryTab from "@/components/dashboard/MemoryTab";
 import ChatHistoryTab from "@/components/dashboard/ChatHistoryTab";
+import ApprovalsTab from "@/components/dashboard/ApprovalsTab";
 
 // ─── Types ────────────────────────────────────────────────
-type Tab = "overview" | "ideas" | "agents" | "goals" | "memory" | "history";
+type Tab = "overview" | "ideas" | "agents" | "goals" | "memory" | "history" | "approvals";
 type ModalData = { title: string; body: string; actions?: { label: string; onClick: () => void }[] } | null;
 
 const MEMORY_CATEGORIES: { key: MemoryCategory; label: string; color: string; icon: string }[] = [
@@ -90,6 +91,13 @@ export default function Dashboard() {
       setProjects(projectsData);
       setGoals(goalsData);
       fetchMemories();
+
+      // Fetch pending approvals count
+      try {
+        const appRes = await fetch("/api/approvals");
+        const appData = await appRes.json();
+        setPendingApprovals((appData.data || []).length);
+      } catch { /* silent */ }
 
       // Fetch pending approval count
       try {
@@ -328,9 +336,19 @@ export default function Dashboard() {
     { key: "goals", label: "90-Day Goals", icon: "🎯" },
     { key: "memory", label: "Memory", icon: "🧠" },
     { key: "history", label: "Chat History", icon: "💬" },
+    { key: "approvals", label: "Approvals", icon: "🛡️" },
   ];
 
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+  const [mobileChatActive, setMobileChatActive] = useState(false);
+  const [isMobile, setIsMobile] = useState(false);
+
+  useEffect(() => {
+    const check = () => setIsMobile(window.innerWidth < 768);
+    check();
+    window.addEventListener("resize", check);
+    return () => window.removeEventListener("resize", check);
+  }, []);
 
   // ── Tab content map ──────────────────────────────────────
   const tabContent: Record<Tab, () => React.ReactNode> = {
@@ -367,6 +385,7 @@ export default function Dashboard() {
       />
     ),
     history: () => <ChatHistoryTab />,
+    approvals: () => <ApprovalsTab />,
   };
 
   return (
@@ -463,6 +482,9 @@ export default function Dashboard() {
                 <button key={tab.key} onClick={() => setActiveTab(tab.key)} className={`px-4 py-3 text-sm font-medium transition-colors relative whitespace-nowrap ${activeTab === tab.key ? "text-jarvis-accent" : "text-jarvis-muted hover:text-jarvis-text"}`}>
                   <span className="mr-1">{tab.icon}</span>
                   <span>{tab.label}</span>
+                  {tab.key === "approvals" && pendingApprovals > 0 && (
+                    <span className="ml-1.5 inline-flex items-center justify-center w-5 h-5 text-[10px] font-bold bg-red-500 text-white rounded-full">{pendingApprovals}</span>
+                  )}
                   {activeTab === tab.key && <span className="absolute bottom-0 left-0 right-0 h-0.5 bg-jarvis-accent" />}
                 </button>
               ))}
@@ -632,7 +654,7 @@ export default function Dashboard() {
     </div>
 
     {/* ─── MOBILE: Bottom Tab Bar ─── */}
-    <BottomTabBar activeTab={activeTab} onTabChange={setActiveTab} />
+    <BottomTabBar activeTab={activeTab} onTabChange={setActiveTab} mobileChatActive={mobileChatActive} onMobileChatToggle={setMobileChatActive} />
 
     {/* Remember This Modal */}
     {showRememberModal && (

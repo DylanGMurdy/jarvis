@@ -77,6 +77,32 @@ export default function ProjectDetailPage({ params }: { params: Promise<{ id: st
     risk_assessor: { loading: false, analysis: null },
   });
 
+  // Sales Agent state (Lindy project only)
+  const isLindyProject = id.startsWith("8f662ef5");
+  const [salesResults, setSalesResults] = useState<Record<string, { loading: boolean; output: string | null }>>({
+    find_leads: { loading: false, output: null },
+    draft_outreach: { loading: false, output: null },
+    generate_demo_script: { loading: false, output: null },
+  });
+
+  async function runSalesAgent(action: string) {
+    setSalesResults((prev) => ({ ...prev, [action]: { loading: true, output: null } }));
+    try {
+      const res = await fetch("/api/agents/lindy-sales", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action }),
+      });
+      const data = await res.json();
+      setSalesResults((prev) => ({
+        ...prev,
+        [action]: { loading: false, output: data.ok ? data.output : data.error || "Failed" },
+      }));
+    } catch {
+      setSalesResults((prev) => ({ ...prev, [action]: { loading: false, output: "Connection error" } }));
+    }
+  }
+
   async function runAnalysis(analyst: string) {
     setWarRoomResults((prev) => ({ ...prev, [analyst]: { loading: true, analysis: null } }));
     try {
@@ -673,6 +699,54 @@ curl -X POST ${typeof window !== "undefined" ? window.location.origin : ""}/api/
           {/* ── War Room ────────────────────────────────── */}
           {activeTab === "War Room" && (
             <div className="space-y-6">
+              {/* ── Sales Agent (Lindy project only) ──── */}
+              {isLindyProject && (
+                <div className="space-y-4">
+                  <div className="bg-gradient-to-r from-[#6366f1]/10 to-[#8b5cf6]/10 rounded-xl border border-[#6366f1]/30 p-4">
+                    <div className="flex items-center gap-2 mb-1">
+                      <span className="text-lg">🤝</span>
+                      <h3 className="text-lg font-bold text-white">Sales Agent</h3>
+                    </div>
+                    <p className="text-sm text-[#64748b]">AI-powered sales tools for the Lindy agent business. Results save to project notes.</p>
+                  </div>
+                  <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
+                    {([
+                      { key: "find_leads", icon: "🎯", name: "Find Leads", desc: "10 Utah brokerages that need Lindy agents", btnClass: "bg-emerald-500/10 border-emerald-500/30 text-emerald-400 hover:bg-emerald-500/20", borderClass: "border-emerald-500/20" },
+                      { key: "draft_outreach", icon: "✉️", name: "Draft Outreach", desc: "Cold text, warm follow-up, and email drafts", btnClass: "bg-violet-500/10 border-violet-500/30 text-violet-400 hover:bg-violet-500/20", borderClass: "border-violet-500/20" },
+                      { key: "generate_demo_script", icon: "🎬", name: "Demo Script", desc: "5-minute walkthrough script for prospects", btnClass: "bg-cyan-500/10 border-cyan-500/30 text-cyan-400 hover:bg-cyan-500/20", borderClass: "border-cyan-500/20" },
+                    ] as const).map((panel) => (
+                      <div key={panel.key} className={`bg-[#12121a] rounded-xl border ${salesResults[panel.key].output ? panel.borderClass : "border-[#1e1e2e]"} flex flex-col`}>
+                        <div className="p-4 border-b border-[#1e1e2e]">
+                          <div className="flex items-center gap-2 mb-1">
+                            <span className="text-lg">{panel.icon}</span>
+                            <h4 className="text-sm font-bold text-white">{panel.name}</h4>
+                          </div>
+                          <p className="text-xs text-[#64748b]">{panel.desc}</p>
+                        </div>
+                        <div className="flex-1 p-4 min-h-[100px] max-h-[400px] overflow-y-auto">
+                          {salesResults[panel.key].loading ? (
+                            <div className="text-sm text-[#64748b] animate-pulse">Generating...</div>
+                          ) : salesResults[panel.key].output ? (
+                            <div className="text-sm text-[#e2e8f0] whitespace-pre-wrap leading-relaxed">{salesResults[panel.key].output}</div>
+                          ) : (
+                            <p className="text-sm text-[#64748b]">Click below to generate.</p>
+                          )}
+                        </div>
+                        <div className="p-4 border-t border-[#1e1e2e]">
+                          <button
+                            onClick={() => runSalesAgent(panel.key)}
+                            disabled={salesResults[panel.key].loading}
+                            className={`w-full px-4 py-2.5 border rounded-lg text-sm font-medium disabled:opacity-50 transition-colors ${panel.btnClass}`}
+                          >
+                            {salesResults[panel.key].loading ? "Running..." : salesResults[panel.key].output ? "Regenerate" : "Generate"}
+                          </button>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+
               <div className="bg-[#12121a] rounded-xl border border-[#1e1e2e] p-4">
                 <h3 className="text-lg font-bold text-white mb-1">War Room</h3>
                 <p className="text-sm text-[#64748b]">Run AI analyst panels to stress-test this idea before building.</p>
