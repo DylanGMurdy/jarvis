@@ -31,7 +31,7 @@ export async function runDailyAgent(): Promise<AgentResult> {
   const { data: projects, error: fetchErr } = await sb
     .from("projects")
     .select("*")
-    .in("status", ["Building", "Planning"]);
+    .in("status", ["Building", "Planning", "Idea"]);
 
   if (fetchErr) throw new Error(`Failed to fetch projects: ${fetchErr.message}`);
   if (!projects || projects.length === 0) {

@@ -1,7 +1,8 @@
+import type { Config } from "@netlify/functions";
 import Anthropic from "@anthropic-ai/sdk";
 import { createClient } from "@supabase/supabase-js";
 
-export default async () => {
+export default async (req: Request) => {
   const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
   const supabaseKey = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
   const anthropicKey = process.env.ANTHROPIC_API_KEY;
@@ -16,7 +17,7 @@ export default async () => {
   const { data: projects, error: fetchErr } = await sb
     .from("projects")
     .select("*")
-    .in("status", ["Building", "Planning"]);
+    .in("status", ["Building", "Planning", "Idea"]);
 
   if (fetchErr || !projects) {
     return new Response(JSON.stringify({ error: fetchErr?.message || "No projects" }), { status: 500 });
@@ -98,4 +99,4 @@ export default async () => {
   );
 };
 
-export const config = { schedule: "0 8 * * *" };
+export const config: Config = { schedule: "0 8 * * *" };
