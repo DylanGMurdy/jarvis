@@ -119,6 +119,22 @@ export default function ProjectDetailPage({ params }: { params: Promise<{ id: st
     kpis: { loading: false, output: null },
   });
 
+  // CLO Agent state
+  const [cloResults, setCloResults] = useState<Record<string, { loading: boolean; output: string | null }>>({
+    legal_risks: { loading: false, output: null },
+    entity_structure: { loading: false, output: null },
+    contracts_needed: { loading: false, output: null },
+    compliance_checklist: { loading: false, output: null },
+  });
+
+  // CHRO Agent state
+  const [chroResults, setChroResults] = useState<Record<string, { loading: boolean; output: string | null }>>({
+    org_structure: { loading: false, output: null },
+    first_hires: { loading: false, output: null },
+    culture_values: { loading: false, output: null },
+    compensation_model: { loading: false, output: null },
+  });
+
   async function runCooAgent(action: string) {
     setCooResults((prev) => ({ ...prev, [action]: { loading: true, output: null } }));
     try {
@@ -134,6 +150,44 @@ export default function ProjectDetailPage({ params }: { params: Promise<{ id: st
       }));
     } catch {
       setCooResults((prev) => ({ ...prev, [action]: { loading: false, output: "Connection error" } }));
+    }
+  }
+
+  async function runCloAgent(action: string) {
+    setCloResults((prev) => ({ ...prev, [action]: { loading: true, output: null } }));
+    try {
+      const res = await fetch("/api/agents/clo", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action, projectId: id, projectTitle: project?.title, projectDescription: project?.description }),
+      });
+      const data = await res.json();
+      setCloResults((prev) => ({
+        ...prev,
+        [action]: { loading: false, output: data.ok ? data.result : data.error || "Failed" },
+      }));
+      if (data.ok) loadData();
+    } catch {
+      setCloResults((prev) => ({ ...prev, [action]: { loading: false, output: "Connection error" } }));
+    }
+  }
+
+  async function runChroAgent(action: string) {
+    setChroResults((prev) => ({ ...prev, [action]: { loading: true, output: null } }));
+    try {
+      const res = await fetch("/api/agents/chro", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action, projectId: id, projectTitle: project?.title, projectDescription: project?.description }),
+      });
+      const data = await res.json();
+      setChroResults((prev) => ({
+        ...prev,
+        [action]: { loading: false, output: data.ok ? data.result : data.error || "Failed" },
+      }));
+      if (data.ok) loadData();
+    } catch {
+      setChroResults((prev) => ({ ...prev, [action]: { loading: false, output: "Connection error" } }));
     }
   }
 
@@ -242,6 +296,102 @@ export default function ProjectDetailPage({ params }: { params: Promise<{ id: st
       if (data.ok) loadData();
     } catch {
       setCtoResults((prev) => ({ ...prev, [action]: { loading: false, output: "Connection error" } }));
+    }
+  }
+
+  // CSO Agent state
+  const [csoResults, setCsoResults] = useState<Record<string, { loading: boolean; output: string | null }>>({
+    sales_strategy: { loading: false, output: null },
+    prospect_list: { loading: false, output: null },
+    sales_script: { loading: false, output: null },
+    pricing_strategy: { loading: false, output: null },
+  });
+
+  async function runCso(action: string) {
+    setCsoResults((prev) => ({ ...prev, [action]: { loading: true, output: null } }));
+    try {
+      const res = await fetch("/api/agents/cso", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action, projectId: id, projectTitle: project?.title, projectDescription: project?.description }),
+      });
+      const data = await res.json();
+      setCsoResults((prev) => ({ ...prev, [action]: { loading: false, output: data.ok ? data.result : data.error || "Failed" } }));
+      if (data.ok) loadData();
+    } catch {
+      setCsoResults((prev) => ({ ...prev, [action]: { loading: false, output: "Connection error" } }));
+    }
+  }
+
+  // VP Sales Agent state
+  const [vpSalesResults, setVpSalesResults] = useState<Record<string, { loading: boolean; output: string | null }>>({
+    pipeline_structure: { loading: false, output: null },
+    objection_handling: { loading: false, output: null },
+    demo_script: { loading: false, output: null },
+    close_playbook: { loading: false, output: null },
+  });
+
+  async function runVpSales(action: string) {
+    setVpSalesResults((prev) => ({ ...prev, [action]: { loading: true, output: null } }));
+    try {
+      const res = await fetch("/api/agents/vp_sales", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action, projectId: id, projectTitle: project?.title, projectDescription: project?.description }),
+      });
+      const data = await res.json();
+      setVpSalesResults((prev) => ({ ...prev, [action]: { loading: false, output: data.ok ? data.result : data.error || "Failed" } }));
+      if (data.ok) loadData();
+    } catch {
+      setVpSalesResults((prev) => ({ ...prev, [action]: { loading: false, output: "Connection error" } }));
+    }
+  }
+
+  // VP Product Agent state
+  const [vpProductResults, setVpProductResults] = useState<Record<string, { loading: boolean; output: string | null }>>({
+    product_vision: { loading: false, output: null },
+    feature_roadmap: { loading: false, output: null },
+    user_personas: { loading: false, output: null },
+    competitive_analysis: { loading: false, output: null },
+  });
+
+  async function runVpProduct(action: string) {
+    setVpProductResults((prev) => ({ ...prev, [action]: { loading: true, output: null } }));
+    try {
+      const res = await fetch("/api/agents/vp_product", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action, projectId: id, projectTitle: project?.title, projectDescription: project?.description }),
+      });
+      const data = await res.json();
+      setVpProductResults((prev) => ({ ...prev, [action]: { loading: false, output: data.ok ? data.result : data.error || "Failed" } }));
+      if (data.ok) loadData();
+    } catch {
+      setVpProductResults((prev) => ({ ...prev, [action]: { loading: false, output: "Connection error" } }));
+    }
+  }
+
+  // VP Engineering Agent state
+  const [vpEngResults, setVpEngResults] = useState<Record<string, { loading: boolean; output: string | null }>>({
+    architecture_plan: { loading: false, output: null },
+    sprint_plan: { loading: false, output: null },
+    tech_debt_audit: { loading: false, output: null },
+    api_design: { loading: false, output: null },
+  });
+
+  async function runVpEng(action: string) {
+    setVpEngResults((prev) => ({ ...prev, [action]: { loading: true, output: null } }));
+    try {
+      const res = await fetch("/api/agents/vp_engineering", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action, projectId: id, projectTitle: project?.title, projectDescription: project?.description }),
+      });
+      const data = await res.json();
+      setVpEngResults((prev) => ({ ...prev, [action]: { loading: false, output: data.ok ? data.result : data.error || "Failed" } }));
+      if (data.ok) loadData();
+    } catch {
+      setVpEngResults((prev) => ({ ...prev, [action]: { loading: false, output: "Connection error" } }));
     }
   }
 
@@ -1113,6 +1263,100 @@ curl -X POST ${typeof window !== "undefined" ? window.location.origin : ""}/api/
                           className={`w-full px-4 py-2.5 border rounded-lg text-sm font-medium disabled:opacity-50 transition-colors ${panel.btnClass}`}
                         >
                           {cooResults[panel.key].loading ? "Running..." : cooResults[panel.key].output ? "Re-run" : "Run Analysis"}
+                        </button>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+
+              {/* ── CLO Agent ──────────────────────────── */}
+              <div className="space-y-4">
+                <div className="bg-gradient-to-r from-amber-500/10 to-orange-500/10 rounded-xl border border-amber-500/30 p-4">
+                  <div className="flex items-center gap-2 mb-1">
+                    <span className="text-lg">⚖️</span>
+                    <h3 className="text-lg font-bold text-white">CLO Agent</h3>
+                  </div>
+                  <p className="text-sm text-[#64748b]">Legal strategy — risks, entity structure, contracts, and compliance. Results saved to project notes.</p>
+                </div>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                  {([
+                    { key: "legal_risks", icon: "⚠️", name: "Legal Risks", desc: "IP, liability, compliance, contract risks", btnClass: "bg-amber-500/10 border-amber-500/30 text-amber-400 hover:bg-amber-500/20", borderClass: "border-amber-500/20" },
+                    { key: "entity_structure", icon: "🏛️", name: "Entity Structure", desc: "LLC vs S-Corp vs C-Corp recommendation", btnClass: "bg-orange-500/10 border-orange-500/30 text-orange-400 hover:bg-orange-500/20", borderClass: "border-orange-500/20" },
+                    { key: "contracts_needed", icon: "📝", name: "Contracts Needed", desc: "All legal docs needed to launch and operate", btnClass: "bg-yellow-500/10 border-yellow-500/30 text-yellow-400 hover:bg-yellow-500/20", borderClass: "border-yellow-500/20" },
+                    { key: "compliance_checklist", icon: "✅", name: "Compliance Checklist", desc: "Regulatory requirements for your industry", btnClass: "bg-red-500/10 border-red-500/30 text-red-400 hover:bg-red-500/20", borderClass: "border-red-500/20" },
+                  ] as const).map((panel) => (
+                    <div key={panel.key} className={`bg-[#12121a] rounded-xl border ${cloResults[panel.key].output ? panel.borderClass : "border-[#1e1e2e]"} flex flex-col`}>
+                      <div className="p-4 border-b border-[#1e1e2e]">
+                        <div className="flex items-center gap-2 mb-1">
+                          <span className="text-lg">{panel.icon}</span>
+                          <h4 className="text-sm font-bold text-white">{panel.name}</h4>
+                        </div>
+                        <p className="text-xs text-[#64748b]">{panel.desc}</p>
+                      </div>
+                      <div className="flex-1 p-4 min-h-[80px] max-h-[400px] overflow-y-auto">
+                        {cloResults[panel.key].loading ? (
+                          <div className="text-sm text-[#64748b] animate-pulse">Analyzing legal landscape...</div>
+                        ) : cloResults[panel.key].output ? (
+                          <div className="text-sm text-[#e2e8f0] whitespace-pre-wrap leading-relaxed">{cloResults[panel.key].output}</div>
+                        ) : (
+                          <p className="text-sm text-[#64748b]">Click below to run analysis.</p>
+                        )}
+                      </div>
+                      <div className="p-4 border-t border-[#1e1e2e]">
+                        <button
+                          onClick={() => runCloAgent(panel.key)}
+                          disabled={cloResults[panel.key].loading}
+                          className={`w-full px-4 py-2.5 border rounded-lg text-sm font-medium disabled:opacity-50 transition-colors ${panel.btnClass}`}
+                        >
+                          {cloResults[panel.key].loading ? "Running..." : cloResults[panel.key].output ? "Re-run" : "Run Analysis"}
+                        </button>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+
+              {/* ── CHRO Agent ─────────────────────────── */}
+              <div className="space-y-4">
+                <div className="bg-gradient-to-r from-rose-500/10 to-pink-500/10 rounded-xl border border-rose-500/30 p-4">
+                  <div className="flex items-center gap-2 mb-1">
+                    <span className="text-lg">👥</span>
+                    <h3 className="text-lg font-bold text-white">CHRO Agent</h3>
+                  </div>
+                  <p className="text-sm text-[#64748b]">People strategy — org structure, hiring, culture, and compensation. Results saved to project notes.</p>
+                </div>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                  {([
+                    { key: "org_structure", icon: "🏗️", name: "Org Structure", desc: "Optimal team structure for current stage", btnClass: "bg-rose-500/10 border-rose-500/30 text-rose-400 hover:bg-rose-500/20", borderClass: "border-rose-500/20" },
+                    { key: "first_hires", icon: "🎯", name: "First 3 Hires", desc: "Who to hire or automate first and why", btnClass: "bg-pink-500/10 border-pink-500/30 text-pink-400 hover:bg-pink-500/20", borderClass: "border-pink-500/20" },
+                    { key: "culture_values", icon: "💎", name: "Culture & Values", desc: "Core values and operating principles", btnClass: "bg-fuchsia-500/10 border-fuchsia-500/30 text-fuchsia-400 hover:bg-fuchsia-500/20", borderClass: "border-fuchsia-500/20" },
+                    { key: "compensation_model", icon: "💰", name: "Compensation Model", desc: "Pay structure for early team members", btnClass: "bg-purple-500/10 border-purple-500/30 text-purple-400 hover:bg-purple-500/20", borderClass: "border-purple-500/20" },
+                  ] as const).map((panel) => (
+                    <div key={panel.key} className={`bg-[#12121a] rounded-xl border ${chroResults[panel.key].output ? panel.borderClass : "border-[#1e1e2e]"} flex flex-col`}>
+                      <div className="p-4 border-b border-[#1e1e2e]">
+                        <div className="flex items-center gap-2 mb-1">
+                          <span className="text-lg">{panel.icon}</span>
+                          <h4 className="text-sm font-bold text-white">{panel.name}</h4>
+                        </div>
+                        <p className="text-xs text-[#64748b]">{panel.desc}</p>
+                      </div>
+                      <div className="flex-1 p-4 min-h-[80px] max-h-[400px] overflow-y-auto">
+                        {chroResults[panel.key].loading ? (
+                          <div className="text-sm text-[#64748b] animate-pulse">Building people strategy...</div>
+                        ) : chroResults[panel.key].output ? (
+                          <div className="text-sm text-[#e2e8f0] whitespace-pre-wrap leading-relaxed">{chroResults[panel.key].output}</div>
+                        ) : (
+                          <p className="text-sm text-[#64748b]">Click below to run analysis.</p>
+                        )}
+                      </div>
+                      <div className="p-4 border-t border-[#1e1e2e]">
+                        <button
+                          onClick={() => runChroAgent(panel.key)}
+                          disabled={chroResults[panel.key].loading}
+                          className={`w-full px-4 py-2.5 border rounded-lg text-sm font-medium disabled:opacity-50 transition-colors ${panel.btnClass}`}
+                        >
+                          {chroResults[panel.key].loading ? "Running..." : chroResults[panel.key].output ? "Re-run" : "Run Analysis"}
                         </button>
                       </div>
                     </div>

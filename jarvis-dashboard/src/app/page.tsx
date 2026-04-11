@@ -37,6 +37,8 @@ const AGENTS = [
   { name: "Scheduler", status: "active" as const, desc: "Managing calendar.", lastAction: "Blocked family time 6-8pm" },
   { name: "CMO Agent", status: "active" as const, desc: "Market analysis, content strategy, growth channels, brand voice.", lastAction: "Generated market analysis for Lindy Agents" },
   { name: "CTO Agent", status: "active" as const, desc: "Tech stack, build roadmap, technical risks, MVP scope.", lastAction: "Defined MVP scope for Lindy Agents" },
+  { name: "CLO Agent", status: "idle" as const, desc: "Legal risks, entity structure, contracts, compliance.", lastAction: "Awaiting first project analysis" },
+  { name: "CHRO Agent", status: "idle" as const, desc: "Org structure, hiring, culture, compensation.", lastAction: "Awaiting first project analysis" },
 ];
 
 const StatusDot = ({ status }: { status: "active" | "idle" | "error" }) => (
