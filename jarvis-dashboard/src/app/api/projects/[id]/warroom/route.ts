@@ -69,6 +69,12 @@ ${notes.map((n: { content: string }) => n.content).join("\n---\n") || "None"}`;
     const textBlock = response.content.find((b) => b.type === "text");
     const analysis = textBlock && textBlock.type === "text" ? textBlock.text : "No analysis generated.";
 
+    // Save analysis as a project note
+    await sb.from("project_notes").insert({
+      project_id: id,
+      content: `[War Room — ${ANALYSTS[analyst].name}]\n\n${analysis}`,
+    });
+
     return Response.json({ success: true, analyst: ANALYSTS[analyst].name, analysis });
   } catch (error: unknown) {
     const msg = error instanceof Error ? error.message : "Unknown error";

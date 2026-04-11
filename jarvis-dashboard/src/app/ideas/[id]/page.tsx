@@ -535,11 +535,11 @@ curl -X POST ${typeof window !== "undefined" ? window.location.origin : ""}/api/
               </div>
               <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
                 {([
-                  { key: "devils_advocate", icon: "😈", name: "Devil\u2019s Advocate", desc: "Finds every flaw, blind spot, and weakness", color: "red" },
-                  { key: "market_analyst", icon: "📊", name: "Market Analyst", desc: "Market size, competition, timing, acquisition", color: "blue" },
-                  { key: "risk_assessor", icon: "⚠️", name: "Risk Assessor", desc: "Technical, market, execution, financial risk", color: "yellow" },
+                  { key: "devils_advocate", icon: "😈", name: "Devil\u2019s Advocate", desc: "Finds every flaw, blind spot, and weakness", btnClass: "bg-red-500/10 border-red-500/30 text-red-400 hover:bg-red-500/20", borderClass: "border-red-500/20" },
+                  { key: "market_analyst", icon: "📊", name: "Market Analyst", desc: "Market size, competition, timing, acquisition", btnClass: "bg-blue-500/10 border-blue-500/30 text-blue-400 hover:bg-blue-500/20", borderClass: "border-blue-500/20" },
+                  { key: "risk_assessor", icon: "⚠️", name: "Risk Assessor", desc: "Technical, market, execution, financial risk", btnClass: "bg-amber-500/10 border-amber-500/30 text-amber-400 hover:bg-amber-500/20", borderClass: "border-amber-500/20" },
                 ] as const).map((panel) => (
-                  <div key={panel.key} className="bg-[#12121a] rounded-xl border border-[#1e1e2e] flex flex-col">
+                  <div key={panel.key} className={`bg-[#12121a] rounded-xl border ${warRoomResults[panel.key].analysis ? panel.borderClass : "border-[#1e1e2e]"} flex flex-col`}>
                     <div className="p-4 border-b border-[#1e1e2e]">
                       <div className="flex items-center gap-2 mb-1">
                         <span className="text-lg">{panel.icon}</span>
@@ -560,7 +560,7 @@ curl -X POST ${typeof window !== "undefined" ? window.location.origin : ""}/api/
                       <button
                         onClick={() => runAnalysis(panel.key)}
                         disabled={warRoomResults[panel.key].loading}
-                        className={`w-full px-4 py-2.5 bg-${panel.color}-500/10 border border-${panel.color}-500/30 text-${panel.color}-400 rounded-lg text-sm font-medium hover:bg-${panel.color}-500/20 disabled:opacity-50 transition-colors`}
+                        className={`w-full px-4 py-2.5 border rounded-lg text-sm font-medium disabled:opacity-50 transition-colors ${panel.btnClass}`}
                       >
                         {warRoomResults[panel.key].loading ? "Running..." : warRoomResults[panel.key].analysis ? "Re-run Analysis" : "Run Analysis"}
                       </button>
