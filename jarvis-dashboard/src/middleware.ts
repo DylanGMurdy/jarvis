@@ -1,44 +1,76 @@
-import { NextRequest, NextResponse } from 'next/server';
+import { createMiddlewareClient } from '@supabase/auth-helpers-nextjs'
+import { NextRequest, NextResponse } from 'next/server'
+import { rateLimit, getRateLimitIdentifier } from './lib/rateLimit'
 
-const publicRoutes = ['/login', '/api/auth/login', '/api/lindy/update'];
+const protectedPaths = ['/dashboard', '/settings', '/profile']
+const authPaths = ['/login', '/signup']
 
-export function middleware(request: NextRequest) {
-  const { pathname } = request.nextUrl;
+export async function middleware(request: NextRequest) {
+  const response = NextResponse.next()
   
-  // Allow public routes
-  if (publicRoutes.includes(pathname)) {
-    return NextResponse.next();
-  }
-  
-  // Check session cookie
-  const sessionCookie = request.cookies.get('jarvis_session');
-  const isValidSession = sessionCookie?.value === process.env.JARVIS_PASSWORD;
-  
-  if (!isValidSession) {
-    // For API routes, return 401 JSON
-    if (pathname.startsWith('/api')) {
-      return NextResponse.json(
-        { error: 'Unauthorized' },
-        { status: 401 }
-      );
+  // Apply rate limiting to API routes
+  if (request.nextUrl.pathname.startsWith('/api/')) {
+    const identifier = getRateLimitIdentifier(request)
+    const rateLimitResult = rateLimit(identifier, {
+      windowMs: 60 * 1000, // 1 minute
+      maxRequests: 100
+    })
+    
+    if (!rateLimitResult.success) {
+      return new NextResponse(
+        JSON.stringify({
+          error: 'Too many requests',
+          resetTime: rateLimitResult.resetTime
+        }),
+        {
+          status: 429,
+          headers: {
+            'Content-Type': 'application/json',
+            'X-RateLimit-Limit': '100',
+            'X-RateLimit-Remaining': '0',
+            'X-RateLimit-Reset': rateLimitResult.resetTime.toString()
+          }
+        }
+      )
     }
     
-    // For regular routes, redirect to login
-    const loginUrl = new URL('/login', request.url);
-    return NextResponse.redirect(loginUrl);
+    // Add rate limit headers
+    response.headers.set('X-RateLimit-Limit', '100')
+    response.headers.set('X-RateLimit-Remaining', rateLimitResult.remaining.toString())
+    response.headers.set('X-RateLimit-Reset', rateLimitResult.resetTime.toString())
   }
   
-  return NextResponse.next();
+  // Create Supabase client
+  const supabase = createMiddlewareClient({ req: request, res: response })
+  
+  // Get session
+  const { data: { session } } = await supabase.auth.getSession()
+  
+  const isProtectedPath = protectedPaths.some(path => 
+    request.nextUrl.pathname.startsWith(path)
+  )
+  
+  const isAuthPath = authPaths.some(path => 
+    request.nextUrl.pathname.startsWith(path)
+  )
+  
+  // Redirect to login if accessing protected route without session
+  if (isProtectedPath && !session) {
+    const redirectUrl = new URL('/login', request.url)
+    redirectUrl.searchParams.set('redirect', request.nextUrl.pathname)
+    return NextResponse.redirect(redirectUrl)
+  }
+  
+  // Redirect to dashboard if accessing auth routes with session
+  if (isAuthPath && session) {
+    return NextResponse.redirect(new URL('/dashboard', request.url))
+  }
+  
+  return response
 }
 
 export const config = {
   matcher: [
-    /*
-     * Match all request paths except for the ones starting with:
-     * - _next/static (static files)
-     * - _next/image (image optimization files)
-     * - favicon.ico (favicon file)
-     */
-    '/((?!_next/static|_next/image|favicon.ico).*)',
+    '/((?!_next/static|_next/image|favicon.ico|.*\.(?:svg|png|jpg|jpeg|gif|webp)$).*)',
   ],
-};
+}
