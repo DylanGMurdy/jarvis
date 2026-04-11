@@ -144,7 +144,19 @@ export async function POST() {
     alter table goal_journal enable row level security;
     alter table memories enable row level security;
     alter table conversations enable row level security;
+    create table if not exists approval_queue (
+      id uuid default gen_random_uuid() primary key,
+      project_id text,
+      project_title text,
+      action_type text not null,
+      description text not null,
+      payload jsonb,
+      status text default 'pending',
+      created_at timestamp with time zone default now()
+    );
+
     alter table lindy_updates enable row level security;
+    alter table approval_queue enable row level security;
 
     create policy "Allow all" on projects for all using (true) with check (true);
     create policy "Allow all" on project_tasks for all using (true) with check (true);
@@ -154,6 +166,7 @@ export async function POST() {
     create policy "Allow all" on memories for all using (true) with check (true);
     create policy "Allow all" on conversations for all using (true) with check (true);
     create policy "Allow all" on lindy_updates for all using (true) with check (true);
+    create policy "Allow all" on approval_queue for all using (true) with check (true);
   `;
 
   const sqlResult = await execSQL(dropAndCreate);
