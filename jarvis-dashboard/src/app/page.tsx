@@ -41,6 +41,8 @@ const AGENTS = [
   { name: "CHRO Agent", status: "idle" as const, desc: "Org structure, hiring, culture, compensation.", lastAction: "Awaiting first project analysis" },
   { name: "CSO Agent", status: "active" as const, desc: "Sales strategy, prospect list, outreach scripts, pricing.", lastAction: "Built GTM sales strategy for Lindy Agents" },
   { name: "VP of Sales", status: "active" as const, desc: "Pipeline design, objection handling, demo scripts, closing.", lastAction: "Created objection handling guide" },
+  { name: "VP of Marketing", status: "idle" as const, desc: "Brand strategy, launch plans, marketing budget, campaign ideas.", lastAction: "Awaiting first project analysis" },
+  { name: "Head of Growth", status: "idle" as const, desc: "Growth loops, acquisition channels, retention strategy, experiments.", lastAction: "Awaiting first project analysis" },
 ];
 
 const StatusDot = ({ status }: { status: "active" | "idle" | "error" }) => (
