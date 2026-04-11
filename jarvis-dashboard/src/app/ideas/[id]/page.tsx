@@ -77,6 +77,10 @@ export default function ProjectDetailPage({ params }: { params: Promise<{ id: st
     risk_assessor: { loading: false, analysis: null },
   });
 
+  // Move to Build state
+  const [showBuildConfirm, setShowBuildConfirm] = useState(false);
+  const [moveToBuildLoading, setMoveToBuildLoading] = useState(false);
+
   // War Room Deploy + Summary + Chat
   const [deployLoading, setDeployLoading] = useState(false);
   const [deploySummary, setDeploySummary] = useState<{ consensus: string[]; conflicts: string[]; recommendations: string[]; verdict: string; confidence_score: number } | null>(null);
@@ -114,6 +118,20 @@ export default function ProjectDetailPage({ params }: { params: Promise<{ id: st
       }
     } catch { /* silent */ }
     setDeployLoading(false);
+  }
+
+  async function moveToBuild() {
+    if (!project) return;
+    setMoveToBuildLoading(true);
+    try {
+      await api.projects.update(id, { status: "Building" as const });
+      await api.projects.update(id, { war_room_completed_at: new Date().toISOString() } as Partial<Project>);
+      await api.projectNotes.create(id, `[War Room Completed — ${new Date().toLocaleDateString()}]\n\nWar Room analysis complete. Project moved to Build stage. Team is ready for execution.`);
+      await loadData();
+      setShowBuildConfirm(false);
+      setActiveTab("Overview");
+    } catch { /* silent */ }
+    setMoveToBuildLoading(false);
   }
 
   async function sendWarRoomChat() {
@@ -160,6 +178,25 @@ export default function ProjectDetailPage({ params }: { params: Promise<{ id: st
       setWarRoomChatMessages([...updated, { role: "assistant", content: "Connection error." }]);
     }
     setWarRoomChatLoading(false);
+  }
+
+  // War Room completion detection
+  const warRoomNotes = notes.filter((n) => /^\[(War Room|CFO Agent|CMO Agent|CTO Agent|COO Agent|CLO Agent|CHRO Agent|CSO Agent|VP |Head of|Customer Success|SDR Agent|Partnerships|Data Analytics|Investor Relations|Recruiting)/.test(n.content));
+  const hasWarRoomRun = warRoomNotes.length > 0 || deploySummary !== null;
+
+  // Agent icons for war room report display
+  const AGENT_ICONS: Record<string, string> = {
+    "War Room": "🏛️", "CFO Agent": "💰", "CMO Agent": "📣", "CTO Agent": "🛠️", "COO Agent": "⚙️",
+    "CLO Agent": "⚖️", "CHRO Agent": "👥", "CSO Agent": "💼", "VP Marketing": "📢", "VP Sales": "🤝",
+    "VP Product": "🎯", "VP Engineering": "🔧", "VP Finance": "💵", "VP Operations": "🏭",
+    "Head of Growth": "📈", "Head of Content": "📝", "Head of Design": "🎨", "Head of CX": "💬",
+    "Head of PR": "📰", "Customer Success": "🌟", "SDR Agent": "📞", "Data Analytics": "📉",
+    "Partnerships": "🤝", "Investor Relations": "💎", "Recruiting": "🔍",
+  };
+
+  function getAgentNameFromNote(content: string): string {
+    const match = content.match(/^\[(.+?)(?:\s*—|\])/);
+    return match ? match[1] : "Agent";
   }
 
   // Sales Agent state (Lindy project only)
@@ -1191,6 +1228,53 @@ curl -X POST ${typeof window !== "undefined" ? window.location.origin : ""}/api/
           {/* ── Files (Google Drive) ──────────────────── */}
           {activeTab === "Files" && (
             <div className="space-y-4">
+              {/* War Room Reports Section */}
+              {warRoomNotes.length > 0 && (
+                <div>
+                  <div className="flex items-center gap-2 mb-3">
+                    <span className="text-lg">🏛️</span>
+                    <h3 className="text-sm font-bold text-white">War Room Reports</h3>
+                    <span className="text-[10px] px-2 py-0.5 rounded-full bg-[#22c55e]/20 text-[#22c55e] border border-[#22c55e]/30">{warRoomNotes.length} reports</span>
+                  </div>
+                  <div className="space-y-2">
+                    {warRoomNotes
+                      .sort((a, b) => {
+                        const aIsSum = a.content.includes("[War Room Completed");
+                        const bIsSum = b.content.includes("[War Room Completed");
+                        if (aIsSum && !bIsSum) return -1;
+                        if (!aIsSum && bIsSum) return 1;
+                        return new Date(b.created_at).getTime() - new Date(a.created_at).getTime();
+                      })
+                      .map((note) => {
+                        const agentName = getAgentNameFromNote(note.content);
+                        const icon = Object.entries(AGENT_ICONS).find(([key]) => agentName.includes(key))?.[1] || "📄";
+                        const isSum = note.content.includes("[War Room Completed");
+                        const date = new Date(note.created_at);
+                        const size = `${(note.content.length / 1024).toFixed(1)} KB`;
+                        return (
+                          <div key={note.id} className={`flex items-center gap-3 bg-[#12121a] border rounded-lg px-4 py-3 ${isSum ? "border-[#6366f1]/40 bg-[#6366f1]/5" : "border-[#1e1e2e]"}`}>
+                            <div className="w-8 h-8 rounded bg-[#1e1e2e] flex items-center justify-center text-sm">{icon}</div>
+                            <div className="flex-1 min-w-0">
+                              <div className="flex items-center gap-2">
+                                <p className="text-sm text-[#e2e8f0] truncate font-medium">{agentName}</p>
+                                {isSum && <span className="text-[9px] px-1.5 py-0.5 rounded-full bg-[#6366f1]/20 text-[#6366f1]">Summary</span>}
+                              </div>
+                              <p className="text-xs text-[#64748b]">{size} &middot; {date.toLocaleDateString()} {date.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}</p>
+                            </div>
+                            <button
+                              onClick={() => { const blob = new Blob([note.content], { type: "text/plain" }); window.open(URL.createObjectURL(blob), "_blank"); }}
+                              className="px-3 py-1.5 text-xs font-medium text-[#6366f1] bg-[#6366f1]/10 border border-[#6366f1]/30 rounded-lg hover:bg-[#6366f1]/20 transition-colors"
+                            >
+                              View
+                            </button>
+                          </div>
+                        );
+                      })}
+                  </div>
+                </div>
+              )}
+
+              {/* Google Drive Files */}
               {!driveConnected ? (
                 <div className="bg-[#12121a] rounded-xl border border-[#1e1e2e] p-8 text-center">
                   <div className="w-16 h-16 mx-auto mb-4 rounded-full bg-[#1e1e2e] flex items-center justify-center">
@@ -2338,6 +2422,113 @@ curl -X POST ${typeof window !== "undefined" ? window.location.origin : ""}/api/
                   </div>
                 </div>
               </div>
+
+              {/* ── War Room Refresh ──────────────────────── */}
+              <div className="bg-[#12121a] rounded-xl border border-[#1e1e2e] p-4 space-y-3">
+                <div className="flex items-center gap-2 mb-1">
+                  <span className="text-lg">🔄</span>
+                  <h3 className="text-sm font-bold text-white">Refresh War Room</h3>
+                  <span className="text-xs text-[#64748b]">Re-run all 21 agents with new context</span>
+                </div>
+                <textarea
+                  value={refreshContext}
+                  onChange={(e) => setRefreshContext(e.target.value)}
+                  placeholder="Add new context for the refresh (recent conversations, new data, pivots, market changes)..."
+                  rows={2}
+                  className="w-full bg-[#0a0a0f] border border-[#1e1e2e] rounded-lg p-3 text-sm text-[#e2e8f0] placeholder-[#64748b] resize-none focus:outline-none focus:border-[#6366f1]"
+                />
+                <div className="flex items-center gap-3 flex-wrap">
+                  <button
+                    onClick={runWarRoomRefresh}
+                    disabled={refreshLoading}
+                    className="px-5 py-2.5 bg-[#6366f1] text-white rounded-lg text-sm font-medium hover:bg-[#5558e6] disabled:opacity-50 transition-colors"
+                  >
+                    {refreshLoading ? "Refreshing 21 agents..." : "Refresh War Room"}
+                  </button>
+                  {refreshResults && !pdfLoading && !pdfReports && (
+                    <button
+                      onClick={generatePdfReports}
+                      className="px-5 py-2.5 bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 rounded-lg text-sm font-medium hover:bg-emerald-500/30 transition-colors"
+                    >
+                      Generate {Object.keys(refreshResults.results).length + 1} Reports
+                    </button>
+                  )}
+                  {pdfLoading && (
+                    <div className="flex items-center gap-2 text-sm text-[#64748b]">
+                      <div className="w-4 h-4 border-2 border-[#6366f1] border-t-transparent rounded-full animate-spin" />
+                      Generating {Object.keys(refreshResults?.results || {}).length + 1} reports...
+                    </div>
+                  )}
+                </div>
+                {refreshLoading && (
+                  <div className="flex items-center gap-3 p-3 bg-[#0a0a0f] rounded-lg">
+                    <div className="w-4 h-4 border-2 border-[#6366f1] border-t-transparent rounded-full animate-spin" />
+                    <span className="text-sm text-[#64748b]">Wave 1 (CFO/CTO/CLO/COO) → Wave 2 (17 agents) → Jarvis Summary... ~60 seconds</span>
+                  </div>
+                )}
+                {refreshResults && (
+                  <div className="p-3 bg-emerald-500/10 border border-emerald-500/20 rounded-lg">
+                    <p className="text-sm text-emerald-400">
+                      {Object.keys(refreshResults.results).length} agents refreshed. Results saved to project notes.
+                    </p>
+                  </div>
+                )}
+                {refreshResults?.jarvisSummary && (
+                  <div className="p-4 bg-[#0a0a0f] border border-[#6366f1]/20 rounded-lg">
+                    <div className="flex items-center gap-2 mb-2">
+                      <div className="w-6 h-6 bg-[#6366f1] rounded-full flex items-center justify-center text-white text-[10px] font-bold">J</div>
+                      <span className="text-sm font-bold text-white">Refreshed Jarvis Summary</span>
+                    </div>
+                    <div className="text-sm text-[#e2e8f0] whitespace-pre-wrap leading-relaxed max-h-[300px] overflow-y-auto">{refreshResults.jarvisSummary}</div>
+                  </div>
+                )}
+                {pdfReports && (
+                  <div className="p-3 bg-[#0a0a0f] border border-[#1e1e2e] rounded-lg space-y-2">
+                    <p className="text-sm font-semibold text-white">{pdfReports.length} reports generated</p>
+                    <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
+                      {pdfReports.map((r, i) => (
+                        <a key={i} href={r.url} target="_blank" rel="noreferrer" className="text-xs px-3 py-2 bg-[#1e1e2e] rounded-lg text-[#6366f1] hover:bg-[#6366f1]/10 transition-colors truncate">
+                          {r.agentName}
+                        </a>
+                      ))}
+                    </div>
+                  </div>
+                )}
+              </div>
+
+              {/* ── Move to Build ──────────────────────────── */}
+              {hasWarRoomRun && project && project.status !== "Building" && project.status !== "Launched" && project.status !== "Revenue" && (
+                <div className="mt-8">
+                  {!showBuildConfirm ? (
+                    <button
+                      onClick={() => setShowBuildConfirm(true)}
+                      className="w-full px-6 py-4 bg-gradient-to-r from-[#6366f1] to-[#8b5cf6] text-white rounded-xl text-sm font-bold hover:from-[#5558e6] hover:to-[#7c3aed] transition-all shadow-lg shadow-[#6366f1]/20"
+                    >
+                      Move to Build Stage
+                    </button>
+                  ) : (
+                    <div className="bg-[#12121a] rounded-xl border border-[#6366f1]/40 p-6">
+                      <h3 className="text-lg font-bold text-white mb-2">Move {project.title} to Build Stage?</h3>
+                      <p className="text-sm text-[#64748b] mb-6">This means you are committing to building this business. Your team is ready.</p>
+                      <div className="flex gap-3">
+                        <button
+                          onClick={moveToBuild}
+                          disabled={moveToBuildLoading}
+                          className="flex-1 px-4 py-3 bg-[#6366f1] text-white rounded-lg text-sm font-medium hover:bg-[#5558e6] disabled:opacity-50 transition-colors"
+                        >
+                          {moveToBuildLoading ? "Moving..." : "Confirm — Start Building"}
+                        </button>
+                        <button
+                          onClick={() => setShowBuildConfirm(false)}
+                          className="px-4 py-3 bg-[#1e1e2e] text-[#64748b] rounded-lg text-sm font-medium hover:text-white transition-colors"
+                        >
+                          Cancel
+                        </button>
+                      </div>
+                    </div>
+                  )}
+                </div>
+              )}
             </div>
           )}
 
