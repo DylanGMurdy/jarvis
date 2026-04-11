@@ -72,7 +72,13 @@ export default function IdeasTab({ projects, openModal, closeModal }: IdeasTabPr
                 </div>
                 <p className="text-xs text-jarvis-muted line-clamp-1">{project.description}</p>
               </div>
-              <div className="flex items-center gap-2 flex-shrink-0 ml-4">
+              <div className="flex items-center gap-2 flex-shrink-0 ml-4 flex-wrap justify-end">
+                {project.war_room_completed_at && project.status !== "Building" && (
+                  <span className="px-2 py-0.5 rounded text-[10px] font-semibold bg-jarvis-green/20 text-jarvis-green border border-jarvis-green/30">War Room Complete</span>
+                )}
+                {project.status === "Building" && (
+                  <span className="px-2 py-0.5 rounded text-[10px] font-semibold bg-purple-500/20 text-purple-400 border border-purple-500/30">In Build</span>
+                )}
                 <CategoryBadge category={project.category} />
                 <StatusBadge status={project.status} />
               </div>

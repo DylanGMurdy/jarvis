@@ -8,6 +8,7 @@ export interface Project {
   progress: number;
   grade: "A" | "B" | "C";
   drive_folder_id?: string | null;
+  war_room_completed_at?: string | null;
   created_at: string;
 }
 

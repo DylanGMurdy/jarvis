@@ -31,6 +31,11 @@ async function migrate() {
       console.log('Added drive_folder_id column to projects');
 
       await supabase.rpc('exec_sql', {
+        sql: 'ALTER TABLE projects ADD COLUMN IF NOT EXISTS war_room_completed_at timestamptz'
+      });
+      console.log('Added war_room_completed_at column to projects');
+
+      await supabase.rpc('exec_sql', {
         sql: `CREATE TABLE IF NOT EXISTS lindy_clients (
           id uuid default gen_random_uuid() primary key,
           name text not null,
@@ -90,6 +95,7 @@ async function migrate() {
       console.log('     created_at timestamp with time zone default now()');
       console.log('   );');
       console.log('\n2. ALTER TABLE projects ADD COLUMN IF NOT EXISTS drive_folder_id text;');
+      console.log('\n3. ALTER TABLE projects ADD COLUMN IF NOT EXISTS war_room_completed_at timestamptz;');
       console.log('\n3. CREATE TABLE IF NOT EXISTS lindy_clients (');
       console.log('     id uuid default gen_random_uuid() primary key,');
       console.log('     name text not null,');
