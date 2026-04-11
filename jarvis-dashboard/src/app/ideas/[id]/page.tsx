@@ -103,6 +103,32 @@ export default function ProjectDetailPage({ params }: { params: Promise<{ id: st
     }
   }
 
+  // CFO Agent state
+  const [cfoResults, setCfoResults] = useState<Record<string, { loading: boolean; output: string | null }>>({
+    revenue_model: { loading: false, output: null },
+    unit_economics: { loading: false, output: null },
+    funding_needs: { loading: false, output: null },
+    financial_risks: { loading: false, output: null },
+  });
+
+  async function runCfoAgent(action: string) {
+    setCfoResults((prev) => ({ ...prev, [action]: { loading: true, output: null } }));
+    try {
+      const res = await fetch("/api/agents/cfo", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action, projectId: id, projectTitle: project?.title, projectDescription: project?.description }),
+      });
+      const data = await res.json();
+      setCfoResults((prev) => ({
+        ...prev,
+        [action]: { loading: false, output: data.ok ? data.result : data.error || "Failed" },
+      }));
+    } catch {
+      setCfoResults((prev) => ({ ...prev, [action]: { loading: false, output: "Connection error" } }));
+    }
+  }
+
   // Research Agent state
   const [researchQuery, setResearchQuery] = useState("");
   const [researchLoading, setResearchLoading] = useState(false);
@@ -126,6 +152,38 @@ export default function ProjectDetailPage({ params }: { params: Promise<{ id: st
       setResearchResult("Connection error");
     } finally {
       setResearchLoading(false);
+    }
+  }
+
+  // CMO Agent state
+  const [cmoResults, setCmoResults] = useState<Record<string, { loading: boolean; output: string | null }>>({
+    market_analysis: { loading: false, output: null },
+    content_strategy: { loading: false, output: null },
+    growth_channels: { loading: false, output: null },
+    brand_voice: { loading: false, output: null },
+  });
+
+  async function runCmo(action: string) {
+    setCmoResults((prev) => ({ ...prev, [action]: { loading: true, output: null } }));
+    try {
+      const res = await fetch("/api/agents/cmo", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          action,
+          projectId: id,
+          projectTitle: project?.title,
+          projectDescription: project?.description,
+        }),
+      });
+      const data = await res.json();
+      setCmoResults((prev) => ({
+        ...prev,
+        [action]: { loading: false, output: data.ok ? data.result : data.error || "Failed" },
+      }));
+      if (data.ok) loadData(); // Refresh notes
+    } catch {
+      setCmoResults((prev) => ({ ...prev, [action]: { loading: false, output: "Connection error" } }));
     }
   }
 
@@ -819,6 +877,98 @@ curl -X POST ${typeof window !== "undefined" ? window.location.origin : ""}/api/
               >
                 Run All Analysts
               </button>
+
+              {/* ── CFO Agent ──────────────────────────── */}
+              <div className="space-y-4">
+                <div className="bg-gradient-to-r from-emerald-500/10 to-teal-500/10 rounded-xl border border-emerald-500/30 p-4">
+                  <div className="flex items-center gap-2 mb-1">
+                    <span className="text-lg">💰</span>
+                    <h3 className="text-lg font-bold text-white">CFO Agent</h3>
+                  </div>
+                  <p className="text-sm text-[#64748b]">Financial analysis and projections. Results are saved to project notes.</p>
+                </div>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                  {([
+                    { key: "revenue_model", icon: "📈", name: "Revenue Model", desc: "Pricing, revenue streams, 12-month projection", btnClass: "bg-emerald-500/10 border-emerald-500/30 text-emerald-400 hover:bg-emerald-500/20", borderClass: "border-emerald-500/20" },
+                    { key: "unit_economics", icon: "🧮", name: "Unit Economics", desc: "CAC, LTV, margins, break-even analysis", btnClass: "bg-teal-500/10 border-teal-500/30 text-teal-400 hover:bg-teal-500/20", borderClass: "border-teal-500/20" },
+                    { key: "funding_needs", icon: "🏦", name: "Funding Needs", desc: "Bootstrap vs funded path, resource needs", btnClass: "bg-cyan-500/10 border-cyan-500/30 text-cyan-400 hover:bg-cyan-500/20", borderClass: "border-cyan-500/20" },
+                    { key: "financial_risks", icon: "🛡️", name: "Financial Risks", desc: "Top 5 risks with mitigation strategies", btnClass: "bg-amber-500/10 border-amber-500/30 text-amber-400 hover:bg-amber-500/20", borderClass: "border-amber-500/20" },
+                  ] as const).map((panel) => (
+                    <div key={panel.key} className={`bg-[#12121a] rounded-xl border ${cfoResults[panel.key].output ? panel.borderClass : "border-[#1e1e2e]"} flex flex-col`}>
+                      <div className="p-4 border-b border-[#1e1e2e]">
+                        <div className="flex items-center gap-2 mb-1">
+                          <span className="text-lg">{panel.icon}</span>
+                          <h4 className="text-sm font-bold text-white">{panel.name}</h4>
+                        </div>
+                        <p className="text-xs text-[#64748b]">{panel.desc}</p>
+                      </div>
+                      <div className="flex-1 p-4 min-h-[80px] max-h-[400px] overflow-y-auto">
+                        {cfoResults[panel.key].loading ? (
+                          <div className="text-sm text-[#64748b] animate-pulse">Analyzing financials...</div>
+                        ) : cfoResults[panel.key].output ? (
+                          <div className="text-sm text-[#e2e8f0] whitespace-pre-wrap leading-relaxed">{cfoResults[panel.key].output}</div>
+                        ) : (
+                          <p className="text-sm text-[#64748b]">Click below to run analysis.</p>
+                        )}
+                      </div>
+                      <div className="p-4 border-t border-[#1e1e2e]">
+                        <button
+                          onClick={() => runCfoAgent(panel.key)}
+                          disabled={cfoResults[panel.key].loading}
+                          className={`w-full px-4 py-2.5 border rounded-lg text-sm font-medium disabled:opacity-50 transition-colors ${panel.btnClass}`}
+                        >
+                          {cfoResults[panel.key].loading ? "Running..." : cfoResults[panel.key].output ? "Re-run" : "Run Analysis"}
+                        </button>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+
+              {/* ── CMO Agent ─────────────────────────── */}
+              <div className="bg-gradient-to-r from-[#ec4899]/10 to-[#f97316]/10 rounded-xl border border-[#ec4899]/30 p-4">
+                <div className="flex items-center gap-2 mb-1">
+                  <span className="text-lg">📣</span>
+                  <h3 className="text-lg font-bold text-white">CMO Agent</h3>
+                </div>
+                <p className="text-sm text-[#64748b]">Chief Marketing Officer — market analysis, content strategy, growth channels, and brand voice.</p>
+              </div>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                {([
+                  { key: "market_analysis", icon: "🎯", name: "Market Analysis", desc: "Market size, audience, competitors, positioning", btnClass: "bg-pink-500/10 border-pink-500/30 text-pink-400 hover:bg-pink-500/20", borderClass: "border-pink-500/20" },
+                  { key: "content_strategy", icon: "📝", name: "Content Strategy", desc: "30-day content plan with channels and messaging", btnClass: "bg-orange-500/10 border-orange-500/30 text-orange-400 hover:bg-orange-500/20", borderClass: "border-orange-500/20" },
+                  { key: "growth_channels", icon: "📈", name: "Growth Channels", desc: "Top 5 channels with effort/impact scores", btnClass: "bg-fuchsia-500/10 border-fuchsia-500/30 text-fuchsia-400 hover:bg-fuchsia-500/20", borderClass: "border-fuchsia-500/20" },
+                  { key: "brand_voice", icon: "🎤", name: "Brand Voice", desc: "Voice, tone, messaging guidelines, and sample copy", btnClass: "bg-rose-500/10 border-rose-500/30 text-rose-400 hover:bg-rose-500/20", borderClass: "border-rose-500/20" },
+                ] as const).map((panel) => (
+                  <div key={panel.key} className={`bg-[#12121a] rounded-xl border ${cmoResults[panel.key].output ? panel.borderClass : "border-[#1e1e2e]"} flex flex-col`}>
+                    <div className="p-4 border-b border-[#1e1e2e]">
+                      <div className="flex items-center gap-2 mb-1">
+                        <span className="text-lg">{panel.icon}</span>
+                        <h4 className="text-sm font-bold text-white">{panel.name}</h4>
+                      </div>
+                      <p className="text-xs text-[#64748b]">{panel.desc}</p>
+                    </div>
+                    <div className="flex-1 p-4 min-h-[100px] max-h-[400px] overflow-y-auto">
+                      {cmoResults[panel.key].loading ? (
+                        <div className="text-sm text-[#64748b] animate-pulse">CMO is working...</div>
+                      ) : cmoResults[panel.key].output ? (
+                        <div className="text-sm text-[#e2e8f0] whitespace-pre-wrap leading-relaxed">{cmoResults[panel.key].output}</div>
+                      ) : (
+                        <p className="text-sm text-[#64748b]">Click below to run.</p>
+                      )}
+                    </div>
+                    <div className="p-4 border-t border-[#1e1e2e]">
+                      <button
+                        onClick={() => runCmo(panel.key)}
+                        disabled={cmoResults[panel.key].loading}
+                        className={`w-full px-4 py-2.5 border rounded-lg text-sm font-medium disabled:opacity-50 transition-colors ${panel.btnClass}`}
+                      >
+                        {cmoResults[panel.key].loading ? "Running..." : cmoResults[panel.key].output ? "Re-run" : "Run Analysis"}
+                      </button>
+                    </div>
+                  </div>
+                ))}
+              </div>
 
               {/* ── Research Agent ──────────────────────── */}
               <div className="bg-[#12121a] rounded-xl border border-[#1e1e2e] p-4">

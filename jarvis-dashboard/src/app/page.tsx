@@ -35,6 +35,7 @@ const AGENTS = [
   { name: "Content Writer", status: "idle" as const, desc: "Ready to generate content.", lastAction: "Generated 4 listing descriptions" },
   { name: "Market Analyzer", status: "idle" as const, desc: "Tracks Utah County market data.", lastAction: "Compiled weekly market report" },
   { name: "Scheduler", status: "active" as const, desc: "Managing calendar.", lastAction: "Blocked family time 6-8pm" },
+  { name: "CMO Agent", status: "active" as const, desc: "Market analysis, content strategy, growth channels, brand voice.", lastAction: "Generated market analysis for Lindy Agents" },
 ];
 
 const StatusDot = ({ status }: { status: "active" | "idle" | "error" }) => (
