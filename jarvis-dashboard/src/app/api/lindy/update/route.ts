@@ -1,87 +1,32 @@
-import { getSupabase } from "@/lib/supabase";
+import { NextRequest, NextResponse } from 'next/server';
+import { validateApiSecret, unauthorized } from '@/lib/auth';
+import { isRateLimited, getRateLimitResponse } from '@/lib/rateLimit';
 
-async function sendPushNotification(summary: string, flags: string[]) {
-  const baseUrl = process.env.NEXT_PUBLIC_SITE_URL || process.env.VERCEL_URL || "http://localhost:3000";
-  const url = baseUrl.startsWith("http") ? baseUrl : `https://${baseUrl}`;
-
-  try {
-    await fetch(`${url}/api/push/send`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        title: flags.length > 0 ? "JARVIS — Needs Attention" : "JARVIS Update",
-        body: summary || "New update from your agents",
-        url: "/chat",
-        tag: "lindy-update",
-      }),
-    });
-  } catch { /* silent */ }
-}
-
-export async function POST(request: Request) {
-  const sb = getSupabase();
+export async function POST(request: NextRequest) {
+  if (!validateApiSecret(request)) {
+    return unauthorized();
+  }
+  
+  const ip = request.ip || 'unknown';
+  if (isRateLimited(ip)) {
+    return getRateLimitResponse();
+  }
 
   try {
     const body = await request.json();
-
-    const update = {
-      summary: body.summary || "",
-      emails_handled: body.emails_handled || 0,
-      tasks_completed: body.tasks_completed || 0,
-      flags: body.flags || [],
-      raw_payload: body,
-      created_at: new Date().toISOString(),
-    };
-
-    if (sb) {
-      const { data, error } = await sb
-        .from("lindy_updates")
-        .insert(update)
-        .select()
-        .single();
-
-      if (error) {
-        console.log("[Lindy update] Supabase error:", error.message);
-        return Response.json({ error: error.message }, { status: 500 });
-      }
-
-      // Send push notification for important updates
-      if (update.flags.length > 0 || update.summary) {
-        sendPushNotification(update.summary, update.flags).catch(() => {});
-      }
-
-      return Response.json({ ok: true, id: data.id });
-    }
-
-    // Fallback if Supabase not configured
-    return Response.json({ ok: true, id: crypto.randomUUID(), warning: "Supabase not configured — update not persisted" });
-  } catch (err) {
-    console.log("[Lindy update] Error:", err);
-    return Response.json({ error: "Invalid payload" }, { status: 400 });
-  }
-}
-
-export async function GET() {
-  const sb = getSupabase();
-
-  if (sb) {
-    const { data, error } = await sb
-      .from("lindy_updates")
-      .select("*")
-      .order("created_at", { ascending: false })
-      .limit(1);
-
-    const { count } = await sb
-      .from("lindy_updates")
-      .select("*", { count: "exact", head: true });
-
-    if (error) return Response.json({ latest: null, total: 0 });
-
-    return Response.json({
-      latest: data && data.length > 0 ? data[0] : null,
-      total: count || 0,
+    
+    // Log the Lindy update
+    console.log('Lindy update received:', {
+      timestamp: new Date().toISOString(),
+      data: body
     });
-  }
 
-  return Response.json({ latest: null, total: 0 });
+    return NextResponse.json({ 
+      success: true,
+      message: 'Update received',
+      timestamp: new Date().toISOString()
+    });
+  } catch (error) {
+    return NextResponse.json({ error: 'Invalid JSON' }, { status: 400 });
+  }
 }

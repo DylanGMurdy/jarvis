@@ -1,83 +1,59 @@
-import { getSupabase } from "@/lib/supabase";
+import { NextRequest, NextResponse } from 'next/server';
+import { validateApiSecret, unauthorized } from '@/lib/auth';
+import { isRateLimited, getRateLimitResponse } from '@/lib/rateLimit';
 
-export async function GET(request: Request) {
-  const sb = getSupabase();
-  if (!sb) return Response.json({ data: [] });
+interface Conversation {
+  id: string;
+  title: string;
+  timestamp: string;
+  messages: Array<{
+    role: 'user' | 'assistant';
+    content: string;
+    timestamp: string;
+  }>;
+}
 
-  const { searchParams } = new URL(request.url);
-  const limit = parseInt(searchParams.get("limit") || "20");
-  const type = searchParams.get("type"); // "global" | "project" | null (all)
+// In-memory storage (replace with actual database)
+let conversations: Conversation[] = [];
 
-  let query = sb
-    .from("conversations")
-    .select("*")
-    .order("updated_at", { ascending: false })
-    .limit(limit);
-
-  if (type) {
-    query = query.eq("conversation_type", type);
+export async function GET(request: NextRequest) {
+  if (!validateApiSecret(request)) {
+    return unauthorized();
+  }
+  
+  const ip = request.ip || 'unknown';
+  if (isRateLimited(ip)) {
+    return getRateLimitResponse();
   }
 
-  const { data, error } = await query;
-
-  if (error) return Response.json({ data: [], error: error.message }, { status: 500 });
-  return Response.json({ data: data || [] });
+  return NextResponse.json({ conversations });
 }
 
-export async function POST(request: Request) {
-  const sb = getSupabase();
-  if (!sb) return Response.json({ error: "Supabase not configured" }, { status: 500 });
+export async function POST(request: NextRequest) {
+  if (!validateApiSecret(request)) {
+    return unauthorized();
+  }
+  
+  const ip = request.ip || 'unknown';
+  if (isRateLimited(ip)) {
+    return getRateLimitResponse();
+  }
 
-  const { messages, summary, title, conversation_type } = await request.json();
+  try {
+    const body = await request.json();
+    const { title, messages } = body;
 
-  const { data, error } = await sb
-    .from("conversations")
-    .insert({
-      messages: messages || [],
-      summary: summary || "",
-      title: title || summary || "",
-      conversation_type: conversation_type || "global",
-      created_at: new Date().toISOString(),
-      updated_at: new Date().toISOString(),
-    })
-    .select()
-    .single();
+    const conversation: Conversation = {
+      id: crypto.randomUUID(),
+      title: title || 'Untitled Conversation',
+      timestamp: new Date().toISOString(),
+      messages: messages || []
+    };
 
-  if (error) return Response.json({ error: error.message }, { status: 500 });
-  return Response.json({ data });
-}
+    conversations.push(conversation);
 
-export async function PATCH(request: Request) {
-  const sb = getSupabase();
-  if (!sb) return Response.json({ error: "Supabase not configured" }, { status: 500 });
-
-  const { id, ...updates } = await request.json();
-  if (!id) return Response.json({ error: "Missing conversation id" }, { status: 400 });
-
-  // Always update updated_at
-  const { data, error } = await sb
-    .from("conversations")
-    .update({ ...updates, updated_at: new Date().toISOString() })
-    .eq("id", id)
-    .select()
-    .single();
-
-  if (error) return Response.json({ error: error.message }, { status: 500 });
-  return Response.json({ data });
-}
-
-export async function DELETE(request: Request) {
-  const sb = getSupabase();
-  if (!sb) return Response.json({ error: "Supabase not configured" }, { status: 500 });
-
-  const { id } = await request.json();
-  if (!id) return Response.json({ error: "Missing conversation id" }, { status: 400 });
-
-  const { error } = await sb
-    .from("conversations")
-    .delete()
-    .eq("id", id);
-
-  if (error) return Response.json({ error: error.message }, { status: 500 });
-  return Response.json({ success: true });
+    return NextResponse.json({ success: true, conversation });
+  } catch (error) {
+    return NextResponse.json({ error: 'Invalid JSON' }, { status: 400 });
+  }
 }
