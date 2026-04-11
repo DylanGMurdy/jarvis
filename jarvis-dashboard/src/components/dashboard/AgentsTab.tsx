@@ -18,8 +18,8 @@ type ModalData = { title: string; body: string; actions?: { label: string; onCli
 
 // Master orchestrator
 const JARVIS: AgentDef = {
-  name: "JARVIS", title: "Master Orchestrator", status: "active", route: "/api/agents/run",
-  actions: [{ key: "run", label: "Run Daily Agent" }],
+  name: "JARVIS", title: "Master Orchestrator", status: "active", route: "/api/agents/orchestrator",
+  actions: [{ key: "daily_briefing", label: "Daily Briefing" }, { key: "assign_tasks", label: "Assign Tasks" }, { key: "weekly_review", label: "Weekly Review" }, { key: "escalate", label: "Escalate" }],
 };
 
 // C-Suite row
@@ -76,6 +76,10 @@ const SPECIALISTS: AgentDef[] = [
     actions: [{ key: "pr_strategy", label: "PR Strategy" }, { key: "press_release", label: "Press Release" }, { key: "media_list", label: "Media List" }, { key: "thought_leadership", label: "Thought Leadership" }] },
   { name: "Customer Success", title: "Customer Success", status: "active", route: "/api/agents/customer_success",
     actions: [{ key: "onboarding_flow", label: "Onboarding Flow" }, { key: "support_playbook", label: "Support Playbook" }, { key: "churn_prevention", label: "Churn Prevention" }, { key: "upsell_strategy", label: "Upsell Strategy" }] },
+  { name: "Investor Relations", title: "Investor Relations", status: "active", route: "/api/agents/investor_relations",
+    actions: [{ key: "investor_update", label: "Investor Update" }, { key: "pitch_deck_outline", label: "Pitch Deck" }, { key: "cap_table_strategy", label: "Cap Table" }, { key: "fundraising_timeline", label: "Fundraise Timeline" }] },
+  { name: "Recruiting", title: "Head of Recruiting", status: "active", route: "/api/agents/head_of_recruiting",
+    actions: [{ key: "job_descriptions", label: "Job Descriptions" }, { key: "hiring_process", label: "Hiring Process" }, { key: "culture_fit_questions", label: "Culture Fit" }, { key: "employer_brand", label: "Employer Brand" }] },
 ];
 
 const ALL_AGENTS = [JARVIS, ...C_SUITE, ...VPS, ...SPECIALISTS];

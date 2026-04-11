@@ -491,6 +491,78 @@ export default function ProjectDetailPage({ params }: { params: Promise<{ id: st
     }
   }
 
+  // Investor Relations Agent state
+  const [irResults, setIrResults] = useState<Record<string, { loading: boolean; output: string | null }>>({
+    investor_update: { loading: false, output: null },
+    pitch_deck_outline: { loading: false, output: null },
+    cap_table_strategy: { loading: false, output: null },
+    fundraising_timeline: { loading: false, output: null },
+  });
+
+  async function runIr(action: string) {
+    setIrResults((prev) => ({ ...prev, [action]: { loading: true, output: null } }));
+    try {
+      const res = await fetch("/api/agents/investor_relations", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action, projectId: id, projectTitle: project?.title, projectDescription: project?.description }),
+      });
+      const data = await res.json();
+      setIrResults((prev) => ({ ...prev, [action]: { loading: false, output: data.ok ? data.result : data.error || "Failed" } }));
+      if (data.ok) loadData();
+    } catch {
+      setIrResults((prev) => ({ ...prev, [action]: { loading: false, output: "Connection error" } }));
+    }
+  }
+
+  // Head of Recruiting Agent state
+  const [recruitingResults, setRecruitingResults] = useState<Record<string, { loading: boolean; output: string | null }>>({
+    job_descriptions: { loading: false, output: null },
+    hiring_process: { loading: false, output: null },
+    culture_fit_questions: { loading: false, output: null },
+    employer_brand: { loading: false, output: null },
+  });
+
+  async function runRecruiting(action: string) {
+    setRecruitingResults((prev) => ({ ...prev, [action]: { loading: true, output: null } }));
+    try {
+      const res = await fetch("/api/agents/head_of_recruiting", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action, projectId: id, projectTitle: project?.title, projectDescription: project?.description }),
+      });
+      const data = await res.json();
+      setRecruitingResults((prev) => ({ ...prev, [action]: { loading: false, output: data.ok ? data.result : data.error || "Failed" } }));
+      if (data.ok) loadData();
+    } catch {
+      setRecruitingResults((prev) => ({ ...prev, [action]: { loading: false, output: "Connection error" } }));
+    }
+  }
+
+  // Master Orchestrator Agent state
+  const [orchestratorResults, setOrchestratorResults] = useState<Record<string, { loading: boolean; output: string | null }>>({
+    daily_briefing: { loading: false, output: null },
+    assign_tasks: { loading: false, output: null },
+    weekly_review: { loading: false, output: null },
+    escalate: { loading: false, output: null },
+  });
+
+  async function runOrchestrator(action: string) {
+    setOrchestratorResults((prev) => ({ ...prev, [action]: { loading: true, output: null } }));
+    try {
+      const res = await fetch("/api/agents/orchestrator", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action, projectId: id, projectTitle: project?.title, projectDescription: project?.description }),
+      });
+      const data = await res.json();
+      setOrchestratorResults((prev) => ({ ...prev, [action]: { loading: false, output: data.ok ? data.result : data.error || "Failed" } }));
+      if (data.ok) loadData();
+    } catch {
+      setOrchestratorResults((prev) => ({ ...prev, [action]: { loading: false, output: "Connection error" } }));
+    }
+  }
+
   async function runAnalysis(analyst: string) {
     setWarRoomResults((prev) => ({ ...prev, [analyst]: { loading: true, analysis: null } }));
     try {
@@ -1087,6 +1159,54 @@ curl -X POST ${typeof window !== "undefined" ? window.location.origin : ""}/api/
           {/* ── War Room ────────────────────────────────── */}
           {activeTab === "War Room" && (
             <div className="space-y-6">
+              {/* ── Master Orchestrator ───────────────── */}
+              <div className="space-y-4">
+                <div className="bg-gradient-to-r from-yellow-500/10 via-amber-500/10 to-orange-500/10 rounded-xl border border-yellow-500/40 p-4">
+                  <div className="flex items-center gap-2 mb-1">
+                    <span className="text-lg">🧠</span>
+                    <h3 className="text-lg font-bold text-white">Master Orchestrator</h3>
+                    <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-yellow-500/20 text-yellow-400 border border-yellow-500/30 uppercase tracking-wider">Master</span>
+                  </div>
+                  <p className="text-sm text-[#64748b]">Executive command — briefings, agent assignments, weekly reviews, and escalation. Pulls live project data.</p>
+                </div>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                  {([
+                    { key: "daily_briefing", icon: "☀️", name: "Daily Briefing", desc: "Morning status, top 3 priorities, quick wins", btnClass: "bg-yellow-500/10 border-yellow-500/30 text-yellow-400 hover:bg-yellow-500/20", borderClass: "border-yellow-500/20" },
+                    { key: "assign_tasks", icon: "📋", name: "Assign Tasks", desc: "Route work to the right agents automatically", btnClass: "bg-amber-500/10 border-amber-500/30 text-amber-400 hover:bg-amber-500/20", borderClass: "border-amber-500/20" },
+                    { key: "weekly_review", icon: "📊", name: "Weekly Review", desc: "Scorecard, wins, misses, next week priorities", btnClass: "bg-orange-500/10 border-orange-500/30 text-orange-400 hover:bg-orange-500/20", borderClass: "border-orange-500/20" },
+                    { key: "escalate", icon: "🚨", name: "Escalate", desc: "What needs Dylan's attention right now", btnClass: "bg-red-500/10 border-red-500/30 text-red-400 hover:bg-red-500/20", borderClass: "border-red-500/20" },
+                  ] as const).map((panel) => (
+                    <div key={panel.key} className={`bg-[#12121a] rounded-xl border ${orchestratorResults[panel.key].output ? panel.borderClass : "border-[#1e1e2e]"} flex flex-col`}>
+                      <div className="p-4 border-b border-[#1e1e2e]">
+                        <div className="flex items-center gap-2 mb-1">
+                          <span className="text-lg">{panel.icon}</span>
+                          <h4 className="text-sm font-bold text-white">{panel.name}</h4>
+                        </div>
+                        <p className="text-xs text-[#64748b]">{panel.desc}</p>
+                      </div>
+                      <div className="flex-1 p-4 min-h-[80px] max-h-[400px] overflow-y-auto">
+                        {orchestratorResults[panel.key].loading ? (
+                          <div className="text-sm text-[#64748b] animate-pulse">Orchestrating...</div>
+                        ) : orchestratorResults[panel.key].output ? (
+                          <div className="text-sm text-[#e2e8f0] whitespace-pre-wrap leading-relaxed">{orchestratorResults[panel.key].output}</div>
+                        ) : (
+                          <p className="text-sm text-[#64748b]">Click below to run.</p>
+                        )}
+                      </div>
+                      <div className="p-4 border-t border-[#1e1e2e]">
+                        <button
+                          onClick={() => runOrchestrator(panel.key)}
+                          disabled={orchestratorResults[panel.key].loading}
+                          className={`w-full px-4 py-2.5 border rounded-lg text-sm font-medium disabled:opacity-50 transition-colors ${panel.btnClass}`}
+                        >
+                          {orchestratorResults[panel.key].loading ? "Running..." : orchestratorResults[panel.key].output ? "Re-run" : "Run"}
+                        </button>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+
               {/* ── Sales Agent (Lindy project only) ──── */}
               {isLindyProject && (
                 <div className="space-y-4">
@@ -1817,6 +1937,92 @@ curl -X POST ${typeof window !== "undefined" ? window.location.origin : ""}/api/
                           className={`w-full px-4 py-2.5 border rounded-lg text-sm font-medium disabled:opacity-50 transition-colors ${panel.btnClass}`}
                         >
                           {dataAnalyticsResults[panel.key].loading ? "Running..." : dataAnalyticsResults[panel.key].output ? "Re-run" : "Run Analysis"}
+                        </button>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+
+              {/* ── Investor Relations Agent ─────────────── */}
+              <div className="space-y-4">
+                <div className="bg-gradient-to-r from-blue-500/10 to-indigo-500/10 rounded-xl border border-blue-500/30 p-4">
+                  <div className="flex items-center gap-2 mb-1">
+                    <span className="text-lg">💎</span>
+                    <h3 className="text-lg font-bold text-white">Investor Relations</h3>
+                  </div>
+                  <p className="text-sm text-[#64748b]">Fundraising strategy — updates, pitch decks, cap tables, and timelines. Saved to notes.</p>
+                </div>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                  {([
+                    { key: "investor_update", icon: "📧", name: "Investor Update", desc: "Monthly update email with KPIs and asks", btnClass: "bg-blue-500/10 border-blue-500/30 text-blue-400 hover:bg-blue-500/20", borderClass: "border-blue-500/20" },
+                    { key: "pitch_deck_outline", icon: "🎪", name: "Pitch Deck", desc: "12-slide deck with content and speaker notes", btnClass: "bg-indigo-500/10 border-indigo-500/30 text-indigo-400 hover:bg-indigo-500/20", borderClass: "border-indigo-500/20" },
+                    { key: "cap_table_strategy", icon: "📐", name: "Cap Table", desc: "Equity structure, dilution, and option pool", btnClass: "bg-violet-500/10 border-violet-500/30 text-violet-400 hover:bg-violet-500/20", borderClass: "border-violet-500/20" },
+                    { key: "fundraising_timeline", icon: "🗓️", name: "Fundraise Timeline", desc: "Process from prep to close with investor targets", btnClass: "bg-purple-500/10 border-purple-500/30 text-purple-400 hover:bg-purple-500/20", borderClass: "border-purple-500/20" },
+                  ] as const).map((panel) => (
+                    <div key={panel.key} className={`bg-[#12121a] rounded-xl border ${irResults[panel.key].output ? panel.borderClass : "border-[#1e1e2e]"} flex flex-col`}>
+                      <div className="p-4 border-b border-[#1e1e2e]">
+                        <div className="flex items-center gap-2 mb-1">
+                          <span className="text-lg">{panel.icon}</span>
+                          <h4 className="text-sm font-bold text-white">{panel.name}</h4>
+                        </div>
+                        <p className="text-xs text-[#64748b]">{panel.desc}</p>
+                      </div>
+                      <div className="flex-1 p-4 min-h-[80px] max-h-[400px] overflow-y-auto">
+                        {irResults[panel.key].loading ? (
+                          <div className="text-sm text-[#64748b] animate-pulse">Preparing...</div>
+                        ) : irResults[panel.key].output ? (
+                          <div className="text-sm text-[#e2e8f0] whitespace-pre-wrap leading-relaxed">{irResults[panel.key].output}</div>
+                        ) : (
+                          <p className="text-sm text-[#64748b]">Click below to run.</p>
+                        )}
+                      </div>
+                      <div className="p-4 border-t border-[#1e1e2e]">
+                        <button onClick={() => runIr(panel.key)} disabled={irResults[panel.key].loading} className={`w-full px-4 py-2.5 border rounded-lg text-sm font-medium disabled:opacity-50 transition-colors ${panel.btnClass}`}>
+                          {irResults[panel.key].loading ? "Running..." : irResults[panel.key].output ? "Re-run" : "Run Analysis"}
+                        </button>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+
+              {/* ── Head of Recruiting Agent ──────────────── */}
+              <div className="space-y-4">
+                <div className="bg-gradient-to-r from-teal-500/10 to-cyan-500/10 rounded-xl border border-teal-500/30 p-4">
+                  <div className="flex items-center gap-2 mb-1">
+                    <span className="text-lg">🎯</span>
+                    <h3 className="text-lg font-bold text-white">Head of Recruiting</h3>
+                  </div>
+                  <p className="text-sm text-[#64748b]">Talent strategy — job descriptions, hiring process, culture questions, and employer brand. Saved to notes.</p>
+                </div>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                  {([
+                    { key: "job_descriptions", icon: "📝", name: "Job Descriptions", desc: "Top 3 roles with compelling copy", btnClass: "bg-teal-500/10 border-teal-500/30 text-teal-400 hover:bg-teal-500/20", borderClass: "border-teal-500/20" },
+                    { key: "hiring_process", icon: "🔄", name: "Hiring Process", desc: "End-to-end process in under 14 days", btnClass: "bg-cyan-500/10 border-cyan-500/30 text-cyan-400 hover:bg-cyan-500/20", borderClass: "border-cyan-500/20" },
+                    { key: "culture_fit_questions", icon: "🤝", name: "Culture Fit", desc: "12 interview questions with scoring rubric", btnClass: "bg-sky-500/10 border-sky-500/30 text-sky-400 hover:bg-sky-500/20", borderClass: "border-sky-500/20" },
+                    { key: "employer_brand", icon: "🏷️", name: "Employer Brand", desc: "EVP, culture pillars, and careers copy", btnClass: "bg-blue-500/10 border-blue-500/30 text-blue-400 hover:bg-blue-500/20", borderClass: "border-blue-500/20" },
+                  ] as const).map((panel) => (
+                    <div key={panel.key} className={`bg-[#12121a] rounded-xl border ${recruitingResults[panel.key].output ? panel.borderClass : "border-[#1e1e2e]"} flex flex-col`}>
+                      <div className="p-4 border-b border-[#1e1e2e]">
+                        <div className="flex items-center gap-2 mb-1">
+                          <span className="text-lg">{panel.icon}</span>
+                          <h4 className="text-sm font-bold text-white">{panel.name}</h4>
+                        </div>
+                        <p className="text-xs text-[#64748b]">{panel.desc}</p>
+                      </div>
+                      <div className="flex-1 p-4 min-h-[80px] max-h-[400px] overflow-y-auto">
+                        {recruitingResults[panel.key].loading ? (
+                          <div className="text-sm text-[#64748b] animate-pulse">Recruiting...</div>
+                        ) : recruitingResults[panel.key].output ? (
+                          <div className="text-sm text-[#e2e8f0] whitespace-pre-wrap leading-relaxed">{recruitingResults[panel.key].output}</div>
+                        ) : (
+                          <p className="text-sm text-[#64748b]">Click below to run.</p>
+                        )}
+                      </div>
+                      <div className="p-4 border-t border-[#1e1e2e]">
+                        <button onClick={() => runRecruiting(panel.key)} disabled={recruitingResults[panel.key].loading} className={`w-full px-4 py-2.5 border rounded-lg text-sm font-medium disabled:opacity-50 transition-colors ${panel.btnClass}`}>
+                          {recruitingResults[panel.key].loading ? "Running..." : recruitingResults[panel.key].output ? "Re-run" : "Run Analysis"}
                         </button>
                       </div>
                     </div>
