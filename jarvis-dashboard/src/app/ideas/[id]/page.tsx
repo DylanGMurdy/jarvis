@@ -103,6 +103,32 @@ export default function ProjectDetailPage({ params }: { params: Promise<{ id: st
     }
   }
 
+  // Research Agent state
+  const [researchQuery, setResearchQuery] = useState("");
+  const [researchLoading, setResearchLoading] = useState(false);
+  const [researchResult, setResearchResult] = useState<string | null>(null);
+
+  async function runResearch() {
+    const q = researchQuery.trim();
+    if (!q) return;
+    setResearchLoading(true);
+    setResearchResult(null);
+    try {
+      const res = await fetch("/api/agents/research", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ query: q, projectId: id }),
+      });
+      const data = await res.json();
+      setResearchResult(data.ok ? data.result : data.error || "Failed");
+      if (data.ok) setResearchQuery("");
+    } catch {
+      setResearchResult("Connection error");
+    } finally {
+      setResearchLoading(false);
+    }
+  }
+
   async function runAnalysis(analyst: string) {
     setWarRoomResults((prev) => ({ ...prev, [analyst]: { loading: true, analysis: null } }));
     try {
@@ -793,6 +819,37 @@ curl -X POST ${typeof window !== "undefined" ? window.location.origin : ""}/api/
               >
                 Run All Analysts
               </button>
+
+              {/* ── Research Agent ──────────────────────── */}
+              <div className="bg-[#12121a] rounded-xl border border-[#1e1e2e] p-4">
+                <div className="flex items-center gap-2 mb-1">
+                  <span className="text-lg">🔍</span>
+                  <h3 className="text-lg font-bold text-white">Research</h3>
+                </div>
+                <p className="text-sm text-[#64748b] mb-3">Get real-time web research powered by Perplexity. Results are saved to project notes.</p>
+                <div className="flex gap-2">
+                  <input
+                    type="text"
+                    value={researchQuery}
+                    onChange={(e) => setResearchQuery(e.target.value)}
+                    onKeyDown={(e) => e.key === "Enter" && !researchLoading && runResearch()}
+                    placeholder="e.g. Utah real estate market trends 2026..."
+                    className="flex-1 bg-[#0a0a0f] border border-[#1e1e2e] rounded-lg px-4 py-2.5 text-sm text-[#e2e8f0] placeholder-[#64748b] focus:outline-none focus:border-[#6366f1]"
+                  />
+                  <button
+                    onClick={runResearch}
+                    disabled={researchLoading || !researchQuery.trim()}
+                    className="px-4 py-2.5 bg-[#6366f1] hover:bg-[#5558e6] text-white text-sm font-medium rounded-lg disabled:opacity-50 transition-colors whitespace-nowrap"
+                  >
+                    {researchLoading ? "Researching..." : "Research"}
+                  </button>
+                </div>
+                {researchResult && (
+                  <div className="mt-4 p-4 bg-[#0a0a0f] border border-[#1e1e2e] rounded-lg max-h-[400px] overflow-y-auto">
+                    <div className="text-sm text-[#e2e8f0] whitespace-pre-wrap leading-relaxed">{researchResult}</div>
+                  </div>
+                )}
+              </div>
             </div>
           )}
 
