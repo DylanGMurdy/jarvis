@@ -1,242 +1,200 @@
-'use client';
+'use client'
 
-import { useState, useEffect } from 'react';
-import Link from 'next/link';
+import { useState, useEffect } from 'react'
+import { getSupabase } from '@/lib/supabase'
+import { Button } from '@/components/ui/button'
+import { Input } from '@/components/ui/input'
+import { Textarea } from '@/components/ui/textarea'
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog'
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
+import { Plus, X } from 'lucide-react'
 
 interface Project {
-  id: string;
-  title: string;
-  description: string;
-  status: string;
-  grade: string;
-  category: string;
-  progress: number;
-  created_at: string;
+  id: string
+  title: string
+  description?: string
+  created_at: string
 }
 
-interface NewProjectModalProps {
-  isOpen: boolean;
-  onClose: () => void;
-  onSuccess: () => void;
-}
+export default function IdeasLab() {
+  const [projects, setProjects] = useState<Project[]>([])
+  const [isModalOpen, setIsModalOpen] = useState(false)
+  const [newProject, setNewProject] = useState({ title: '', description: '' })
+  const [loading, setLoading] = useState(true)
+  const [submitting, setSubmitting] = useState(false)
 
-function NewProjectModal({ isOpen, onClose, onSuccess }: NewProjectModalProps) {
-  const [title, setTitle] = useState('');
-  const [description, setDescription] = useState('');
-  const [isSubmitting, setIsSubmitting] = useState(false);
-
-  if (!isOpen) return null;
-
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!title.trim()) return;
-
-    setIsSubmitting(true);
-    try {
-      const response = await fetch('/api/projects', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          title: title.trim(),
-          description: description.trim(),
-          status: 'Idea',
-          grade: 'B',
-          category: 'AI Business',
-          progress: 0
-        })
-      });
-
-      if (response.ok) {
-        setTitle('');
-        setDescription('');
-        onSuccess();
-        onClose();
-      }
-    } catch (error) {
-      console.error('Error creating project:', error);
-    } finally {
-      setIsSubmitting(false);
-    }
-  };
-
-  const handleCancel = () => {
-    setTitle('');
-    setDescription('');
-    onClose();
-  };
-
-  return (
-    <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
-      <div className="bg-gray-900 border border-gray-800 rounded-lg p-6 w-full max-w-md mx-4">
-        <h3 className="text-xl font-bold text-white mb-4">New Project</h3>
-        <form onSubmit={handleSubmit} className="space-y-4">
-          <div>
-            <label className="block text-sm font-medium text-gray-300 mb-1">
-              Project Name *
-            </label>
-            <input
-              type="text"
-              value={title}
-              onChange={(e) => setTitle(e.target.value)}
-              className="w-full px-3 py-2 bg-gray-800 border border-gray-700 rounded-md text-white focus:outline-none focus:ring-2 focus:ring-purple-500"
-              placeholder="Enter project name"
-              required
-            />
-          </div>
-          <div>
-            <label className="block text-sm font-medium text-gray-300 mb-1">
-              Description
-            </label>
-            <textarea
-              value={description}
-              onChange={(e) => setDescription(e.target.value)}
-              className="w-full px-3 py-2 bg-gray-800 border border-gray-700 rounded-md text-white focus:outline-none focus:ring-2 focus:ring-purple-500 resize-none"
-              rows={3}
-              placeholder="Optional description"
-            />
-          </div>
-          <div className="flex gap-3 pt-2">
-            <button
-              type="button"
-              onClick={handleCancel}
-              className="flex-1 px-4 py-2 text-gray-300 border border-gray-600 rounded-md hover:bg-gray-800 transition-colors"
-            >
-              Cancel
-            </button>
-            <button
-              type="submit"
-              disabled={!title.trim() || isSubmitting}
-              className="flex-1 bg-purple-600 text-white px-4 py-2 rounded-md hover:bg-purple-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
-            >
-              {isSubmitting ? 'Creating...' : 'Create Project'}
-            </button>
-          </div>
-        </form>
-      </div>
-    </div>
-  );
-}
-
-function ProjectCard({ project, onDelete }: { project: Project; onDelete: (id: string) => void }) {
-  const handleDelete = () => {
-    if (confirm(`Delete ${project.title}? This cannot be undone.`)) {
-      onDelete(project.id);
-    }
-  };
-
-  return (
-    <Link href={`/ideas/${project.id}`} className="block">
-      <div className="relative bg-gray-900 border border-gray-800 rounded-lg p-6 hover:border-gray-700 transition-colors">
-        <button
-          onClick={(e) => { e.preventDefault(); handleDelete(); }}
-          className="absolute top-3 right-3 text-gray-500 hover:text-red-400 text-lg leading-none transition-colors"
-          title="Delete project"
-        >
-          ×
-        </button>
-        <div className="flex items-start justify-between mb-3 pr-6">
-          <h3 className="text-lg font-semibold text-white">{project.title}</h3>
-        </div>
-        {project.description && (
-          <p className="text-gray-400 mb-4 text-sm">{project.description}</p>
-        )}
-        <div className="flex items-center justify-between text-sm">
-          <div className="flex items-center gap-3">
-            <span className={`px-2 py-1 rounded text-xs ${
-              project.status === 'Active' || project.status === 'Building' ? 'bg-green-500/20 text-green-400' :
-              project.status === 'Idea' ? 'bg-purple-500/20 text-purple-400' :
-              project.status === 'Planning' ? 'bg-blue-500/20 text-blue-400' :
-              'bg-gray-500/20 text-gray-400'
-            }`}>
-              {project.status}
-            </span>
-            <span className="text-gray-500">Grade {project.grade}</span>
-          </div>
-          <span className="text-gray-500">{project.progress}%</span>
-        </div>
-      </div>
-    </Link>
-  );
-}
-
-export default function IdeasPage() {
-  const [projects, setProjects] = useState<Project[]>([]);
-  const [isModalOpen, setIsModalOpen] = useState(false);
-  const [loading, setLoading] = useState(true);
+  useEffect(() => {
+    fetchProjects()
+  }, [])
 
   const fetchProjects = async () => {
     try {
-      const res = await fetch('/api/projects');
-      const data = await res.json();
-      setProjects(data.data || []);
-    } catch (error) {
-      console.error('Error fetching projects:', error);
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const handleDeleteProject = async (id: string) => {
-    try {
-      const response = await fetch(`/api/projects/${id}`, {
-        method: 'DELETE'
-      });
-
+      const response = await fetch('/api/projects')
       if (response.ok) {
-        setProjects(projects.filter(p => p.id !== id));
+        const data = await response.json()
+        setProjects(data)
       }
     } catch (error) {
-      console.error('Error deleting project:', error);
+      console.error('Error fetching projects:', error)
+    } finally {
+      setLoading(false)
     }
-  };
+  }
 
-  useEffect(() => {
-    fetchProjects();
-  }, []);
+  const handleCreateProject = async (e: React.FormEvent) => {
+    e.preventDefault()
+    if (!newProject.title.trim()) return
+
+    setSubmitting(true)
+    try {
+      const response = await fetch('/api/projects', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          title: newProject.title.trim(),
+          description: newProject.description.trim() || null,
+        }),
+      })
+
+      if (response.ok) {
+        setNewProject({ title: '', description: '' })
+        setIsModalOpen(false)
+        await fetchProjects() // Refresh the list
+      } else {
+        console.error('Failed to create project')
+      }
+    } catch (error) {
+      console.error('Error creating project:', error)
+    } finally {
+      setSubmitting(false)
+    }
+  }
+
+  const handleDeleteProject = async (id: string) => {
+    if (!confirm('Are you sure you want to delete this project?')) {
+      return
+    }
+
+    try {
+      const response = await fetch(`/api/projects/${id}`, {
+        method: 'DELETE',
+      })
+
+      if (response.ok) {
+        setProjects(projects.filter(project => project.id !== id))
+      } else {
+        console.error('Failed to delete project')
+      }
+    } catch (error) {
+      console.error('Error deleting project:', error)
+    }
+  }
+
+  if (loading) {
+    return (
+      <div className="container mx-auto px-4 py-8">
+        <div className="flex justify-center items-center h-64">
+          <div className="text-lg text-gray-600">Loading projects...</div>
+        </div>
+      </div>
+    )
+  }
 
   return (
-    <div className="min-h-screen bg-black text-white p-8">
-      <div className="max-w-7xl mx-auto">
-        <div className="flex items-center justify-between mb-8">
-          <div>
-            <h1 className="text-4xl font-bold mb-2">Ideas Lab</h1>
-            <p className="text-gray-400">Explore and develop new project concepts</p>
-          </div>
-          <button
-            onClick={() => setIsModalOpen(true)}
-            className="bg-purple-600 hover:bg-purple-700 text-white px-6 py-3 rounded-lg transition-colors"
-          >
-            New Project
-          </button>
-        </div>
-
-        {loading ? (
-          <div className="text-center py-12">
-            <div className="text-gray-400">Loading projects...</div>
-          </div>
-        ) : projects.length === 0 ? (
-          <div className="text-center py-12">
-            <div className="text-gray-400 mb-4">No projects yet</div>
-            <p className="text-sm text-gray-500">Click &quot;New Project&quot; to create your first idea</p>
-          </div>
-        ) : (
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-            {projects.map(project => (
-              <ProjectCard
-                key={project.id}
-                project={project}
-                onDelete={handleDeleteProject}
-              />
-            ))}
-          </div>
-        )}
+    <div className="container mx-auto px-4 py-8">
+      <div className="flex justify-between items-center mb-8">
+        <h1 className="text-3xl font-bold">Ideas Lab</h1>
+        <Dialog open={isModalOpen} onOpenChange={setIsModalOpen}>
+          <DialogTrigger asChild>
+            <Button>
+              <Plus className="w-4 h-4 mr-2" />
+              New Project
+            </Button>
+          </DialogTrigger>
+          <DialogContent>
+            <DialogHeader>
+              <DialogTitle>Create New Project</DialogTitle>
+            </DialogHeader>
+            <form onSubmit={handleCreateProject} className="space-y-4">
+              <div>
+                <label htmlFor="title" className="block text-sm font-medium mb-1">
+                  Title *
+                </label>
+                <Input
+                  id="title"
+                  type="text"
+                  value={newProject.title}
+                  onChange={(e) => setNewProject({ ...newProject, title: e.target.value })}
+                  required
+                  placeholder="Enter project title"
+                />
+              </div>
+              <div>
+                <label htmlFor="description" className="block text-sm font-medium mb-1">
+                  Description
+                </label>
+                <Textarea
+                  id="description"
+                  value={newProject.description}
+                  onChange={(e) => setNewProject({ ...newProject, description: e.target.value })}
+                  placeholder="Enter project description (optional)"
+                  rows={3}
+                />
+              </div>
+              <div className="flex justify-end space-x-2">
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={() => setIsModalOpen(false)}
+                  disabled={submitting}
+                >
+                  Cancel
+                </Button>
+                <Button type="submit" disabled={submitting || !newProject.title.trim()}>
+                  {submitting ? 'Creating...' : 'Create Project'}
+                </Button>
+              </div>
+            </form>
+          </DialogContent>
+        </Dialog>
       </div>
 
-      <NewProjectModal
-        isOpen={isModalOpen}
-        onClose={() => setIsModalOpen(false)}
-        onSuccess={fetchProjects}
-      />
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+        {projects.map((project) => (
+          <Card key={project.id} className="relative">
+            <button
+              onClick={() => handleDeleteProject(project.id)}
+              className="absolute top-2 right-2 p-1 text-gray-400 hover:text-red-500 transition-colors"
+              title="Delete project"
+            >
+              <X className="w-4 h-4" />
+            </button>
+            <CardHeader className="pr-8">
+              <CardTitle className="text-lg">{project.title}</CardTitle>
+              {project.description && (
+                <CardDescription>{project.description}</CardDescription>
+              )}
+            </CardHeader>
+            <CardContent>
+              <p className="text-sm text-gray-500">
+                Created {new Date(project.created_at).toLocaleDateString()}
+              </p>
+            </CardContent>
+          </Card>
+        ))}
+      </div>
+
+      {projects.length === 0 && (
+        <div className="text-center py-12">
+          <div className="text-gray-500 mb-4">
+            <div className="text-6xl mb-4">💡</div>
+            <p className="text-lg">No projects yet</p>
+            <p className="text-sm">Create your first project to get started!</p>
+          </div>
+        </div>
+      )}
     </div>
-  );
+  )
 }
