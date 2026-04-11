@@ -111,6 +111,32 @@ export default function ProjectDetailPage({ params }: { params: Promise<{ id: st
     financial_risks: { loading: false, output: null },
   });
 
+  // COO Agent state
+  const [cooResults, setCooResults] = useState<Record<string, { loading: boolean; output: string | null }>>({
+    operations_plan: { loading: false, output: null },
+    hiring_plan: { loading: false, output: null },
+    process_map: { loading: false, output: null },
+    kpis: { loading: false, output: null },
+  });
+
+  async function runCooAgent(action: string) {
+    setCooResults((prev) => ({ ...prev, [action]: { loading: true, output: null } }));
+    try {
+      const res = await fetch("/api/agents/coo", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action, projectId: id, projectTitle: project?.title, projectDescription: project?.description }),
+      });
+      const data = await res.json();
+      setCooResults((prev) => ({
+        ...prev,
+        [action]: { loading: false, output: data.ok ? data.result : data.error || "Failed" },
+      }));
+    } catch {
+      setCooResults((prev) => ({ ...prev, [action]: { loading: false, output: "Connection error" } }));
+    }
+  }
+
   async function runCfoAgent(action: string) {
     setCfoResults((prev) => ({ ...prev, [action]: { loading: true, output: null } }));
     try {
@@ -1045,6 +1071,53 @@ curl -X POST ${typeof window !== "undefined" ? window.location.origin : ""}/api/
                     </div>
                   </div>
                 ))}
+              </div>
+
+              {/* ── COO Agent ──────────────────────────── */}
+              <div className="space-y-4">
+                <div className="bg-gradient-to-r from-sky-500/10 to-indigo-500/10 rounded-xl border border-sky-500/30 p-4">
+                  <div className="flex items-center gap-2 mb-1">
+                    <span className="text-lg">⚙️</span>
+                    <h3 className="text-lg font-bold text-white">COO Agent</h3>
+                  </div>
+                  <p className="text-sm text-[#64748b]">Operations strategy — plans, processes, hiring, and KPIs. Results saved to project notes.</p>
+                </div>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                  {([
+                    { key: "operations_plan", icon: "📋", name: "Operations Plan", desc: "Day-to-day schedule, weekly cadence, automation", btnClass: "bg-sky-500/10 border-sky-500/30 text-sky-400 hover:bg-sky-500/20", borderClass: "border-sky-500/20" },
+                    { key: "hiring_plan", icon: "👥", name: "Hiring Plan", desc: "Roles needed, automate-first, hire triggers", btnClass: "bg-indigo-500/10 border-indigo-500/30 text-indigo-400 hover:bg-indigo-500/20", borderClass: "border-indigo-500/20" },
+                    { key: "process_map", icon: "🗺️", name: "Process Map", desc: "Customer journey, fulfillment, sales, support", btnClass: "bg-blue-500/10 border-blue-500/30 text-blue-400 hover:bg-blue-500/20", borderClass: "border-blue-500/20" },
+                    { key: "kpis", icon: "📊", name: "KPIs", desc: "5 key metrics with targets and red flags", btnClass: "bg-violet-500/10 border-violet-500/30 text-violet-400 hover:bg-violet-500/20", borderClass: "border-violet-500/20" },
+                  ] as const).map((panel) => (
+                    <div key={panel.key} className={`bg-[#12121a] rounded-xl border ${cooResults[panel.key].output ? panel.borderClass : "border-[#1e1e2e]"} flex flex-col`}>
+                      <div className="p-4 border-b border-[#1e1e2e]">
+                        <div className="flex items-center gap-2 mb-1">
+                          <span className="text-lg">{panel.icon}</span>
+                          <h4 className="text-sm font-bold text-white">{panel.name}</h4>
+                        </div>
+                        <p className="text-xs text-[#64748b]">{panel.desc}</p>
+                      </div>
+                      <div className="flex-1 p-4 min-h-[80px] max-h-[400px] overflow-y-auto">
+                        {cooResults[panel.key].loading ? (
+                          <div className="text-sm text-[#64748b] animate-pulse">Planning operations...</div>
+                        ) : cooResults[panel.key].output ? (
+                          <div className="text-sm text-[#e2e8f0] whitespace-pre-wrap leading-relaxed">{cooResults[panel.key].output}</div>
+                        ) : (
+                          <p className="text-sm text-[#64748b]">Click below to run analysis.</p>
+                        )}
+                      </div>
+                      <div className="p-4 border-t border-[#1e1e2e]">
+                        <button
+                          onClick={() => runCooAgent(panel.key)}
+                          disabled={cooResults[panel.key].loading}
+                          className={`w-full px-4 py-2.5 border rounded-lg text-sm font-medium disabled:opacity-50 transition-colors ${panel.btnClass}`}
+                        >
+                          {cooResults[panel.key].loading ? "Running..." : cooResults[panel.key].output ? "Re-run" : "Run Analysis"}
+                        </button>
+                      </div>
+                    </div>
+                  ))}
+                </div>
               </div>
 
               {/* ── Research Agent ──────────────────────── */}
