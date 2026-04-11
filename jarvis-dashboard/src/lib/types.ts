@@ -7,6 +7,7 @@ export interface Project {
   revenue_goal: string;
   progress: number;
   grade: "A" | "B" | "C";
+  drive_folder_id?: string | null;
   created_at: string;
 }
 

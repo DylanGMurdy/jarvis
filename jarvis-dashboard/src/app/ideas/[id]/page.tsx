@@ -7,7 +7,7 @@ import type { Project, ProjectTask, ProjectNote, ChatMessage } from "@/lib/types
 import VoiceChatInput from "@/components/VoiceChatInput";
 
 const STATUSES: Project["status"][] = ["Idea", "Planning", "Building", "Launched", "Revenue"];
-const TABS = ["Overview", "Tasks", "Notes", "Chat", "War Room", "History"] as const;
+const TABS = ["Overview", "Tasks", "Notes", "Chat", "Files", "War Room", "History"] as const;
 type Tab = (typeof TABS)[number];
 
 const GRADE_COLORS: Record<Project["grade"], string> = {
@@ -62,6 +62,14 @@ export default function ProjectDetailPage({ params }: { params: Promise<{ id: st
   const [historyLoading, setHistoryLoading] = useState(false);
   const [expandedHistoryId, setExpandedHistoryId] = useState<string | null>(null);
 
+  // Drive / Files state
+  const [driveConnected, setDriveConnected] = useState(false);
+  const [driveFolderId, setDriveFolderId] = useState<string | null>(null);
+  const [driveFolderLink, setDriveFolderLink] = useState<string | null>(null);
+  const [driveFiles, setDriveFiles] = useState<{ id: string; name: string; mimeType: string; webViewLink: string }[]>([]);
+  const [driveLoading, setDriveLoading] = useState(false);
+  const [driveError, setDriveError] = useState<string | null>(null);
+
   // War Room state
   const [warRoomResults, setWarRoomResults] = useState<Record<string, { loading: boolean; analysis: string | null }>>({
     devils_advocate: { loading: false, analysis: null },
@@ -85,6 +93,38 @@ export default function ProjectDetailPage({ params }: { params: Promise<{ id: st
     } catch {
       setWarRoomResults((prev) => ({ ...prev, [analyst]: { loading: false, analysis: "Connection error" } }));
     }
+  }
+
+  // ─── Drive helpers ──────────────────────────────────────
+  const loadDriveFiles = useCallback(async () => {
+    try {
+      const res = await fetch(`/api/projects/${id}/drive`);
+      const data = await res.json();
+      setDriveConnected(!!data.connected);
+      setDriveFolderId(data.folderId || null);
+      setDriveFolderLink(data.folderLink || null);
+      setDriveFiles(data.files || []);
+    } catch { /* silent */ }
+  }, [id]);
+
+  async function connectDrive() {
+    setDriveLoading(true);
+    setDriveError(null);
+    try {
+      const res = await fetch(`/api/projects/${id}/drive`, { method: "POST" });
+      const data = await res.json();
+      if (data.ok) {
+        setDriveConnected(true);
+        setDriveFolderId(data.folderId);
+        setDriveFolderLink(data.folderLink);
+        loadDriveFiles();
+      } else {
+        setDriveError(data.error || "Failed to connect Drive");
+      }
+    } catch {
+      setDriveError("Connection error");
+    }
+    setDriveLoading(false);
   }
 
   // ─── Load Data ───────────────────────────────────────────
@@ -140,6 +180,13 @@ export default function ProjectDetailPage({ params }: { params: Promise<{ id: st
       loadProjectHistory();
     }
   }, [activeTab, loadProjectHistory]);
+
+  // Load Drive files when Files tab is selected
+  useEffect(() => {
+    if (activeTab === "Files") {
+      loadDriveFiles();
+    }
+  }, [activeTab, loadDriveFiles]);
 
   useEffect(() => {
     chatEndRef.current?.scrollIntoView({ behavior: "smooth" });
@@ -523,6 +570,103 @@ curl -X POST ${typeof window !== "undefined" ? window.location.origin : ""}/api/
                   variant="full"
                 />
               </div>
+            </div>
+          )}
+
+          {/* ── Files (Google Drive) ──────────────────── */}
+          {activeTab === "Files" && (
+            <div className="space-y-4">
+              {!driveConnected ? (
+                <div className="bg-[#12121a] rounded-xl border border-[#1e1e2e] p-8 text-center">
+                  <div className="w-16 h-16 mx-auto mb-4 rounded-full bg-[#1e1e2e] flex items-center justify-center">
+                    <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="#6366f1" strokeWidth="1.5"><path d="M22 19a2 2 0 01-2 2H4a2 2 0 01-2-2V5a2 2 0 012-2h5l2 3h9a2 2 0 012 2z" /></svg>
+                  </div>
+                  <h3 className="text-lg font-bold text-white mb-2">Connect Google Drive</h3>
+                  <p className="text-sm text-[#64748b] mb-6 max-w-md mx-auto">
+                    Create a dedicated Drive folder for this project to store documents, assets, and files.
+                  </p>
+                  <button
+                    onClick={connectDrive}
+                    disabled={driveLoading}
+                    className="px-6 py-3 bg-[#6366f1] text-white rounded-lg text-sm font-medium hover:bg-[#5558e6] disabled:opacity-50 transition-colors"
+                  >
+                    {driveLoading ? "Creating folder..." : "Connect Google Drive"}
+                  </button>
+                  {driveError && (
+                    <p className="text-red-400 text-sm mt-4">{driveError}</p>
+                  )}
+                </div>
+              ) : (
+                <>
+                  <div className="bg-[#12121a] rounded-xl border border-[#1e1e2e] p-4 flex items-center justify-between">
+                    <div className="flex items-center gap-3">
+                      <div className="w-10 h-10 rounded-lg bg-[#6366f1]/10 flex items-center justify-center">
+                        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#6366f1" strokeWidth="2"><path d="M22 19a2 2 0 01-2 2H4a2 2 0 01-2-2V5a2 2 0 012-2h5l2 3h9a2 2 0 012 2z" /></svg>
+                      </div>
+                      <div>
+                        <h3 className="text-sm font-bold text-white">Jarvis — {project.title}</h3>
+                        <p className="text-xs text-[#64748b]">Google Drive folder connected</p>
+                      </div>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <button onClick={loadDriveFiles} className="px-3 py-1.5 text-xs text-[#64748b] hover:text-[#e2e8f0] transition-colors">Refresh</button>
+                      {driveFolderLink && (
+                        <a
+                          href={driveFolderLink}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="px-4 py-2 bg-[#6366f1] text-white rounded-lg text-sm font-medium hover:bg-[#5558e6] transition-colors inline-flex items-center gap-2"
+                        >
+                          Open in Drive
+                          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M7 17L17 7M17 7H7M17 7v10" /></svg>
+                        </a>
+                      )}
+                    </div>
+                  </div>
+
+                  {driveFolderLink && (
+                    <a
+                      href={driveFolderLink}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="block bg-[#12121a] rounded-xl border border-dashed border-[#1e1e2e] p-4 text-center hover:border-[#6366f1]/50 hover:bg-[#6366f1]/5 transition-colors"
+                    >
+                      <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#64748b" strokeWidth="2" className="mx-auto mb-2"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4M17 8l-5-5-5 5M12 3v12" /></svg>
+                      <span className="text-sm text-[#64748b]">Upload files — opens Drive folder</span>
+                    </a>
+                  )}
+
+                  {driveFiles.length === 0 ? (
+                    <p className="text-[#64748b] text-sm text-center py-8">No files in this folder yet. Upload files via Google Drive.</p>
+                  ) : (
+                    <div className="space-y-2">
+                      {driveFiles.map((file) => (
+                        <a
+                          key={file.id}
+                          href={file.webViewLink}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="flex items-center gap-3 bg-[#12121a] border border-[#1e1e2e] rounded-lg px-4 py-3 hover:border-[#6366f1]/30 transition-colors"
+                        >
+                          <div className="w-8 h-8 rounded bg-[#1e1e2e] flex items-center justify-center text-xs text-[#64748b] font-medium">
+                            {file.mimeType.includes("folder") ? "📁" :
+                             file.mimeType.includes("document") ? "📄" :
+                             file.mimeType.includes("spreadsheet") ? "📊" :
+                             file.mimeType.includes("presentation") ? "📽" :
+                             file.mimeType.includes("image") ? "🖼" :
+                             file.mimeType.includes("pdf") ? "📕" : "📎"}
+                          </div>
+                          <div className="flex-1 min-w-0">
+                            <p className="text-sm text-[#e2e8f0] truncate">{file.name}</p>
+                            <p className="text-xs text-[#64748b]">{file.mimeType.split(".").pop()?.replace("apps.", "") || file.mimeType}</p>
+                          </div>
+                          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#64748b" strokeWidth="2"><path d="M7 17L17 7M17 7H7M17 7v10" /></svg>
+                        </a>
+                      ))}
+                    </div>
+                  )}
+                </>
+              )}
             </div>
           )}
 
