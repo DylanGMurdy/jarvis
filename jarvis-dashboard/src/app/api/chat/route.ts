@@ -7,7 +7,7 @@ export async function POST(request: NextRequest) {
     return unauthorized();
   }
   
-  const ip = request.ip || 'unknown';
+  const ip = request.headers.get('x-forwarded-for')?.split(',')[0] || 'unknown';
   if (isRateLimited(ip)) {
     return getRateLimitResponse();
   }

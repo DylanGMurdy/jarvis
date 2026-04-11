@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { isRateLimited, getRateLimitResponse } from '@/lib/rateLimit';
 
 export async function POST(request: NextRequest) {
-  const ip = request.ip || 'unknown';
+  const ip = request.headers.get('x-forwarded-for')?.split(',')[0] || 'unknown';
   if (isRateLimited(ip)) {
     return getRateLimitResponse();
   }
@@ -21,7 +21,7 @@ export async function POST(request: NextRequest) {
     const response = NextResponse.json({ ok: true });
     
     // Set httpOnly cookie that expires in 30 days
-    response.cookies.set('jarvis_session', process.env.JARVIS_PASSWORD, {
+    response.cookies.set('jarvis_session', process.env.JARVIS_PASSWORD || '', {
       httpOnly: true,
       secure: process.env.NODE_ENV === 'production',
       sameSite: 'strict',
