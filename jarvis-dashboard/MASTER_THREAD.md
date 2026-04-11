@@ -1,116 +1,118 @@
-# JARVIS DASHBOARD — MASTER THREAD
+# MASTER THREAD — JARVIS DASHBOARD
 
-**Live: jarvis-dashboard-five.vercel.app**
+## OVERVIEW
+Jarvis Dashboard is a comprehensive system for managing AI agents, projects, and automated workflows. Built with Next.js 16, TypeScript, Tailwind CSS, and Supabase.
 
-This document tracks the complete development journey of the Jarvis Dashboard — a Next.js app that runs AI agents to build software companies from zero to $10M ARR.
+## CURRENT ARCHITECTURE
+
+### Database Schema (Supabase)
+- **profiles**: User profiles with role-based access
+- **projects**: Core project entity with metadata
+- **ideas**: Idea Lab conversations and iterations
+- **agents**: AI agent definitions and configurations
+- **agent_reports**: War Room agent analysis and reports
+- **conversations**: Chat histories and context
+- **files**: Project file storage and management
+- **notifications**: System alerts and updates
+
+### Core Features
+1. **Idea Lab**: Interactive brainstorming with AI
+2. **War Room**: Multi-agent analysis and strategy
+3. **Build**: Project execution and management
+4. **Files**: Document storage and organization
+5. **Agents**: AI assistant management
+
+### Technology Stack
+- **Frontend**: Next.js 16, React, TypeScript
+- **Styling**: Tailwind CSS, Shadcn/ui components
+- **Backend**: Supabase (PostgreSQL + Auth + Storage)
+- **AI Integration**: OpenAI API, custom agent orchestration
+- **Deployment**: Vercel
+
+## CURRENT STATUS
+- [x] Project structure established
+- [x] Database schema implemented
+- [x] Authentication system active
+- [x] Basic UI components in place
+- [ ] Idea Lab implementation
+- [ ] War Room multi-agent system
+- [ ] Build stage automation
+- [ ] File management system
+
+## KEY DECISIONS
+
+### UI/UX Principles
+- Dark theme primary (Jarvis aesthetic)
+- Clean, minimal interface
+- Real-time updates and feedback
+- Mobile-responsive design
+- Consistent component patterns
+
+### Data Flow
+1. Ideas → War Room → Build → Execution
+2. All stages preserve full context
+3. Agent outputs feed into next stage
+4. Files and reports auto-organize by project
+
+### Agent System
+- 21 specialized business agents
+- Context-aware analysis
+- Cross-agent information sharing
+- Iterative refinement capability
 
 ---
 
-## DAY 1 — April 9, 2026
+## WAR ROOM — FULL AGREED SPEC (April 11 2026)
 
-### FOUNDATION LAID
-- Next.js 16 + TypeScript + Tailwind CSS + Supabase
-- 5 core pages: Dashboard, Ideas, Agents, Analytics, Settings
-- Mobile-first responsive design
-- Dark theme with purple accents
-- Supabase auth + RLS policies
+### Vision
+The War Room is a living think tank. Not a static report. Dylan brings a fully formed idea from the Idea Lab and deploys his entire executive team simultaneously. They brief each other, analyze from their specialty, and deliver a comprehensive picture. Dylan interrogates, refines, and approves. Then moves to Build.
 
-### CORE FEATURES BUILT
-- **Idea Generator**: AI-powered startup ideas with save/favorite
-- **Agent Runner**: 12 specialized AI agents (Market Research, Legal, Finance, etc.)
-- **Analytics Dashboard**: Revenue tracking, user metrics, growth charts
-- **Settings Panel**: Profile, preferences, integrations
+### Deployment — Two Wave System
+Wave 1 (Foundation): CFO, CTO, CLO, COO fire first. They establish:
+- CFO: financial reality, budget, revenue model, runway
+- CTO: technical scope, what is and isn't buildable
+- CLO: legal constraints, compliance requirements
+- COO: operational requirements, resource needs
 
-### INFRASTRUCTURE
-- Supabase tables: ideas, agent_runs, user_profiles
-- OpenAI API integration for all AI features
-- Vercel deployment pipeline
-- Mobile PWA capabilities
+Wave 2 (Full Team): All 17 remaining agents fire simultaneously. Each receives a briefing package from Wave 1 so they understand the full picture — budget, technical constraints, legal limits, operational reality. CMO knows the budget. VP Sales knows the legal constraints. Head of Design knows the tech scope.
 
----
+### Layout
+- Jarvis Summary at top — cover page synthesizing everything, flagging conflicts, top 3 things team agreed on
+- C-Suite row below summary
+- VP row below C-Suite
+- Specialists row at bottom
+- Each agent has expandable card with full analysis + role-specific visuals
 
-## DAY 2 — April 10, 2026
+### Context Fed to Every Agent
+Complete Idea Lab conversation — every message Dylan and Jarvis exchanged about the idea, plus project title and description. Agents use full context to make analysis specific, not generic.
 
-### AGENT ECOSYSTEM EXPANDED
-- **War Room**: Multi-agent coordination panel
-- **Perplexity Integration**: Real web research capabilities
-- **12 → 18 agents**: Added Growth Hacker, PR Manager, Investor Relations, etc.
-- **Agent Chaining**: Agents can trigger other agents
-- **Context Sharing**: Agents share data across runs
+### Cross-Agent Briefing
+Agents know what relevant teammates said. CTO sees CFO budget before writing tech roadmap. CMO sees CSO target customer before writing content strategy. CLO constraints visible to all agents who need them.
 
-### BUSINESS INTELLIGENCE
-- **Market Research Agent**: Real-time competitor analysis
-- **Revenue Projections**: Financial modeling with Monte Carlo
-- **Legal Risk Assessment**: Automated compliance checking
-- **Technical Architecture**: System design recommendations
+### Live War Room Chat
+After reports populate, Dylan chats with Jarvis inside the War Room. Jarvis knows every agent's full report. Dylan can:
+- Ask about specific agent reports
+- Request individual agent re-runs with new instructions
+- Ask Jarvis to cross-reference agents for conflicts or alignment
+- Get Jarvis to surface top 3 agreements across all 21 agents
 
-### UX IMPROVEMENTS
-- Streamlined agent interface
-- Real-time progress indicators
-- Better mobile experience
-- Toast notifications system
+### Refresh System
+After interrogating and adding context through chat, Dylan hits Refresh. Every agent re-runs with updated context — original Idea Lab + War Room chat history. Reports update. Jarvis Summary refreshes. Can repeat until fully satisfied.
 
----
+### PDF Reports with Visuals
+After final refresh and approval, all agents generate professional PDF reports:
+- Each PDF: agent name, role, project name, date as header
+- Structured sections: Executive Summary, Key Findings, Recommendations, Risks, Next Steps
+- Role-specific visuals: CFO gets revenue charts, CMO gets market matrix, CTO gets architecture diagram
+- Jarvis Summary becomes the cover PDF
+- All 22 PDFs save automatically to project Files tab, tagged with project_id
+- Never mixed with other project files
 
-## DAY 3 — April 11, 2026
+### Move to Build
+Single button closes War Room and formally kicks off Build Stage execution.
 
-### FULL PE ORG CHART BUILT (21 agents)
-
-**C-Suite (6 agents)**
-- CMO: market analysis, content strategy, growth channels, brand voice
-- CFO: revenue model, unit economics, funding needs, financial risks
-- CTO: tech stack, build roadmap, MVP scope, technical risks
-- COO: operations plan, hiring plan, process map, KPIs
-- CLO: legal risks, entity structure, contracts needed, compliance checklist
-- CHRO: org structure, first hires, culture values, compensation model
-
-**VP Layer (7 agents)**
-- CSO: sales strategy, prospect list, sales script, pricing strategy
-- VP Sales: pipeline structure, objection handling, demo script, close playbook
-- VP Product: product vision, feature roadmap, user personas, competitive analysis
-- VP Engineering: architecture plan, sprint plan, tech debt audit, API design
-- VP Marketing: brand strategy, launch plan, marketing budget, campaign ideas
-- VP Finance: financial model, cash flow, pricing analysis, investor metrics
-- VP Operations: operations stack, SOP framework, vendor strategy, scale plan
-
-**Specialist Layer (8 agents)**
-- Head of Growth: growth loops, acquisition channels, retention strategy, growth experiments
-- Head of Content: content calendar, SEO strategy, content pillars, viral hooks
-- Head of Design: design system, brand assets, UX principles, landing page copy
-- Head of CX: CX strategy, NPS program, support stack, voice of customer
-- Data Analytics: metrics framework, dashboard design, data infrastructure, A/B testing
-- SDR: cold outreach, lead qualification, follow-up sequences, personalization
-- Partnerships: partnership targets, pitch, affiliate program, integration opportunities
-- Customer Success: onboarding flow, support playbook, churn prevention, upsell strategy
-- Head of PR: PR strategy, press release, media list, thought leadership
-- Investor Relations: investor update, pitch deck, cap table, fundraising timeline
-- Head of Recruiting: job descriptions, hiring process, culture fit, employer brand
-- Master Orchestrator: daily briefing, task assignment, weekly review, escalation
-
-### INFRASTRUCTURE COMPLETED TODAY
-- Supabase brain: 7 tables created (approval_queue, lindy_clients, project_notes, notifications, revenue_settings, drive_folder_id column)
-- Mobile PWA: fullscreen iPhone app, bottom tab bar
-- Revenue dashboard: MRR tracker, Lindy client list
-- Google Drive per project: each idea gets its own Drive folder
-- Perplexity research agent: real web research saved to project notes
-- Approval queue: agents hold external actions for Dylan to approve
-- Daily agent scheduler: runs every morning 8am UTC
-- Notification bell: smart alerts in dashboard header
-- PE org chart visual: interactive agent runner in Agents tab
-- War Room: 3 analyst panels + CMO + CFO panels
-- Superwhisper: voice input working system-wide
-
-### BUSINESS STATUS
-- Lindy Service Partner application: submitted, waiting on response from PartnerStack
-- Warm leads: 2 Narwhal PMs ready to close RIGHT NOW
-- Revenue: $0 MRR — first money comes from closing those leads
-- Next action: text both Narwhal PMs today
-
-### VERSION 2 PRIORITIES (next session)
-1. Wire all 21 agents into War Room simultaneously
-2. Add real tools: Twilio (SDR), Gmail API (outreach), Stripe (revenue), GitHub API (CTO)
-3. Build true agent orchestration — Master Orchestrator assigns and agents execute
-4. Jarvis-as-a-Service landing page and Stripe checkout
-5. Close Narwhal PM leads and track in revenue dashboard
-
-git add . && git commit -m "docs: Day 3 master thread update - full PE org chart complete" && git push
+### Business Context
+- Lindy agent business: being built separately by Dylan, not ready yet, Jarvis will run it when ready
+- First revenue: Dylan closing Narwhal PM leads personally, SDR agent fills calendar automatically
+- Longer term: virtual closer on commission, then AI-assisted closing with real-time coaching
+- Two tracks: Dylan doing personal outreach NOW while SDR automation builds pipeline in background
