@@ -1364,6 +1364,182 @@ curl -X POST ${typeof window !== "undefined" ? window.location.origin : ""}/api/
                 </div>
               </div>
 
+              {/* ── VP Product Agent ─────────────────────── */}
+              <div className="space-y-4">
+                <div className="bg-gradient-to-r from-purple-500/10 to-pink-500/10 rounded-xl border border-purple-500/30 p-4">
+                  <div className="flex items-center gap-2 mb-1">
+                    <span className="text-lg">🎯</span>
+                    <h3 className="text-lg font-bold text-white">VP of Product</h3>
+                  </div>
+                  <p className="text-sm text-[#64748b]">Product strategy — vision, roadmap, personas, and competitive positioning. Saved to notes.</p>
+                </div>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                  {([
+                    { key: "product_vision", icon: "🔭", name: "Product Vision", desc: "Vision, mission, north star metric, principles", btnClass: "bg-purple-500/10 border-purple-500/30 text-purple-400 hover:bg-purple-500/20", borderClass: "border-purple-500/20" },
+                    { key: "feature_roadmap", icon: "🗓️", name: "Feature Roadmap", desc: "90-day RICE-scored prioritized roadmap", btnClass: "bg-pink-500/10 border-pink-500/30 text-pink-400 hover:bg-pink-500/20", borderClass: "border-pink-500/20" },
+                    { key: "user_personas", icon: "👤", name: "User Personas", desc: "3 detailed personas with goals and pain points", btnClass: "bg-fuchsia-500/10 border-fuchsia-500/30 text-fuchsia-400 hover:bg-fuchsia-500/20", borderClass: "border-fuchsia-500/20" },
+                    { key: "competitive_analysis", icon: "⚔️", name: "Competitive Analysis", desc: "3-5 competitors with feature gaps and positioning", btnClass: "bg-violet-500/10 border-violet-500/30 text-violet-400 hover:bg-violet-500/20", borderClass: "border-violet-500/20" },
+                  ] as const).map((panel) => (
+                    <div key={panel.key} className={`bg-[#12121a] rounded-xl border ${vpProductResults[panel.key].output ? panel.borderClass : "border-[#1e1e2e]"} flex flex-col`}>
+                      <div className="p-4 border-b border-[#1e1e2e]">
+                        <div className="flex items-center gap-2 mb-1">
+                          <span className="text-lg">{panel.icon}</span>
+                          <h4 className="text-sm font-bold text-white">{panel.name}</h4>
+                        </div>
+                        <p className="text-xs text-[#64748b]">{panel.desc}</p>
+                      </div>
+                      <div className="flex-1 p-4 min-h-[80px] max-h-[400px] overflow-y-auto">
+                        {vpProductResults[panel.key].loading ? (
+                          <div className="text-sm text-[#64748b] animate-pulse">Defining product strategy...</div>
+                        ) : vpProductResults[panel.key].output ? (
+                          <div className="text-sm text-[#e2e8f0] whitespace-pre-wrap leading-relaxed">{vpProductResults[panel.key].output}</div>
+                        ) : (
+                          <p className="text-sm text-[#64748b]">Click below to run analysis.</p>
+                        )}
+                      </div>
+                      <div className="p-4 border-t border-[#1e1e2e]">
+                        <button
+                          onClick={() => runVpProduct(panel.key)}
+                          disabled={vpProductResults[panel.key].loading}
+                          className={`w-full px-4 py-2.5 border rounded-lg text-sm font-medium disabled:opacity-50 transition-colors ${panel.btnClass}`}
+                        >
+                          {vpProductResults[panel.key].loading ? "Running..." : vpProductResults[panel.key].output ? "Re-run" : "Run Analysis"}
+                        </button>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+
+              {/* ── VP Engineering Agent ──────────────────── */}
+              <div className="space-y-4">
+                <div className="bg-gradient-to-r from-orange-500/10 to-red-500/10 rounded-xl border border-orange-500/30 p-4">
+                  <div className="flex items-center gap-2 mb-1">
+                    <span className="text-lg">🔧</span>
+                    <h3 className="text-lg font-bold text-white">VP of Engineering</h3>
+                  </div>
+                  <p className="text-sm text-[#64748b]">Technical planning — architecture, sprints, tech debt prevention, API design. Saved to notes.</p>
+                </div>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                  {([
+                    { key: "architecture_plan", icon: "🏗️", name: "Architecture Plan", desc: "System design, DB schema, data flow, infra", btnClass: "bg-orange-500/10 border-orange-500/30 text-orange-400 hover:bg-orange-500/20", borderClass: "border-orange-500/20" },
+                    { key: "sprint_plan", icon: "🏃", name: "Sprint Plan", desc: "2-week sprint with tasks and story points", btnClass: "bg-red-500/10 border-red-500/30 text-red-400 hover:bg-red-500/20", borderClass: "border-red-500/20" },
+                    { key: "tech_debt_audit", icon: "🧹", name: "Tech Debt Audit", desc: "Top 5 risks and prevention strategies", btnClass: "bg-amber-500/10 border-amber-500/30 text-amber-400 hover:bg-amber-500/20", borderClass: "border-amber-500/20" },
+                    { key: "api_design", icon: "🔌", name: "API Design", desc: "Core endpoints with schemas and examples", btnClass: "bg-yellow-500/10 border-yellow-500/30 text-yellow-400 hover:bg-yellow-500/20", borderClass: "border-yellow-500/20" },
+                  ] as const).map((panel) => (
+                    <div key={panel.key} className={`bg-[#12121a] rounded-xl border ${vpEngResults[panel.key].output ? panel.borderClass : "border-[#1e1e2e]"} flex flex-col`}>
+                      <div className="p-4 border-b border-[#1e1e2e]">
+                        <div className="flex items-center gap-2 mb-1">
+                          <span className="text-lg">{panel.icon}</span>
+                          <h4 className="text-sm font-bold text-white">{panel.name}</h4>
+                        </div>
+                        <p className="text-xs text-[#64748b]">{panel.desc}</p>
+                      </div>
+                      <div className="flex-1 p-4 min-h-[80px] max-h-[400px] overflow-y-auto">
+                        {vpEngResults[panel.key].loading ? (
+                          <div className="text-sm text-[#64748b] animate-pulse">Engineering planning...</div>
+                        ) : vpEngResults[panel.key].output ? (
+                          <div className="text-sm text-[#e2e8f0] whitespace-pre-wrap leading-relaxed">{vpEngResults[panel.key].output}</div>
+                        ) : (
+                          <p className="text-sm text-[#64748b]">Click below to run analysis.</p>
+                        )}
+                      </div>
+                      <div className="p-4 border-t border-[#1e1e2e]">
+                        <button
+                          onClick={() => runVpEng(panel.key)}
+                          disabled={vpEngResults[panel.key].loading}
+                          className={`w-full px-4 py-2.5 border rounded-lg text-sm font-medium disabled:opacity-50 transition-colors ${panel.btnClass}`}
+                        >
+                          {vpEngResults[panel.key].loading ? "Running..." : vpEngResults[panel.key].output ? "Re-run" : "Run Analysis"}
+                        </button>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+
+              {/* ── CSO Agent ─────────────────────────── */}
+              <div className="bg-gradient-to-r from-[#f59e0b]/10 to-[#ef4444]/10 rounded-xl border border-[#f59e0b]/30 p-4">
+                <div className="flex items-center gap-2 mb-1">
+                  <span className="text-lg">💼</span>
+                  <h3 className="text-lg font-bold text-white">CSO Agent</h3>
+                </div>
+                <p className="text-sm text-[#64748b]">Chief Sales Officer — sales strategy, prospect list, outreach scripts, and pricing.</p>
+              </div>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                {([
+                  { key: "sales_strategy", icon: "🎯", name: "Sales Strategy", desc: "GTM strategy, ICP, sales motion, and first 90 days", btnClass: "bg-amber-500/10 border-amber-500/30 text-amber-400 hover:bg-amber-500/20", borderClass: "border-amber-500/20" },
+                  { key: "prospect_list", icon: "📋", name: "Prospect List", desc: "10 ideal first customers with how to reach them", btnClass: "bg-yellow-500/10 border-yellow-500/30 text-yellow-400 hover:bg-yellow-500/20", borderClass: "border-yellow-500/20" },
+                  { key: "sales_script", icon: "✉️", name: "Sales Script", desc: "Cold email sequence, LinkedIn DM, and SMS scripts", btnClass: "bg-orange-500/10 border-orange-500/30 text-orange-400 hover:bg-orange-500/20", borderClass: "border-orange-500/20" },
+                  { key: "pricing_strategy", icon: "💲", name: "Pricing Strategy", desc: "Pricing tiers, anchoring, and discount guidelines", btnClass: "bg-red-500/10 border-red-500/30 text-red-400 hover:bg-red-500/20", borderClass: "border-red-500/20" },
+                ] as const).map((panel) => (
+                  <div key={panel.key} className={`bg-[#12121a] rounded-xl border ${csoResults[panel.key].output ? panel.borderClass : "border-[#1e1e2e]"} flex flex-col`}>
+                    <div className="p-4 border-b border-[#1e1e2e]">
+                      <div className="flex items-center gap-2 mb-1">
+                        <span className="text-lg">{panel.icon}</span>
+                        <h4 className="text-sm font-bold text-white">{panel.name}</h4>
+                      </div>
+                      <p className="text-xs text-[#64748b]">{panel.desc}</p>
+                    </div>
+                    <div className="flex-1 p-4 min-h-[100px] max-h-[400px] overflow-y-auto">
+                      {csoResults[panel.key].loading ? (
+                        <div className="text-sm text-[#64748b] animate-pulse">CSO is working...</div>
+                      ) : csoResults[panel.key].output ? (
+                        <div className="text-sm text-[#e2e8f0] whitespace-pre-wrap leading-relaxed">{csoResults[panel.key].output}</div>
+                      ) : (
+                        <p className="text-sm text-[#64748b]">Click below to run.</p>
+                      )}
+                    </div>
+                    <div className="p-4 border-t border-[#1e1e2e]">
+                      <button onClick={() => runCso(panel.key)} disabled={csoResults[panel.key].loading} className={`w-full px-4 py-2.5 border rounded-lg text-sm font-medium disabled:opacity-50 transition-colors ${panel.btnClass}`}>
+                        {csoResults[panel.key].loading ? "Running..." : csoResults[panel.key].output ? "Re-run" : "Run Analysis"}
+                      </button>
+                    </div>
+                  </div>
+                ))}
+              </div>
+
+              {/* ── VP Sales Agent ────────────────────────── */}
+              <div className="bg-gradient-to-r from-[#a855f7]/10 to-[#6366f1]/10 rounded-xl border border-[#a855f7]/30 p-4">
+                <div className="flex items-center gap-2 mb-1">
+                  <span className="text-lg">🤝</span>
+                  <h3 className="text-lg font-bold text-white">VP of Sales</h3>
+                </div>
+                <p className="text-sm text-[#64748b]">Pipeline design, objection handling, demo scripts, and closing playbooks.</p>
+              </div>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                {([
+                  { key: "pipeline_structure", icon: "🔄", name: "Pipeline Structure", desc: "Sales stages with entry/exit criteria", btnClass: "bg-purple-500/10 border-purple-500/30 text-purple-400 hover:bg-purple-500/20", borderClass: "border-purple-500/20" },
+                  { key: "objection_handling", icon: "🛡️", name: "Objection Handling", desc: "Top 5 objections with word-for-word responses", btnClass: "bg-violet-500/10 border-violet-500/30 text-violet-400 hover:bg-violet-500/20", borderClass: "border-violet-500/20" },
+                  { key: "demo_script", icon: "🎬", name: "Demo Script", desc: "10-minute demo that converts prospects", btnClass: "bg-indigo-500/10 border-indigo-500/30 text-indigo-400 hover:bg-indigo-500/20", borderClass: "border-indigo-500/20" },
+                  { key: "close_playbook", icon: "🏆", name: "Close Playbook", desc: "Closing tactics for each deal stage", btnClass: "bg-fuchsia-500/10 border-fuchsia-500/30 text-fuchsia-400 hover:bg-fuchsia-500/20", borderClass: "border-fuchsia-500/20" },
+                ] as const).map((panel) => (
+                  <div key={panel.key} className={`bg-[#12121a] rounded-xl border ${vpSalesResults[panel.key].output ? panel.borderClass : "border-[#1e1e2e]"} flex flex-col`}>
+                    <div className="p-4 border-b border-[#1e1e2e]">
+                      <div className="flex items-center gap-2 mb-1">
+                        <span className="text-lg">{panel.icon}</span>
+                        <h4 className="text-sm font-bold text-white">{panel.name}</h4>
+                      </div>
+                      <p className="text-xs text-[#64748b]">{panel.desc}</p>
+                    </div>
+                    <div className="flex-1 p-4 min-h-[100px] max-h-[400px] overflow-y-auto">
+                      {vpSalesResults[panel.key].loading ? (
+                        <div className="text-sm text-[#64748b] animate-pulse">VP Sales is working...</div>
+                      ) : vpSalesResults[panel.key].output ? (
+                        <div className="text-sm text-[#e2e8f0] whitespace-pre-wrap leading-relaxed">{vpSalesResults[panel.key].output}</div>
+                      ) : (
+                        <p className="text-sm text-[#64748b]">Click below to run.</p>
+                      )}
+                    </div>
+                    <div className="p-4 border-t border-[#1e1e2e]">
+                      <button onClick={() => runVpSales(panel.key)} disabled={vpSalesResults[panel.key].loading} className={`w-full px-4 py-2.5 border rounded-lg text-sm font-medium disabled:opacity-50 transition-colors ${panel.btnClass}`}>
+                        {vpSalesResults[panel.key].loading ? "Running..." : vpSalesResults[panel.key].output ? "Re-run" : "Run Analysis"}
+                      </button>
+                    </div>
+                  </div>
+                ))}
+              </div>
+
               {/* ── Research Agent ──────────────────────── */}
               <div className="bg-[#12121a] rounded-xl border border-[#1e1e2e] p-4">
                 <div className="flex items-center gap-2 mb-1">
