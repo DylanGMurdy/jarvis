@@ -43,6 +43,8 @@ const AGENTS = [
   { name: "VP of Sales", status: "active" as const, desc: "Pipeline design, objection handling, demo scripts, closing.", lastAction: "Created objection handling guide" },
   { name: "VP of Marketing", status: "idle" as const, desc: "Brand strategy, launch plans, marketing budget, campaign ideas.", lastAction: "Awaiting first project analysis" },
   { name: "Head of Growth", status: "idle" as const, desc: "Growth loops, acquisition channels, retention strategy, experiments.", lastAction: "Awaiting first project analysis" },
+  { name: "SDR Agent", status: "active" as const, desc: "Cold outreach sequences, lead qualification, follow-ups, personalization.", lastAction: "Wrote 5-touch outreach for Lindy Agents" },
+  { name: "Partnerships", status: "active" as const, desc: "Partnership targets, pitch decks, affiliate programs, integrations.", lastAction: "Identified 10 partnership targets" },
 ];
 
 const StatusDot = ({ status }: { status: "active" | "idle" | "error" }) => (
