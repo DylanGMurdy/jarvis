@@ -5,6 +5,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useConversation } from "@/hooks/useConversation";
 import VoiceChatInput from "@/components/VoiceChatInput";
+import type { Project } from "@/lib/types";
 
 const SUGGESTED_PROMPTS = [
   "What should I focus on today?",
@@ -51,6 +52,71 @@ export default function ChatPage({ params }: { params: Promise<{ id: string }> }
     setInput("");
     await send(msg);
   }, [input, send]);
+
+  // ─── Smart Action Buttons ─────────────────────────────
+  const [actionLoading, setActionLoading] = useState<"idea" | "project" | null>(null);
+  const [toast, setToast] = useState<{ message: string; link?: string } | null>(null);
+  const [showProjectPicker, setShowProjectPicker] = useState(false);
+  const [projects, setProjects] = useState<Project[]>([]);
+  const [projectsLoaded, setProjectsLoaded] = useState(false);
+
+  const showActions = messages.length >= 3 && !sending;
+
+  async function loadProjects() {
+    if (projectsLoaded) return;
+    try {
+      const res = await fetch("/api/projects");
+      const data = await res.json();
+      setProjects(data.data || []);
+    } catch { /* silent */ }
+    setProjectsLoaded(true);
+  }
+
+  function showToast(message: string, link?: string) {
+    setToast({ message, link });
+    setTimeout(() => setToast(null), 4000);
+  }
+
+  async function handleNewIdea() {
+    setActionLoading("idea");
+    try {
+      const res = await fetch("/api/projects/create-from-chat", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ conversation: messages }),
+      });
+      const data = await res.json();
+      if (data.success && data.project) {
+        showToast(`Created "${data.project.title}"`, `/ideas/${data.project.id}`);
+      } else {
+        showToast(data.error || "Failed to create project");
+      }
+    } catch {
+      showToast("Connection error");
+    }
+    setActionLoading(null);
+  }
+
+  async function handleAddToProject(projectId: string) {
+    setShowProjectPicker(false);
+    setActionLoading("project");
+    try {
+      const res = await fetch("/api/projects/create-from-chat", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ conversation: messages, projectId }),
+      });
+      const data = await res.json();
+      if (data.success) {
+        showToast(`Added to "${data.projectTitle}" — ${data.tasksCreated} tasks, ${data.notesCreated} notes`);
+      } else {
+        showToast(data.error || "Failed to add to project");
+      }
+    } catch {
+      showToast("Connection error");
+    }
+    setActionLoading(null);
+  }
 
   const getSuggestedPrompts = (): string[] => {
     const lastMsg = messages[messages.length - 1];
@@ -156,6 +222,49 @@ export default function ChatPage({ params }: { params: Promise<{ id: string }> }
         <div ref={chatEndRef} />
       </div>
 
+      {/* Smart Action Buttons — after 3+ messages */}
+      {showActions && (
+        <div className="flex-shrink-0 px-3 py-2 border-t border-jarvis-border">
+          <div className="flex gap-2 relative">
+            <button
+              onClick={handleNewIdea}
+              disabled={actionLoading !== null}
+              className="flex items-center gap-1.5 text-xs px-3 py-1.5 rounded-full bg-jarvis-accent/10 border border-jarvis-accent/30 text-jarvis-accent active:bg-jarvis-accent/20 disabled:opacity-50 whitespace-nowrap"
+            >
+              {actionLoading === "idea" ? <span className="animate-pulse">Creating...</span> : <>💡 New Idea</>}
+            </button>
+            <button
+              onClick={() => { loadProjects(); setShowProjectPicker(!showProjectPicker); }}
+              disabled={actionLoading !== null}
+              className="flex items-center gap-1.5 text-xs px-3 py-1.5 rounded-full bg-jarvis-card border border-jarvis-border text-jarvis-muted active:text-jarvis-accent disabled:opacity-50 whitespace-nowrap"
+            >
+              {actionLoading === "project" ? <span className="animate-pulse">Adding...</span> : <>📌 Add to Project</>}
+            </button>
+            {showProjectPicker && (
+              <div className="absolute bottom-full left-0 mb-2 w-64 bg-jarvis-card border border-jarvis-border rounded-xl shadow-lg overflow-hidden z-20">
+                <div className="px-3 py-2 border-b border-jarvis-border">
+                  <p className="text-[11px] text-jarvis-muted font-medium">Select a project</p>
+                </div>
+                <div className="max-h-48 overflow-y-auto">
+                  {!projectsLoaded ? (
+                    <div className="px-3 py-4 text-xs text-jarvis-muted text-center animate-pulse">Loading...</div>
+                  ) : projects.length === 0 ? (
+                    <div className="px-3 py-4 text-xs text-jarvis-muted text-center">No projects yet</div>
+                  ) : (
+                    projects.map((p) => (
+                      <button key={p.id} onClick={() => handleAddToProject(p.id)} className="w-full text-left px-3 py-2.5 hover:bg-jarvis-border/30 active:bg-jarvis-accent/10 transition-colors border-b border-jarvis-border/50 last:border-0">
+                        <span className="text-sm text-white block truncate">{p.title}</span>
+                        <span className="text-[11px] text-jarvis-muted">{p.category} · {p.status}</span>
+                      </button>
+                    ))
+                  )}
+                </div>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+
       {/* Suggested prompts — shown when there are messages */}
       {messages.length > 0 && !sending && (
         <div className="flex-shrink-0 px-3 py-2 border-t border-jarvis-border overflow-x-auto">
@@ -184,6 +293,20 @@ export default function ChatPage({ params }: { params: Promise<{ id: string }> }
           variant="full"
         />
       </div>
+
+      {/* Toast */}
+      {toast && (
+        <div className="fixed top-4 left-1/2 -translate-x-1/2 z-50 animate-[fadeIn_0.2s_ease-out]">
+          <div className="bg-jarvis-card border border-jarvis-accent/40 rounded-xl px-4 py-3 shadow-lg flex items-center gap-3 max-w-sm">
+            <span className="text-sm text-white">{toast.message}</span>
+            {toast.link && (
+              <Link href={toast.link} className="text-xs text-jarvis-accent font-medium whitespace-nowrap hover:underline">
+                View →
+              </Link>
+            )}
+          </div>
+        </div>
+      )}
     </div>
   );
 }

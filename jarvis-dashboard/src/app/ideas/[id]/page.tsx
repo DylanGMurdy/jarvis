@@ -7,7 +7,7 @@ import type { Project, ProjectTask, ProjectNote, ChatMessage } from "@/lib/types
 import VoiceChatInput from "@/components/VoiceChatInput";
 
 const STATUSES: Project["status"][] = ["Idea", "Planning", "Building", "Launched", "Revenue"];
-const TABS = ["Overview", "Tasks", "Notes", "Chat", "History"] as const;
+const TABS = ["Overview", "Tasks", "Notes", "Chat", "War Room", "History"] as const;
 type Tab = (typeof TABS)[number];
 
 const GRADE_COLORS: Record<Project["grade"], string> = {
@@ -61,6 +61,31 @@ export default function ProjectDetailPage({ params }: { params: Promise<{ id: st
   const [projectHistory, setProjectHistory] = useState<{id: string; title: string; message_count: number; preview: string; messages: ChatMessage[]; created_at: string; updated_at: string}[]>([]);
   const [historyLoading, setHistoryLoading] = useState(false);
   const [expandedHistoryId, setExpandedHistoryId] = useState<string | null>(null);
+
+  // War Room state
+  const [warRoomResults, setWarRoomResults] = useState<Record<string, { loading: boolean; analysis: string | null }>>({
+    devils_advocate: { loading: false, analysis: null },
+    market_analyst: { loading: false, analysis: null },
+    risk_assessor: { loading: false, analysis: null },
+  });
+
+  async function runAnalysis(analyst: string) {
+    setWarRoomResults((prev) => ({ ...prev, [analyst]: { loading: true, analysis: null } }));
+    try {
+      const res = await fetch(`/api/projects/${id}/warroom`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ analyst }),
+      });
+      const data = await res.json();
+      setWarRoomResults((prev) => ({
+        ...prev,
+        [analyst]: { loading: false, analysis: data.success ? data.analysis : data.error || "Failed" },
+      }));
+    } catch {
+      setWarRoomResults((prev) => ({ ...prev, [analyst]: { loading: false, analysis: "Connection error" } }));
+    }
+  }
 
   // ─── Load Data ───────────────────────────────────────────
   const loadData = useCallback(async () => {
@@ -498,6 +523,58 @@ curl -X POST ${typeof window !== "undefined" ? window.location.origin : ""}/api/
                   variant="full"
                 />
               </div>
+            </div>
+          )}
+
+          {/* ── War Room ────────────────────────────────── */}
+          {activeTab === "War Room" && (
+            <div className="space-y-6">
+              <div className="bg-[#12121a] rounded-xl border border-[#1e1e2e] p-4">
+                <h3 className="text-lg font-bold text-white mb-1">War Room</h3>
+                <p className="text-sm text-[#64748b]">Run AI analyst panels to stress-test this idea before building.</p>
+              </div>
+              <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
+                {([
+                  { key: "devils_advocate", icon: "😈", name: "Devil\u2019s Advocate", desc: "Finds every flaw, blind spot, and weakness", color: "red" },
+                  { key: "market_analyst", icon: "📊", name: "Market Analyst", desc: "Market size, competition, timing, acquisition", color: "blue" },
+                  { key: "risk_assessor", icon: "⚠️", name: "Risk Assessor", desc: "Technical, market, execution, financial risk", color: "yellow" },
+                ] as const).map((panel) => (
+                  <div key={panel.key} className="bg-[#12121a] rounded-xl border border-[#1e1e2e] flex flex-col">
+                    <div className="p-4 border-b border-[#1e1e2e]">
+                      <div className="flex items-center gap-2 mb-1">
+                        <span className="text-lg">{panel.icon}</span>
+                        <h4 className="text-sm font-bold text-white">{panel.name}</h4>
+                      </div>
+                      <p className="text-xs text-[#64748b]">{panel.desc}</p>
+                    </div>
+                    <div className="flex-1 p-4 min-h-[100px]">
+                      {warRoomResults[panel.key].loading ? (
+                        <div className="text-sm text-[#64748b] animate-pulse">Analyzing...</div>
+                      ) : warRoomResults[panel.key].analysis ? (
+                        <div className="text-sm text-[#e2e8f0] whitespace-pre-wrap leading-relaxed">{warRoomResults[panel.key].analysis}</div>
+                      ) : (
+                        <p className="text-sm text-[#64748b]">Click below to run this analysis.</p>
+                      )}
+                    </div>
+                    <div className="p-4 border-t border-[#1e1e2e]">
+                      <button
+                        onClick={() => runAnalysis(panel.key)}
+                        disabled={warRoomResults[panel.key].loading}
+                        className={`w-full px-4 py-2.5 bg-${panel.color}-500/10 border border-${panel.color}-500/30 text-${panel.color}-400 rounded-lg text-sm font-medium hover:bg-${panel.color}-500/20 disabled:opacity-50 transition-colors`}
+                      >
+                        {warRoomResults[panel.key].loading ? "Running..." : warRoomResults[panel.key].analysis ? "Re-run Analysis" : "Run Analysis"}
+                      </button>
+                    </div>
+                  </div>
+                ))}
+              </div>
+              <button
+                onClick={() => { runAnalysis("devils_advocate"); runAnalysis("market_analyst"); runAnalysis("risk_assessor"); }}
+                disabled={warRoomResults.devils_advocate.loading || warRoomResults.market_analyst.loading || warRoomResults.risk_assessor.loading}
+                className="w-full px-4 py-3 bg-[#6366f1] text-white rounded-lg text-sm font-medium hover:bg-[#5558e6] disabled:opacity-50 transition-colors"
+              >
+                Run All Analysts
+              </button>
             </div>
           )}
 
