@@ -454,6 +454,10 @@ export default function Dashboard() {
                 <span className="ml-auto bg-red-500 text-white text-[10px] font-bold px-1.5 py-0.5 rounded-full min-w-[18px] text-center">{pendingApprovals}</span>
               )}
             </Link>
+            <Link href="/revenue" className="flex items-center gap-2 w-full text-left text-xs px-2 py-2 rounded hover:bg-jarvis-accent/20 text-jarvis-text hover:text-jarvis-accent transition-colors">
+              <span>💰</span>
+              <span>Revenue</span>
+            </Link>
           </div>
         )}
         {!sidebarCollapsed && (
