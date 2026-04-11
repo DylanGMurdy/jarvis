@@ -19,6 +19,9 @@ const AGENTS = [
   { name: "VP of Engineering", status: "active" as const, desc: "Technical planning — system architecture, 2-week sprint plans, tech debt prevention, and API design. Available in every project War Room.", lastAction: "Designed architecture for Lindy Agent Business" },
   { name: "VP of Marketing", status: "idle" as const, desc: "Brand strategy, 90-day launch plans, marketing budget allocation, and creative campaign ideas. Available in every project War Room.", lastAction: "Awaiting first project analysis" },
   { name: "Head of Growth", status: "idle" as const, desc: "Growth loops, acquisition channel ranking, retention strategies, and A/B test design. Available in every project War Room.", lastAction: "Awaiting first project analysis" },
+  { name: "Head of Content", status: "active" as const, desc: "Content strategy — 30-day calendars, SEO strategy, content pillars, and viral hooks. Available in every project War Room.", lastAction: "Built content calendar for Lindy Agent Business" },
+  { name: "Head of Design", status: "active" as const, desc: "Design leadership — design systems, brand assets, UX principles, and landing page copy. Available in every project War Room.", lastAction: "Defined design system for Lindy Agent Business" },
+  { name: "Customer Success Manager", status: "active" as const, desc: "Customer success — onboarding flows, support playbooks, churn prevention, and upsell strategies. Available in every project War Room.", lastAction: "Created onboarding flow for Lindy Agent Business" },
 ];
 
 const StatusDot = ({ status }: { status: "active" | "idle" | "error" }) => (
@@ -61,7 +64,7 @@ export default function AgentsTab({ openModal, closeModal }: AgentsTabProps) {
         <div className="flex items-center justify-between mb-3 flex-wrap gap-2">
           <div>
             <h2 className="text-lg font-bold">PE Business Empire</h2>
-            <p className="text-xs text-jarvis-muted">21 Agents &middot; Click nodes for details &middot; Pinch to zoom</p>
+            <p className="text-xs text-jarvis-muted">24 Agents &middot; Click nodes for details &middot; Pinch to zoom</p>
           </div>
           <div className="flex items-center gap-3 text-xs text-jarvis-muted">
             <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-jarvis-green" /> 1 Active</span>
