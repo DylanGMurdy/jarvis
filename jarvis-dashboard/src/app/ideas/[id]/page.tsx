@@ -77,6 +77,91 @@ export default function ProjectDetailPage({ params }: { params: Promise<{ id: st
     risk_assessor: { loading: false, analysis: null },
   });
 
+  // War Room Deploy + Summary + Chat
+  const [deployLoading, setDeployLoading] = useState(false);
+  const [deploySummary, setDeploySummary] = useState<{ consensus: string[]; conflicts: string[]; recommendations: string[]; verdict: string; confidence_score: number } | null>(null);
+  const [deployAgentCount, setDeployAgentCount] = useState(0);
+  const [warRoomChatMessages, setWarRoomChatMessages] = useState<{ role: "user" | "assistant"; content: string }[]>([]);
+  const [warRoomChatInput, setWarRoomChatInput] = useState("");
+  const [warRoomChatLoading, setWarRoomChatLoading] = useState(false);
+  const [warRoomContext, setWarRoomContext] = useState("");
+  const warRoomChatEndRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    warRoomChatEndRef.current?.scrollIntoView({ behavior: "smooth" });
+  }, [warRoomChatMessages]);
+
+  async function deployWarRoom() {
+    setDeployLoading(true);
+    setDeploySummary(null);
+    try {
+      const res = await fetch(`/api/projects/${id}/warroom/deploy`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+      });
+      const data = await res.json();
+      if (data.ok) {
+        setDeploySummary(data.summary);
+        setDeployAgentCount(data.agentCount);
+        // Build context string for chat
+        const allResults = [...(data.wave1 || []), ...(data.wave2 || [])];
+        const ctx = allResults
+          .filter((r: { ok: boolean }) => r.ok)
+          .map((r: { agent: string; action: string; result: string }) => `=== ${r.agent.toUpperCase()} — ${r.action} ===\n${r.result}`)
+          .join("\n\n");
+        setWarRoomContext(ctx);
+        loadData(); // Refresh notes
+      }
+    } catch { /* silent */ }
+    setDeployLoading(false);
+  }
+
+  async function sendWarRoomChat() {
+    const text = warRoomChatInput.trim();
+    if (!text) return;
+    const updated = [...warRoomChatMessages, { role: "user" as const, content: text }];
+    setWarRoomChatMessages(updated);
+    setWarRoomChatInput("");
+    setWarRoomChatLoading(true);
+    try {
+      const res = await fetch(`/api/projects/${id}/warroom/chat`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ message: text, warRoomContext }),
+      });
+      const data = await res.json();
+      setWarRoomChatMessages([...updated, { role: "assistant", content: data.response || "No response." }]);
+      // Handle rerun instructions
+      if (data.rerun && data.agent) {
+        const agentEndpoints: Record<string, string> = {
+          cmo: "/api/agents/cmo", cto: "/api/agents/cto", cfo: "/api/agents/cfo",
+          cso: "/api/agents/cso", coo: "/api/agents/coo", vp_sales: "/api/agents/vp_sales",
+          vp_finance: "/api/agents/vp_finance", sdr: "/api/agents/sdr", partnerships: "/api/agents/partnerships",
+          data_analytics: "/api/agents/data_analytics", clo: "/api/agents/clo", chro: "/api/agents/chro",
+        };
+        const endpoint = agentEndpoints[data.agent];
+        if (endpoint) {
+          setWarRoomChatMessages((prev) => [...prev, { role: "assistant", content: `Re-running ${data.agent.toUpperCase()} agent...` }]);
+          try {
+            const rerunRes = await fetch(endpoint, {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({ action: data.newInstructions || "market_analysis", projectId: id, projectTitle: project?.title, projectDescription: project?.description }),
+            });
+            const rerunData = await rerunRes.json();
+            if (rerunData.ok) {
+              setWarRoomChatMessages((prev) => [...prev, { role: "assistant", content: `${data.agent.toUpperCase()} re-run complete:\n\n${rerunData.result}` }]);
+              loadData();
+            }
+          } catch { /* silent */ }
+        }
+      }
+    } catch {
+      setWarRoomChatMessages([...updated, { role: "assistant", content: "Connection error." }]);
+    }
+    setWarRoomChatLoading(false);
+  }
+
   // Sales Agent state (Lindy project only)
   const isLindyProject = id.startsWith("8f662ef5");
   const [salesResults, setSalesResults] = useState<Record<string, { loading: boolean; output: string | null }>>({
@@ -207,6 +292,50 @@ export default function ProjectDetailPage({ params }: { params: Promise<{ id: st
     } catch {
       setCfoResults((prev) => ({ ...prev, [action]: { loading: false, output: "Connection error" } }));
     }
+  }
+
+  // War Room Refresh state
+  const [refreshLoading, setRefreshLoading] = useState(false);
+  const [refreshContext, setRefreshContext] = useState("");
+  const [refreshResults, setRefreshResults] = useState<{ results: Record<string, { agent: string; output: string }>; jarvisSummary: string } | null>(null);
+  const [pdfLoading, setPdfLoading] = useState(false);
+  const [pdfReports, setPdfReports] = useState<{ agentName: string; fileName: string; url: string }[] | null>(null);
+
+  async function runWarRoomRefresh() {
+    setRefreshLoading(true);
+    setRefreshResults(null);
+    setPdfReports(null);
+    try {
+      const res = await fetch(`/api/projects/${id}/warroom/refresh`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ updatedContext: refreshContext }),
+      });
+      const data = await res.json();
+      if (data.ok) {
+        setRefreshResults({ results: data.results, jarvisSummary: data.jarvisSummary });
+        setRefreshContext("");
+        loadData();
+      }
+    } catch { /* silent */ }
+    setRefreshLoading(false);
+  }
+
+  async function generatePdfReports() {
+    if (!refreshResults) return;
+    setPdfLoading(true);
+    try {
+      const res = await fetch(`/api/projects/${id}/warroom/generate-pdfs`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ results: refreshResults.results, jarvisSummary: refreshResults.jarvisSummary, projectName: project?.title }),
+      });
+      const data = await res.json();
+      if (data.ok) {
+        setPdfReports(data.reports);
+      }
+    } catch { /* silent */ }
+    setPdfLoading(false);
   }
 
   // Research Agent state
@@ -2059,6 +2188,155 @@ curl -X POST ${typeof window !== "undefined" ? window.location.origin : ""}/api/
                     <div className="text-sm text-[#e2e8f0] whitespace-pre-wrap leading-relaxed">{researchResult}</div>
                   </div>
                 )}
+              </div>
+
+              {/* ── Deploy All Agents ─────────────────────── */}
+              <div className="bg-gradient-to-r from-[#6366f1]/10 to-[#8b5cf6]/10 rounded-xl border border-[#6366f1]/30 p-6">
+                <div className="flex items-center justify-between mb-3">
+                  <div>
+                    <div className="flex items-center gap-2 mb-1">
+                      <span className="text-lg">🚀</span>
+                      <h3 className="text-lg font-bold text-white">Deploy All Agents</h3>
+                    </div>
+                    <p className="text-sm text-[#64748b]">Run the entire 21-agent executive team and get a synthesized Jarvis Summary.</p>
+                  </div>
+                  <button
+                    onClick={deployWarRoom}
+                    disabled={deployLoading}
+                    className="px-6 py-3 bg-[#6366f1] text-white rounded-lg text-sm font-medium hover:bg-[#5558e6] disabled:opacity-50 transition-colors whitespace-nowrap"
+                  >
+                    {deployLoading ? "Deploying agents..." : deploySummary ? "Re-deploy All" : "Deploy War Room"}
+                  </button>
+                </div>
+                {deployLoading && (
+                  <div className="flex items-center gap-3 mt-3 p-3 bg-[#0a0a0f] rounded-lg">
+                    <div className="w-4 h-4 border-2 border-[#6366f1] border-t-transparent rounded-full animate-spin" />
+                    <span className="text-sm text-[#64748b]">Running Wave 1 (C-Suite) then Wave 2 (VPs & Specialists)... this takes 30-60 seconds.</span>
+                  </div>
+                )}
+              </div>
+
+              {/* ── Jarvis Summary ─────────────────────────── */}
+              {deploySummary && (
+                <div className="bg-[#12121a] rounded-xl border border-[#6366f1]/30 overflow-hidden">
+                  <div className="p-4 bg-gradient-to-r from-[#6366f1]/10 to-transparent border-b border-[#1e1e2e]">
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-2">
+                        <div className="w-8 h-8 bg-[#6366f1] rounded-full flex items-center justify-center text-white text-xs font-bold">J</div>
+                        <div>
+                          <h3 className="text-sm font-bold text-white">Jarvis Executive Summary</h3>
+                          <p className="text-xs text-[#64748b]">{deployAgentCount} agents reported</p>
+                        </div>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <span className="text-xs text-[#64748b]">Confidence</span>
+                        <span className={`text-lg font-bold ${deploySummary.confidence_score >= 7 ? "text-[#22c55e]" : deploySummary.confidence_score >= 4 ? "text-[#eab308]" : "text-[#ef4444]"}`}>
+                          {deploySummary.confidence_score}/10
+                        </span>
+                      </div>
+                    </div>
+                  </div>
+                  <div className="p-4 space-y-4">
+                    <div>
+                      <h4 className="text-xs font-semibold text-[#6366f1] uppercase mb-2">Verdict</h4>
+                      <p className="text-sm text-[#e2e8f0] leading-relaxed">{deploySummary.verdict}</p>
+                    </div>
+                    {deploySummary.consensus.length > 0 && (
+                      <div>
+                        <h4 className="text-xs font-semibold text-[#22c55e] uppercase mb-2">Consensus</h4>
+                        <ul className="space-y-1">
+                          {deploySummary.consensus.map((item, i) => (
+                            <li key={i} className="text-sm text-[#e2e8f0] flex items-start gap-2">
+                              <span className="text-[#22c55e] mt-0.5">✓</span>
+                              <span>{item}</span>
+                            </li>
+                          ))}
+                        </ul>
+                      </div>
+                    )}
+                    {deploySummary.conflicts.length > 0 && (
+                      <div>
+                        <h4 className="text-xs font-semibold text-[#eab308] uppercase mb-2">Conflicts</h4>
+                        <ul className="space-y-1">
+                          {deploySummary.conflicts.map((item, i) => (
+                            <li key={i} className="text-sm text-[#e2e8f0] flex items-start gap-2">
+                              <span className="text-[#eab308] mt-0.5">⚡</span>
+                              <span>{item}</span>
+                            </li>
+                          ))}
+                        </ul>
+                      </div>
+                    )}
+                    {deploySummary.recommendations.length > 0 && (
+                      <div>
+                        <h4 className="text-xs font-semibold text-[#6366f1] uppercase mb-2">Top Recommendations</h4>
+                        <ol className="space-y-1">
+                          {deploySummary.recommendations.map((item, i) => (
+                            <li key={i} className="text-sm text-[#e2e8f0] flex items-start gap-2">
+                              <span className="text-[#6366f1] font-bold text-xs mt-0.5 w-4 shrink-0">{i + 1}.</span>
+                              <span>{item}</span>
+                            </li>
+                          ))}
+                        </ol>
+                      </div>
+                    )}
+                  </div>
+                </div>
+              )}
+
+              {/* ── War Room Live Chat ────────────────────── */}
+              <div className="bg-[#12121a] rounded-xl border border-[#1e1e2e] overflow-hidden">
+                <div className="p-4 border-b border-[#1e1e2e] flex items-center gap-2">
+                  <div className="w-6 h-6 bg-[#6366f1] rounded-full flex items-center justify-center text-white text-[10px] font-bold">J</div>
+                  <span className="text-sm font-bold text-white">War Room Chat</span>
+                  <span className="w-1.5 h-1.5 rounded-full bg-[#22c55e] animate-[pulse-dot_2s_ease-in-out_infinite]" />
+                  <span className="text-xs text-[#64748b]">Ask Jarvis about the analysis</span>
+                </div>
+                <div className="h-[300px] overflow-y-auto p-4 space-y-3">
+                  {warRoomChatMessages.length === 0 && (
+                    <div className="text-center py-8">
+                      <p className="text-sm text-[#64748b] mb-3">{warRoomContext ? "Ask me anything about the agent reports." : "Deploy the War Room first, then ask me questions."}</p>
+                      {warRoomContext && (
+                        <div className="flex flex-wrap justify-center gap-2">
+                          {["What's the biggest risk?", "Where do agents disagree?", "What should I build first?"].map((q) => (
+                            <button key={q} onClick={() => { setWarRoomChatInput(q); }} className="text-xs px-3 py-1.5 rounded-lg bg-[#1e1e2e] text-[#64748b] hover:text-[#e2e8f0] hover:border-[#6366f1]/30 transition-colors">{q}</button>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  )}
+                  {warRoomChatMessages.map((msg, i) => (
+                    <div key={i} className={`flex ${msg.role === "user" ? "justify-end" : "justify-start"}`}>
+                      <div className={`max-w-[80%] rounded-xl px-4 py-2.5 text-sm whitespace-pre-wrap ${msg.role === "user" ? "bg-[#6366f1] text-white" : "bg-[#1e1e2e] text-[#e2e8f0]"}`}>
+                        {msg.content}
+                      </div>
+                    </div>
+                  ))}
+                  {warRoomChatLoading && (
+                    <div className="flex justify-start"><div className="bg-[#1e1e2e] rounded-xl px-4 py-2.5 text-sm text-[#64748b]">Thinking...</div></div>
+                  )}
+                  <div ref={warRoomChatEndRef} />
+                </div>
+                <div className="p-3 border-t border-[#1e1e2e]">
+                  <div className="flex gap-2">
+                    <input
+                      type="text"
+                      value={warRoomChatInput}
+                      onChange={(e) => setWarRoomChatInput(e.target.value)}
+                      onKeyDown={(e) => e.key === "Enter" && !warRoomChatLoading && sendWarRoomChat()}
+                      placeholder={warRoomContext ? "Ask about the agent reports..." : "Deploy War Room first..."}
+                      disabled={!warRoomContext || warRoomChatLoading}
+                      className="flex-1 bg-[#0a0a0f] border border-[#1e1e2e] rounded-lg px-4 py-2.5 text-sm text-[#e2e8f0] placeholder-[#64748b] focus:outline-none focus:border-[#6366f1] disabled:opacity-50"
+                    />
+                    <button
+                      onClick={sendWarRoomChat}
+                      disabled={!warRoomContext || warRoomChatLoading || !warRoomChatInput.trim()}
+                      className="px-4 py-2.5 bg-[#6366f1] hover:bg-[#5558e6] text-white text-sm font-medium rounded-lg disabled:opacity-50 transition-colors"
+                    >
+                      Send
+                    </button>
+                  </div>
+                </div>
               </div>
             </div>
           )}
