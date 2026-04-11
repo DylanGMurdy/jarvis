@@ -1,129 +1,279 @@
 "use client";
 
 import { useState } from "react";
-import dynamic from "next/dynamic";
+import type { Project } from "@/lib/types";
 
-const OrgChart = dynamic(() => import("@/components/OrgChart"), { ssr: false });
+// ─── Agent definitions with API routes and actions ───────
+type AgentAction = { key: string; label: string };
+
+interface AgentDef {
+  name: string;
+  title: string;
+  status: "active" | "building";
+  route: string;
+  actions: AgentAction[];
+}
 
 type ModalData = { title: string; body: string; actions?: { label: string; onClick: () => void }[] } | null;
 
-const AGENTS = [
-  { name: "Lead Nurture Bot", status: "active" as const, desc: "Monitoring 23 builder leads across 4 communities. Last engagement: 12 min ago. Sent 3 follow-ups today.", lastAction: "Sent follow-up to Ivory Homes lead #847" },
-  { name: "Inbox Sentinel", status: "active" as const, desc: "Processing incoming emails, flagging priority items, drafting responses. 12 emails processed today, 3 flagged for review.", lastAction: "Flagged urgent email from broker" },
-  { name: "Content Writer", status: "idle" as const, desc: "Ready to generate listing descriptions, social posts, and marketing copy. Last run: Yesterday, generated 4 listings.", lastAction: "Generated 4 listing descriptions" },
-  { name: "Market Analyzer", status: "idle" as const, desc: "Tracks Utah County market data, inventory levels, and price trends. Next scheduled run: Tonight at 10pm.", lastAction: "Compiled weekly market report" },
-  { name: "Scheduler", status: "active" as const, desc: "Managing calendar, coordinating showings, and protecting family time blocks. 2 showings scheduled this week.", lastAction: "Blocked family time 6-8pm" },
-  { name: "CFO Agent", status: "active" as const, desc: "Financial analysis for all projects — revenue models, unit economics, funding needs, and risk assessment. Available in every project War Room.", lastAction: "Generated revenue model for Lindy Agent Business" },
-  { name: "COO Agent", status: "active" as const, desc: "Operations strategy — daily operations plans, hiring roadmaps, process maps, and KPI definitions. Available in every project War Room.", lastAction: "Built operations plan for Lindy Agent Business" },
-  { name: "VP of Product", status: "active" as const, desc: "Product strategy — vision, RICE-scored feature roadmaps, user personas, and competitive analysis. Available in every project War Room.", lastAction: "Created feature roadmap for Lindy Agent Business" },
-  { name: "VP of Engineering", status: "active" as const, desc: "Technical planning — system architecture, 2-week sprint plans, tech debt prevention, and API design. Available in every project War Room.", lastAction: "Designed architecture for Lindy Agent Business" },
-  { name: "VP of Marketing", status: "idle" as const, desc: "Brand strategy, 90-day launch plans, marketing budget allocation, and creative campaign ideas. Available in every project War Room.", lastAction: "Awaiting first project analysis" },
-  { name: "Head of Growth", status: "idle" as const, desc: "Growth loops, acquisition channel ranking, retention strategies, and A/B test design. Available in every project War Room.", lastAction: "Awaiting first project analysis" },
-  { name: "Head of Content", status: "active" as const, desc: "Content strategy — 30-day calendars, SEO strategy, content pillars, and viral hooks. Available in every project War Room.", lastAction: "Built content calendar for Lindy Agent Business" },
-  { name: "Head of Design", status: "active" as const, desc: "Design leadership — design systems, brand assets, UX principles, and landing page copy. Available in every project War Room.", lastAction: "Defined design system for Lindy Agent Business" },
-  { name: "Customer Success Manager", status: "active" as const, desc: "Customer success — onboarding flows, support playbooks, churn prevention, and upsell strategies. Available in every project War Room.", lastAction: "Created onboarding flow for Lindy Agent Business" },
-  { name: "Head of CX", status: "active" as const, desc: "Customer experience — journey maps, NPS programs, support stack recommendations, and voice of customer programs. Available in every project War Room.", lastAction: "Designed CX strategy for Lindy Agent Business" },
-  { name: "VP of Operations", status: "active" as const, desc: "Operational systems — tech stack, SOPs, vendor strategy, and scaling plans from 0 to 1000 customers. Available in every project War Room.", lastAction: "Built scale plan for Lindy Agent Business" },
-  { name: "Head of PR", status: "active" as const, desc: "Public relations — PR strategy, press releases, media lists, and thought leadership plans. Available in every project War Room.", lastAction: "Built PR strategy for Lindy Agent Business" },
+// Master orchestrator
+const JARVIS: AgentDef = {
+  name: "JARVIS", title: "Master Orchestrator", status: "active", route: "/api/agents/run",
+  actions: [{ key: "run", label: "Run Daily Agent" }],
+};
+
+// C-Suite row
+const C_SUITE: AgentDef[] = [
+  { name: "CMO", title: "Chief Marketing Officer", status: "active", route: "/api/agents/cmo",
+    actions: [{ key: "market_analysis", label: "Market Analysis" }, { key: "content_strategy", label: "Content Strategy" }, { key: "growth_channels", label: "Growth Channels" }, { key: "brand_voice", label: "Brand Voice" }] },
+  { name: "CFO", title: "Chief Financial Officer", status: "active", route: "/api/agents/cfo",
+    actions: [{ key: "revenue_model", label: "Revenue Model" }, { key: "unit_economics", label: "Unit Economics" }, { key: "funding_needs", label: "Funding Needs" }, { key: "financial_risks", label: "Financial Risks" }] },
+  { name: "CTO", title: "Chief Technology Officer", status: "active", route: "/api/agents/cto",
+    actions: [{ key: "tech_stack", label: "Tech Stack" }, { key: "build_roadmap", label: "Build Roadmap" }, { key: "technical_risks", label: "Technical Risks" }, { key: "mvp_scope", label: "MVP Scope" }] },
+  { name: "COO", title: "Chief Operating Officer", status: "active", route: "/api/agents/coo",
+    actions: [{ key: "operations_plan", label: "Operations Plan" }, { key: "hiring_plan", label: "Hiring Plan" }, { key: "process_map", label: "Process Map" }, { key: "kpis", label: "KPIs" }] },
+  { name: "CLO", title: "Chief Legal Officer", status: "active", route: "/api/agents/clo",
+    actions: [{ key: "legal_risks", label: "Legal Risks" }, { key: "entity_structure", label: "Entity Structure" }, { key: "contracts_needed", label: "Contracts Needed" }, { key: "compliance_checklist", label: "Compliance Checklist" }] },
+  { name: "CHRO", title: "Chief HR Officer", status: "active", route: "/api/agents/chro",
+    actions: [{ key: "org_structure", label: "Org Structure" }, { key: "first_hires", label: "First 3 Hires" }, { key: "culture_values", label: "Culture & Values" }, { key: "compensation_model", label: "Compensation Model" }] },
 ];
 
-const StatusDot = ({ status }: { status: "active" | "idle" | "error" }) => (
-  <span className={`inline-block w-2 h-2 rounded-full ${status === "active" ? "bg-jarvis-green animate-[pulse-dot_2s_ease-in-out_infinite]" : status === "idle" ? "bg-jarvis-yellow" : "bg-jarvis-red"}`} />
-);
+// VP row
+const VPS: AgentDef[] = [
+  { name: "CSO", title: "Chief Sales Officer", status: "active", route: "/api/agents/cso",
+    actions: [{ key: "sales_strategy", label: "Sales Strategy" }, { key: "prospect_list", label: "Prospect List" }, { key: "sales_script", label: "Sales Script" }, { key: "pricing_strategy", label: "Pricing Strategy" }] },
+  { name: "VP Sales", title: "VP of Sales", status: "active", route: "/api/agents/vp_sales",
+    actions: [{ key: "pipeline_structure", label: "Pipeline Structure" }, { key: "objection_handling", label: "Objection Handling" }, { key: "demo_script", label: "Demo Script" }, { key: "close_playbook", label: "Close Playbook" }] },
+  { name: "VP Product", title: "VP of Product", status: "active", route: "/api/agents/vp_product",
+    actions: [{ key: "product_vision", label: "Product Vision" }, { key: "feature_roadmap", label: "Feature Roadmap" }, { key: "user_personas", label: "User Personas" }, { key: "competitive_analysis", label: "Competitive Analysis" }] },
+  { name: "VP Eng", title: "VP of Engineering", status: "active", route: "/api/agents/vp_engineering",
+    actions: [{ key: "architecture_plan", label: "Architecture Plan" }, { key: "sprint_plan", label: "Sprint Plan" }, { key: "tech_debt_audit", label: "Tech Debt Audit" }, { key: "api_design", label: "API Design" }] },
+  { name: "VP Marketing", title: "VP of Marketing", status: "active", route: "/api/agents/vp_marketing",
+    actions: [{ key: "brand_strategy", label: "Brand Strategy" }, { key: "launch_plan", label: "90-Day Launch Plan" }, { key: "marketing_budget", label: "Marketing Budget" }, { key: "campaign_ideas", label: "Campaign Ideas" }] },
+  { name: "VP Finance", title: "VP of Finance", status: "active", route: "/api/agents/vp_finance",
+    actions: [{ key: "financial_model", label: "Financial Model" }, { key: "cash_flow", label: "Cash Flow" }, { key: "pricing_analysis", label: "Pricing Analysis" }, { key: "investor_metrics", label: "Investor Metrics" }] },
+  { name: "VP Ops", title: "VP of Operations", status: "active", route: "/api/agents/vp_operations",
+    actions: [{ key: "operations_stack", label: "Operations Stack" }, { key: "sop_framework", label: "SOP Framework" }, { key: "vendor_strategy", label: "Vendor Strategy" }, { key: "scale_plan", label: "Scale Plan" }] },
+];
+
+// Specialists row
+const SPECIALISTS: AgentDef[] = [
+  { name: "Head of Growth", title: "Head of Growth", status: "active", route: "/api/agents/head_of_growth",
+    actions: [{ key: "growth_loops", label: "Growth Loops" }, { key: "acquisition_channels", label: "Acquisition Channels" }, { key: "retention_strategy", label: "Retention Strategy" }, { key: "growth_experiments", label: "Growth Experiments" }] },
+  { name: "Head of Content", title: "Head of Content", status: "active", route: "/api/agents/head_of_content",
+    actions: [{ key: "content_calendar", label: "Content Calendar" }, { key: "seo_strategy", label: "SEO Strategy" }, { key: "content_pillars", label: "Content Pillars" }, { key: "viral_hooks", label: "Viral Hooks" }] },
+  { name: "Head of Design", title: "Head of Design", status: "active", route: "/api/agents/head_of_design",
+    actions: [{ key: "design_system", label: "Design System" }, { key: "brand_assets", label: "Brand Assets" }, { key: "ux_principles", label: "UX Principles" }, { key: "landing_page_copy", label: "Landing Page Copy" }] },
+  { name: "Head of CX", title: "Head of CX", status: "active", route: "/api/agents/head_cx",
+    actions: [{ key: "cx_strategy", label: "CX Strategy" }, { key: "nps_program", label: "NPS Program" }, { key: "support_stack", label: "Support Stack" }, { key: "voice_of_customer", label: "Voice of Customer" }] },
+  { name: "Data Analytics", title: "Data Analytics", status: "active", route: "/api/agents/data_analytics",
+    actions: [{ key: "metrics_framework", label: "Metrics Framework" }, { key: "dashboard_design", label: "Dashboard Design" }, { key: "data_infrastructure", label: "Data Infrastructure" }, { key: "ab_testing_framework", label: "A/B Testing" }] },
+  { name: "SDR", title: "Sales Dev Rep", status: "active", route: "/api/agents/sdr",
+    actions: [{ key: "cold_outreach", label: "Cold Outreach" }, { key: "lead_qualification", label: "Lead Qualification" }, { key: "follow_up_sequences", label: "Follow-Up Sequences" }, { key: "outreach_personalization", label: "Personalization" }] },
+  { name: "Partnerships", title: "Partnerships", status: "active", route: "/api/agents/partnerships",
+    actions: [{ key: "partnership_targets", label: "Partnership Targets" }, { key: "partnership_pitch", label: "Partnership Pitch" }, { key: "affiliate_program", label: "Affiliate Program" }, { key: "integration_opportunities", label: "Integrations" }] },
+  { name: "Head of PR", title: "Head of PR", status: "active", route: "/api/agents/head_of_pr",
+    actions: [{ key: "pr_strategy", label: "PR Strategy" }, { key: "press_release", label: "Press Release" }, { key: "media_list", label: "Media List" }, { key: "thought_leadership", label: "Thought Leadership" }] },
+  { name: "Customer Success", title: "Customer Success", status: "active", route: "/api/agents/customer_success",
+    actions: [{ key: "onboarding_flow", label: "Onboarding Flow" }, { key: "support_playbook", label: "Support Playbook" }, { key: "churn_prevention", label: "Churn Prevention" }, { key: "upsell_strategy", label: "Upsell Strategy" }] },
+];
+
+const ALL_AGENTS = [JARVIS, ...C_SUITE, ...VPS, ...SPECIALISTS];
+
+// ─── Components ──────────────────────────────────────────
+
+function AgentCard({ agent, onClick }: { agent: AgentDef; onClick: () => void }) {
+  const isJarvis = agent.name === "JARVIS";
+  return (
+    <button
+      onClick={onClick}
+      className={`flex flex-col items-center text-center p-2 rounded-xl border transition-all hover:scale-105 cursor-pointer min-w-0 ${
+        isJarvis
+          ? "bg-jarvis-accent/20 border-jarvis-accent/50 hover:border-jarvis-accent shadow-lg shadow-jarvis-accent/10"
+          : "bg-jarvis-card border-jarvis-border hover:border-jarvis-accent/50"
+      }`}
+    >
+      <div className={`w-8 h-8 rounded-full flex items-center justify-center text-xs font-bold mb-1 ${
+        isJarvis ? "bg-jarvis-accent text-black" : agent.status === "active" ? "bg-jarvis-green/20 text-jarvis-green" : "bg-jarvis-yellow/20 text-jarvis-yellow"
+      }`}>
+        {agent.name.slice(0, 2)}
+      </div>
+      <span className="text-[11px] font-semibold text-white leading-tight truncate w-full">{agent.name}</span>
+      <span className="text-[9px] text-jarvis-muted leading-tight truncate w-full">{agent.title}</span>
+      <span className={`text-[8px] mt-0.5 px-1.5 py-0.5 rounded-full ${
+        agent.status === "active" ? "bg-jarvis-green/20 text-jarvis-green" : "bg-jarvis-yellow/20 text-jarvis-yellow"
+      }`}>
+        {agent.status === "active" ? "Active" : "Building"}
+      </span>
+    </button>
+  );
+}
+
+function OrgRow({ label, agents, onAgentClick }: { label: string; agents: AgentDef[]; onAgentClick: (a: AgentDef) => void }) {
+  return (
+    <div>
+      <div className="text-[10px] font-semibold text-jarvis-muted uppercase tracking-wider mb-2 text-center">{label}</div>
+      <div className="flex flex-wrap justify-center gap-2">
+        {agents.map((a) => (
+          <div key={a.name} className="w-[calc(16.666%-8px)] min-w-[90px] max-w-[130px]">
+            <AgentCard agent={a} onClick={() => onAgentClick(a)} />
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+// ─── Main Component ──────────────────────────────────────
 
 interface AgentsTabProps {
   openModal: (data: ModalData) => void;
   closeModal: () => void;
+  projects: Project[];
 }
 
-export default function AgentsTab({ openModal, closeModal }: AgentsTabProps) {
-  const [running, setRunning] = useState(false);
-  const [result, setResult] = useState<{ projectsProcessed: number; tasksGenerated: number } | null>(null);
-  const [error, setError] = useState<string | null>(null);
+export default function AgentsTab({ openModal, closeModal, projects }: AgentsTabProps) {
+  const [selectedProjectId, setSelectedProjectId] = useState<string>("");
+  const [runningAction, setRunningAction] = useState<string | null>(null);
+  const [lastResult, setLastResult] = useState<{ agent: string; action: string; result: string } | null>(null);
 
-  async function triggerDailyAgent() {
-    setRunning(true);
-    setResult(null);
-    setError(null);
+  const selectedProject = projects.find((p) => p.id === selectedProjectId);
+
+  async function runAgentAction(agent: AgentDef, actionKey: string) {
+    if (!selectedProject) return;
+    setRunningAction(`${agent.name}:${actionKey}`);
+    closeModal();
+
     try {
-      const res = await fetch("/api/agents/run", { method: "POST" });
-      const data = await res.json();
-      if (!res.ok || !data.ok) {
-        setError(data.error || "Agent run failed");
-      } else {
-        setResult({ projectsProcessed: data.projectsProcessed, tasksGenerated: data.tasksGenerated });
+      // Special case for the daily agent runner
+      if (agent.route === "/api/agents/run") {
+        const res = await fetch("/api/agents/run", { method: "POST" });
+        const data = await res.json();
+        setLastResult({
+          agent: agent.name,
+          action: "Daily Run",
+          result: data.ok ? `Processed ${data.projectsProcessed} projects, generated ${data.tasksGenerated} tasks` : (data.error || "Failed"),
+        });
+        return;
       }
+
+      const res = await fetch(agent.route, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          action: actionKey,
+          projectId: selectedProject.id,
+          projectTitle: selectedProject.title,
+          projectDescription: selectedProject.description,
+        }),
+      });
+      const data = await res.json();
+      setLastResult({
+        agent: agent.name,
+        action: data.action || actionKey,
+        result: data.ok ? (data.result?.slice(0, 500) + (data.result?.length > 500 ? "..." : "")) : (data.error || "Failed"),
+      });
     } catch {
-      setError("Network error");
+      setLastResult({ agent: agent.name, action: actionKey, result: "Network error" });
     } finally {
-      setRunning(false);
+      setRunningAction(null);
     }
   }
 
+  function openAgentModal(agent: AgentDef) {
+    if (!selectedProject) {
+      openModal({
+        title: agent.name,
+        body: `${agent.title}\n\nSelect a project first to run ${agent.name} actions.`,
+        actions: [{ label: "OK", onClick: closeModal }],
+      });
+      return;
+    }
+
+    openModal({
+      title: `${agent.name} — ${agent.title}`,
+      body: `Project: ${selectedProject.title}\n\nSelect an action to run:`,
+      actions: agent.actions.map((a) => ({
+        label: runningAction === `${agent.name}:${a.key}` ? "Running..." : a.label,
+        onClick: () => runAgentAction(agent, a.key),
+      })),
+    });
+  }
+
+  const activeCount = ALL_AGENTS.filter((a) => a.status === "active").length;
+  const buildingCount = ALL_AGENTS.filter((a) => a.status === "building").length;
+
   return (
     <div className="space-y-6 animate-[slideUp_0.3s_ease-out]">
-      {/* Org Chart */}
-      <div>
-        <div className="flex items-center justify-between mb-3 flex-wrap gap-2">
-          <div>
-            <h2 className="text-lg font-bold">PE Business Empire</h2>
-            <p className="text-xs text-jarvis-muted">24 Agents &middot; Click nodes for details &middot; Pinch to zoom</p>
-          </div>
-          <div className="flex items-center gap-3 text-xs text-jarvis-muted">
-            <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-jarvis-green" /> 1 Active</span>
-            <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-jarvis-yellow" /> 2 In Dev</span>
-            <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-jarvis-muted" /> 18 Planned</span>
+      {/* Header with project selector */}
+      <div className="flex items-center justify-between flex-wrap gap-3">
+        <div>
+          <h2 className="text-lg font-bold">PE Business Empire</h2>
+          <p className="text-xs text-jarvis-muted">{ALL_AGENTS.length} Agents &middot; {activeCount} Active &middot; {buildingCount} Building</p>
+        </div>
+        <div className="flex items-center gap-3">
+          <select
+            value={selectedProjectId}
+            onChange={(e) => setSelectedProjectId(e.target.value)}
+            className="bg-jarvis-card border border-jarvis-border rounded-lg px-3 py-1.5 text-sm text-white focus:border-jarvis-accent outline-none min-w-[200px]"
+          >
+            <option value="">Select a project...</option>
+            {projects.map((p) => (
+              <option key={p.id} value={p.id}>{p.title}</option>
+            ))}
+          </select>
+          <div className="flex items-center gap-2 text-xs text-jarvis-muted">
+            <span className="w-2 h-2 rounded-full bg-jarvis-green" /> Active
+            <span className="w-2 h-2 rounded-full bg-jarvis-yellow" /> Building
           </div>
         </div>
-        <OrgChart />
       </div>
 
-      {/* Agent Activity */}
-      <div>
-        <div className="flex items-center justify-between mb-3">
-          <h3 className="text-sm font-semibold text-jarvis-muted">Agent Activity</h3>
-          <div className="flex items-center gap-3">
-            <button
-              onClick={triggerDailyAgent}
-              disabled={running}
-              className="text-xs px-3 py-1.5 rounded-lg bg-jarvis-accent/20 text-jarvis-accent hover:bg-jarvis-accent/30 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-            >
-              {running ? "Running..." : "Run Daily Agent"}
-            </button>
-            <div className="flex items-center gap-2 text-xs text-jarvis-muted">
-              <StatusDot status="active" /> {AGENTS.filter((a) => a.status === "active").length} Active
-              <StatusDot status="idle" /> {AGENTS.filter((a) => a.status === "idle").length} Idle
-            </div>
+      {/* Last result banner */}
+      {runningAction && (
+        <div className="p-3 rounded-lg bg-jarvis-accent/10 border border-jarvis-accent/30 text-sm text-jarvis-accent animate-pulse">
+          Running {runningAction.replace(":", " — ")}...
+        </div>
+      )}
+      {lastResult && !runningAction && (
+        <div className="p-3 rounded-lg bg-jarvis-green/10 border border-jarvis-green/30 text-sm">
+          <div className="font-semibold text-jarvis-green mb-1">{lastResult.agent} — {lastResult.action}</div>
+          <div className="text-jarvis-muted text-xs whitespace-pre-wrap">{lastResult.result}</div>
+        </div>
+      )}
+
+      {/* Org Chart Layout */}
+      <div className="space-y-4">
+        {/* JARVIS — Top */}
+        <div className="flex justify-center">
+          <div className="w-[140px]">
+            <AgentCard agent={JARVIS} onClick={() => openAgentModal(JARVIS)} />
           </div>
         </div>
 
-        {result && (
-          <div className="mb-3 p-3 rounded-lg bg-jarvis-green/10 border border-jarvis-green/30 text-sm text-jarvis-green">
-            Processed {result.projectsProcessed} projects, generated {result.tasksGenerated} tasks
-          </div>
-        )}
-        {error && (
-          <div className="mb-3 p-3 rounded-lg bg-jarvis-red/10 border border-jarvis-red/30 text-sm text-jarvis-red">
-            {error}
-          </div>
-        )}
-
-        <div className="space-y-2">
-          {AGENTS.map((agent, i) => (
-            <button key={i} onClick={() => openModal({ title: agent.name, body: `Status: ${agent.status.toUpperCase()}\n\n${agent.desc}\n\nLast Action: ${agent.lastAction}`, actions: [{ label: agent.status === "active" ? "Pause Agent" : "Activate Agent", onClick: closeModal }, { label: "View Logs", onClick: closeModal }, { label: "Configure", onClick: closeModal }] })} className="w-full bg-jarvis-card border border-jarvis-border rounded-xl p-4 text-left hover:border-jarvis-accent/50 transition-all cursor-pointer">
-              <div className="flex items-center justify-between">
-                <div className="flex items-center gap-3">
-                  <StatusDot status={agent.status} />
-                  <div>
-                    <h3 className="font-semibold text-white">{agent.name}</h3>
-                    <p className="text-xs text-jarvis-muted mt-0.5">{agent.lastAction}</p>
-                  </div>
-                </div>
-                <span className={`text-xs px-2 py-1 rounded ${agent.status === "active" ? "bg-jarvis-green/20 text-jarvis-green" : "bg-jarvis-yellow/20 text-jarvis-yellow"}`}>{agent.status}</span>
-              </div>
-            </button>
-          ))}
+        {/* Connector line */}
+        <div className="flex justify-center">
+          <div className="w-px h-6 bg-jarvis-border" />
         </div>
+
+        {/* C-Suite */}
+        <OrgRow label="C-Suite" agents={C_SUITE} onAgentClick={openAgentModal} />
+
+        {/* Connector */}
+        <div className="flex justify-center">
+          <div className="w-px h-6 bg-jarvis-border" />
+        </div>
+
+        {/* VPs */}
+        <OrgRow label="Vice Presidents" agents={VPS} onAgentClick={openAgentModal} />
+
+        {/* Connector */}
+        <div className="flex justify-center">
+          <div className="w-px h-6 bg-jarvis-border" />
+        </div>
+
+        {/* Specialists */}
+        <OrgRow label="Specialists & Leads" agents={SPECIALISTS} onAgentClick={openAgentModal} />
       </div>
     </div>
   );
