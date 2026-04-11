@@ -13,6 +13,7 @@ const AGENTS = [
   { name: "Content Writer", status: "idle" as const, desc: "Ready to generate listing descriptions, social posts, and marketing copy. Last run: Yesterday, generated 4 listings.", lastAction: "Generated 4 listing descriptions" },
   { name: "Market Analyzer", status: "idle" as const, desc: "Tracks Utah County market data, inventory levels, and price trends. Next scheduled run: Tonight at 10pm.", lastAction: "Compiled weekly market report" },
   { name: "Scheduler", status: "active" as const, desc: "Managing calendar, coordinating showings, and protecting family time blocks. 2 showings scheduled this week.", lastAction: "Blocked family time 6-8pm" },
+  { name: "CFO Agent", status: "active" as const, desc: "Financial analysis for all projects — revenue models, unit economics, funding needs, and risk assessment. Available in every project War Room.", lastAction: "Generated revenue model for Lindy Agent Business" },
 ];
 
 const StatusDot = ({ status }: { status: "active" | "idle" | "error" }) => (
