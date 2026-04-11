@@ -187,6 +187,38 @@ export default function ProjectDetailPage({ params }: { params: Promise<{ id: st
     }
   }
 
+  // CTO Agent state
+  const [ctoResults, setCtoResults] = useState<Record<string, { loading: boolean; output: string | null }>>({
+    tech_stack: { loading: false, output: null },
+    build_roadmap: { loading: false, output: null },
+    technical_risks: { loading: false, output: null },
+    mvp_scope: { loading: false, output: null },
+  });
+
+  async function runCto(action: string) {
+    setCtoResults((prev) => ({ ...prev, [action]: { loading: true, output: null } }));
+    try {
+      const res = await fetch("/api/agents/cto", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          action,
+          projectId: id,
+          projectTitle: project?.title,
+          projectDescription: project?.description,
+        }),
+      });
+      const data = await res.json();
+      setCtoResults((prev) => ({
+        ...prev,
+        [action]: { loading: false, output: data.ok ? data.result : data.error || "Failed" },
+      }));
+      if (data.ok) loadData();
+    } catch {
+      setCtoResults((prev) => ({ ...prev, [action]: { loading: false, output: "Connection error" } }));
+    }
+  }
+
   async function runAnalysis(analyst: string) {
     setWarRoomResults((prev) => ({ ...prev, [analyst]: { loading: true, analysis: null } }));
     try {
@@ -964,6 +996,51 @@ curl -X POST ${typeof window !== "undefined" ? window.location.origin : ""}/api/
                         className={`w-full px-4 py-2.5 border rounded-lg text-sm font-medium disabled:opacity-50 transition-colors ${panel.btnClass}`}
                       >
                         {cmoResults[panel.key].loading ? "Running..." : cmoResults[panel.key].output ? "Re-run" : "Run Analysis"}
+                      </button>
+                    </div>
+                  </div>
+                ))}
+              </div>
+
+              {/* ── CTO Agent ─────────────────────────── */}
+              <div className="bg-gradient-to-r from-[#3b82f6]/10 to-[#06b6d4]/10 rounded-xl border border-[#3b82f6]/30 p-4">
+                <div className="flex items-center gap-2 mb-1">
+                  <span className="text-lg">🛠️</span>
+                  <h3 className="text-lg font-bold text-white">CTO Agent</h3>
+                </div>
+                <p className="text-sm text-[#64748b]">Chief Technology Officer — tech stack, build roadmap, technical risks, and MVP scope.</p>
+              </div>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                {([
+                  { key: "tech_stack", icon: "⚙️", name: "Tech Stack", desc: "Best stack for this project with justification", btnClass: "bg-blue-500/10 border-blue-500/30 text-blue-400 hover:bg-blue-500/20", borderClass: "border-blue-500/20" },
+                  { key: "build_roadmap", icon: "🗺️", name: "Build Roadmap", desc: "Phased technical roadmap with milestones", btnClass: "bg-cyan-500/10 border-cyan-500/30 text-cyan-400 hover:bg-cyan-500/20", borderClass: "border-cyan-500/20" },
+                  { key: "technical_risks", icon: "🚨", name: "Technical Risks", desc: "Top risks with severity, likelihood, and mitigation", btnClass: "bg-sky-500/10 border-sky-500/30 text-sky-400 hover:bg-sky-500/20", borderClass: "border-sky-500/20" },
+                  { key: "mvp_scope", icon: "🎯", name: "MVP Scope", desc: "Minimum viable product — what to build first", btnClass: "bg-teal-500/10 border-teal-500/30 text-teal-400 hover:bg-teal-500/20", borderClass: "border-teal-500/20" },
+                ] as const).map((panel) => (
+                  <div key={panel.key} className={`bg-[#12121a] rounded-xl border ${ctoResults[panel.key].output ? panel.borderClass : "border-[#1e1e2e]"} flex flex-col`}>
+                    <div className="p-4 border-b border-[#1e1e2e]">
+                      <div className="flex items-center gap-2 mb-1">
+                        <span className="text-lg">{panel.icon}</span>
+                        <h4 className="text-sm font-bold text-white">{panel.name}</h4>
+                      </div>
+                      <p className="text-xs text-[#64748b]">{panel.desc}</p>
+                    </div>
+                    <div className="flex-1 p-4 min-h-[100px] max-h-[400px] overflow-y-auto">
+                      {ctoResults[panel.key].loading ? (
+                        <div className="text-sm text-[#64748b] animate-pulse">CTO is working...</div>
+                      ) : ctoResults[panel.key].output ? (
+                        <div className="text-sm text-[#e2e8f0] whitespace-pre-wrap leading-relaxed">{ctoResults[panel.key].output}</div>
+                      ) : (
+                        <p className="text-sm text-[#64748b]">Click below to run.</p>
+                      )}
+                    </div>
+                    <div className="p-4 border-t border-[#1e1e2e]">
+                      <button
+                        onClick={() => runCto(panel.key)}
+                        disabled={ctoResults[panel.key].loading}
+                        className={`w-full px-4 py-2.5 border rounded-lg text-sm font-medium disabled:opacity-50 transition-colors ${panel.btnClass}`}
+                      >
+                        {ctoResults[panel.key].loading ? "Running..." : ctoResults[panel.key].output ? "Re-run" : "Run Analysis"}
                       </button>
                     </div>
                   </div>
