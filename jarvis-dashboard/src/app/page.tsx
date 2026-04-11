@@ -497,9 +497,123 @@ export default function Dashboard() {
         </nav>
 
         <div className="flex-1 flex overflow-hidden">
+          {/* ── Mobile Fullscreen Chat ─── */}
+          {isMobile && mobileChatActive ? (
+            <div className="flex-1 flex flex-col overflow-hidden">
+              {/* Chat header */}
+              <div className="flex items-center gap-2 px-4 py-3 border-b border-jarvis-border flex-shrink-0">
+                <div className="w-8 h-8 bg-jarvis-accent rounded-full flex items-center justify-center text-white text-xs font-bold">J</div>
+                <div className="flex-1">
+                  <span className="text-sm font-semibold text-white">JARVIS</span>
+                  <div className="flex items-center gap-1.5">
+                    <span className="w-1.5 h-1.5 rounded-full bg-jarvis-green animate-[pulse-dot_2s_ease-in-out_infinite]" />
+                    <span className="text-[11px] text-jarvis-muted">Online</span>
+                  </div>
+                </div>
+                {chatMessages.length > 0 && (
+                  <button
+                    onClick={() => { setChatMessages([]); setChatConversationId(null); }}
+                    className="text-xs text-jarvis-muted px-3 py-2 rounded-lg hover:bg-jarvis-border transition-colors min-h-[44px] flex items-center"
+                  >
+                    New Chat
+                  </button>
+                )}
+              </div>
+
+              {/* Action result toast */}
+              {actionResult && (
+                <div className={`mx-3 mt-2 px-3 py-2 rounded-lg text-xs animate-[slideUp_0.3s_ease-out] flex items-center justify-between ${actionResult.type === "success" ? "bg-jarvis-green/20 text-jarvis-green" : "bg-jarvis-red/20 text-jarvis-red"}`}>
+                  <span>{actionResult.message}</span>
+                  <div className="flex items-center gap-2">
+                    {actionResult.link && <Link href={actionResult.link} className="underline font-semibold">Open</Link>}
+                    <button onClick={() => setActionResult(null)} className="opacity-60 hover:opacity-100 min-h-[44px] min-w-[44px] flex items-center justify-center">&times;</button>
+                  </div>
+                </div>
+              )}
+
+              {/* Messages */}
+              <div className="flex-1 overflow-y-auto px-3 py-3 space-y-3">
+                {chatMessages.length === 0 && (
+                  <div className="text-center py-12">
+                    <div className="text-4xl mb-3">🤖</div>
+                    <p className="text-base text-jarvis-muted mb-6">Good evening, sir. How can I help?</p>
+                    <div className="flex flex-col gap-2 max-w-sm mx-auto">
+                      {getSuggestedPrompts().map((p, i) => (
+                        <button key={i} onClick={() => sendChat(p)} className="text-sm px-4 py-3 rounded-xl bg-jarvis-border text-jarvis-text hover:bg-jarvis-accent/10 transition-colors text-left min-h-[44px]">{p}</button>
+                      ))}
+                    </div>
+                  </div>
+                )}
+                {chatMessages.map((msg, i) => (
+                  <div key={i} className={`flex ${msg.role === "user" ? "justify-end" : "justify-start"} chat-message-in`}>
+                    <div className="max-w-[85%]">
+                      <div className={`rounded-2xl px-4 py-3 text-[15px] leading-relaxed whitespace-pre-wrap ${msg.role === "user" ? "bg-jarvis-accent text-white rounded-br-md" : "bg-jarvis-border text-jarvis-text rounded-bl-md"}`}>
+                        {msg.content}
+                      </div>
+                    </div>
+                  </div>
+                ))}
+                {chatLoading && (
+                  <div className="flex justify-start">
+                    <div className="bg-jarvis-border rounded-2xl px-4 py-3 text-sm text-jarvis-muted">
+                      {voiceProcessing ? "Analyzing voice..." : "Thinking..."}
+                    </div>
+                  </div>
+                )}
+                <div ref={chatEndRef} />
+              </div>
+
+              {/* Smart actions — mobile */}
+              {chatMessages.length >= 3 && (
+                <div className="px-3 py-2 border-t border-jarvis-border flex gap-2 relative">
+                  <button onClick={handleNewIdea} disabled={!!actionLoading} className="flex-1 text-sm px-3 py-2.5 rounded-xl bg-jarvis-accent/10 text-jarvis-accent hover:bg-jarvis-accent/20 transition-colors disabled:opacity-50 min-h-[44px]">
+                    {actionLoading === "new-idea" ? "Creating..." : "💡 New Idea"}
+                  </button>
+                  <button onClick={() => setShowAddToProject(!showAddToProject)} disabled={!!actionLoading} className="flex-1 text-sm px-3 py-2.5 rounded-xl bg-jarvis-green/10 text-jarvis-green hover:bg-jarvis-green/20 transition-colors disabled:opacity-50 min-h-[44px]">
+                    {actionLoading === "add-to-project" ? "Adding..." : "📌 Add to Project"}
+                  </button>
+                  {showAddToProject && (
+                    <div className="absolute bottom-full left-0 right-0 mb-1 bg-jarvis-card border border-jarvis-border rounded-xl shadow-xl max-h-48 overflow-y-auto z-10">
+                      {projects.map((p) => (
+                        <button key={p.id} onClick={() => handleAddToProject(p.id)} className="w-full text-left px-4 py-3 text-sm hover:bg-jarvis-accent/10 transition-colors border-b border-jarvis-border last:border-0 min-h-[44px]">
+                          <span className="text-jarvis-text">{p.title}</span>
+                          <span className="text-jarvis-muted ml-2">{p.status}</span>
+                        </button>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {/* Suggested prompts — scrollable row */}
+              {chatMessages.length > 0 && chatMessages.length < 3 && (
+                <div className="px-3 py-2 border-t border-jarvis-border">
+                  <div className="flex gap-2 overflow-x-auto no-scrollbar">
+                    {getSuggestedPrompts().map((p, i) => (
+                      <button key={i} onClick={() => sendChat(p)} className="text-xs px-3 py-2 rounded-xl bg-jarvis-border text-jarvis-muted hover:text-jarvis-accent shrink-0 min-h-[36px]">{p}</button>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {/* Input — large touch targets, safe area padding for bottom bar */}
+              <div className="px-3 pt-2 border-t border-jarvis-border" style={{ paddingBottom: "calc(12px + 60px + env(safe-area-inset-bottom, 0px))" }}>
+                <VoiceChatInput
+                  value={chatInput}
+                  onChange={setChatInput}
+                  onSend={() => { if (chatInput.trim()) sendChat(); }}
+                  disabled={chatLoading}
+                  placeholder="Ask JARVIS..."
+                  variant="full"
+                  onVoiceComplete={handleVoicePipeline}
+                />
+              </div>
+            </div>
+          ) : (
           <main className="flex-1 overflow-y-auto p-4 md:p-6 pb-20 md:pb-6">
             {tabContent[activeTab]()}
           </main>
+          )}
 
           {/* Chat panel — desktop sidebar */}
           {chatOpen && (

@@ -1,12 +1,12 @@
 {
-  "name": "JARVIS — AI Chief of Staff",
+  "name": "JARVIS",
   "short_name": "JARVIS",
   "description": "Dylan's personal AI command center",
   "start_url": "/",
   "display": "standalone",
   "background_color": "#0a0a0f",
   "theme_color": "#6366f1",
-  "orientation": "portrait-primary",
+  "orientation": "portrait",
   "icons": [
     {
       "src": "/icons/icon-192.svg",

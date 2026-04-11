@@ -120,7 +120,7 @@ export default function VoiceChatInput({
                 ? "bg-jarvis-bg border-jarvis-border rounded-lg px-3 py-2"
                 : "bg-jarvis-bg border-jarvis-border rounded-2xl px-4 py-2.5"
             }`}
-            style={{ minHeight: isPanel ? "36px" : "40px" }}
+            style={{ minHeight: isPanel ? "36px" : "44px" }}
           />
           {/* Interim text overlay */}
           {isListening && interimText && (
@@ -142,11 +142,11 @@ export default function VoiceChatInput({
             className={`flex-shrink-0 flex items-center justify-center transition-all disabled:opacity-50 ${
               isPanel
                 ? `w-9 h-9 rounded-lg text-sm ${isListening ? "bg-red-500 text-white animate-[pulse-dot_1s_ease-in-out_infinite]" : "bg-jarvis-border text-jarvis-muted hover:text-white hover:bg-jarvis-accent/30"}`
-                : `w-10 h-10 rounded-full ${isListening ? "bg-red-500 text-white animate-[pulse-dot_1s_ease-in-out_infinite]" : "bg-jarvis-border text-jarvis-muted hover:text-white hover:bg-jarvis-accent/30"}`
+                : `w-11 h-11 rounded-full ${isListening ? "bg-red-500 text-white animate-[pulse-dot_1s_ease-in-out_infinite]" : "bg-jarvis-border text-jarvis-muted hover:text-white hover:bg-jarvis-accent/30"}`
             }`}
             title={isListening ? "Stop listening" : "Voice input"}
           >
-            <MicIcon size={isPanel ? 16 : 18} />
+            <MicIcon size={isPanel ? 16 : 20} />
           </button>
         )}
 
@@ -158,10 +158,10 @@ export default function VoiceChatInput({
           className={`flex-shrink-0 flex items-center justify-center transition-all duration-200 disabled:opacity-30 active:scale-90 ${
             isPanel
               ? `w-9 h-9 rounded-lg ${hasContent ? "bg-jarvis-accent text-white" : "bg-jarvis-border text-jarvis-muted"}`
-              : `w-10 h-10 rounded-full ${hasContent ? "bg-jarvis-accent text-white shadow-lg shadow-jarvis-accent/30" : "bg-jarvis-border text-jarvis-muted"}`
+              : `w-11 h-11 rounded-full ${hasContent ? "bg-jarvis-accent text-white shadow-lg shadow-jarvis-accent/30" : "bg-jarvis-border text-jarvis-muted"}`
           }`}
         >
-          <SendIcon size={isPanel ? 16 : 18} />
+          <SendIcon size={isPanel ? 16 : 20} />
         </button>
       </div>
 
