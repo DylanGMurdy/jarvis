@@ -1,7 +1,14 @@
 'use client';
 
 import { useState } from 'react';
-import { Send } from 'lucide-react';
+function SendIcon({ className }: { className?: string }) {
+  return (
+    <svg className={className} width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <path d="m22 2-7 20-4-9-9-4Z" />
+      <path d="M22 2 11 13" />
+    </svg>
+  );
+}
 import { VoiceInput } from '@/components/VoiceInput';
 
 interface Message {
@@ -129,7 +136,7 @@ export default function Home() {
                 disabled={isLoading || !input.trim()}
                 className="p-2 bg-blue-500 text-white rounded-lg hover:bg-blue-600 disabled:opacity-50 disabled:cursor-not-allowed"
               >
-                <Send className="h-4 w-4" />
+                <SendIcon className="h-4 w-4" />
               </button>
             </div>
           </form>
