@@ -1,168 +1,51 @@
-'use client'
-
-import { useState, useEffect } from 'react'
-import { createClientComponentClient } from '@supabase/auth-helpers-nextjs'
-import { useRouter, useSearchParams } from 'next/navigation'
-import { Button } from '@/components/ui/button'
-import { Input } from '@/components/ui/input'
-import { Label } from '@/components/ui/label'
-import { Alert, AlertDescription } from '@/components/ui/alert'
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
-import Link from 'next/link'
+"use client";
+import { useState } from "react";
+import { useRouter } from "next/navigation";
 
 export default function LoginPage() {
-  const [email, setEmail] = useState('')
-  const [password, setPassword] = useState('')
-  const [loading, setLoading] = useState(false)
-  const [error, setError] = useState('')
-  const [message, setMessage] = useState('')
-  
-  const router = useRouter()
-  const searchParams = useSearchParams()
-  const supabase = createClientComponentClient()
-  
-  const redirectPath = searchParams.get('redirect') || '/dashboard'
-  
-  useEffect(() => {
-    // Check if user is already logged in
-    const checkUser = async () => {
-      const { data: { session } } = await supabase.auth.getSession()
-      if (session) {
-        router.push(redirectPath)
-      }
+  const [password, setPassword] = useState("");
+  const [error, setError] = useState("");
+  const [loading, setLoading] = useState(false);
+  const router = useRouter();
+
+  const handleLogin = async () => {
+    setLoading(true);
+    setError("");
+    const res = await fetch("/api/auth/login", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ password }),
+    });
+    if (res.ok) {
+      router.push("/");
+    } else {
+      setError("Wrong password. Try again.");
     }
-    checkUser()
-  }, [supabase, router, redirectPath])
-  
-  const handleSignIn = async (e: React.FormEvent) => {
-    e.preventDefault()
-    setLoading(true)
-    setError('')
-    
-    try {
-      const { error } = await supabase.auth.signInWithPassword({
-        email,
-        password,
-      })
-      
-      if (error) {
-        setError(error.message)
-      } else {
-        router.push(redirectPath)
-        router.refresh()
-      }
-    } catch (err) {
-      setError('An unexpected error occurred')
-    } finally {
-      setLoading(false)
-    }
-  }
-  
-  const handleSignUp = async (e: React.FormEvent) => {
-    e.preventDefault()
-    setLoading(true)
-    setError('')
-    setMessage('')
-    
-    try {
-      const { error } = await supabase.auth.signUp({
-        email,
-        password,
-        options: {
-          emailRedirectTo: `${location.origin}/auth/callback`,
-        },
-      })
-      
-      if (error) {
-        setError(error.message)
-      } else {
-        setMessage('Check your email for the confirmation link!')
-      }
-    } catch (err) {
-      setError('An unexpected error occurred')
-    } finally {
-      setLoading(false)
-    }
-  }
-  
+    setLoading(false);
+  };
+
   return (
-    <div className="min-h-screen flex items-center justify-center bg-background px-4">
-      <Card className="w-full max-w-md">
-        <CardHeader>
-          <CardTitle>Welcome to Jarvis</CardTitle>
-          <CardDescription>
-            Sign in to your account or create a new one
-          </CardDescription>
-        </CardHeader>
-        <CardContent className="space-y-4">
-          {error && (
-            <Alert variant="destructive">
-              <AlertDescription>{error}</AlertDescription>
-            </Alert>
-          )}
-          
-          {message && (
-            <Alert>
-              <AlertDescription>{message}</AlertDescription>
-            </Alert>
-          )}
-          
-          <form className="space-y-4">
-            <div className="space-y-2">
-              <Label htmlFor="email">Email</Label>
-              <Input
-                id="email"
-                type="email"
-                value={email}
-                onChange={(e) => setEmail(e.target.value)}
-                placeholder="Enter your email"
-                required
-                disabled={loading}
-              />
-            </div>
-            
-            <div className="space-y-2">
-              <Label htmlFor="password">Password</Label>
-              <Input
-                id="password"
-                type="password"
-                value={password}
-                onChange={(e) => setPassword(e.target.value)}
-                placeholder="Enter your password"
-                required
-                disabled={loading}
-              />
-            </div>
-            
-            <div className="flex flex-col space-y-2">
-              <Button 
-                type="submit" 
-                onClick={handleSignIn}
-                disabled={loading}
-                className="w-full"
-              >
-                {loading ? 'Signing In...' : 'Sign In'}
-              </Button>
-              
-              <Button 
-                type="button" 
-                variant="outline"
-                onClick={handleSignUp}
-                disabled={loading}
-                className="w-full"
-              >
-                {loading ? 'Creating Account...' : 'Create Account'}
-              </Button>
-            </div>
-          </form>
-          
-          <div className="text-center text-sm">
-            <Link href="/" className="text-primary hover:underline">
-              ← Back to Home
-            </Link>
-          </div>
-        </CardContent>
-      </Card>
+    <div className="min-h-screen bg-jarvis-bg flex items-center justify-center">
+      <div className="bg-jarvis-surface border border-jarvis-border rounded-xl p-8 w-full max-w-sm">
+        <h1 className="text-2xl font-bold text-white text-center mb-2">JARVIS</h1>
+        <p className="text-jarvis-muted text-center text-sm mb-8">AI Chief of Staff</p>
+        <input
+          type="password"
+          placeholder="Enter password"
+          value={password}
+          onChange={(e) => setPassword(e.target.value)}
+          onKeyDown={(e) => e.key === "Enter" && handleLogin()}
+          className="w-full bg-jarvis-bg border border-jarvis-border rounded-lg px-4 py-3 text-white placeholder-jarvis-muted mb-3 focus:outline-none focus:border-indigo-500"
+        />
+        {error && <p className="text-red-400 text-sm mb-3">{error}</p>}
+        <button
+          onClick={handleLogin}
+          disabled={loading}
+          className="w-full bg-indigo-600 hover:bg-indigo-700 text-white font-medium py-3 rounded-lg transition-colors disabled:opacity-50"
+        >
+          {loading ? "Entering..." : "Enter Jarvis"}
+        </button>
+      </div>
     </div>
-  )
+  );
 }

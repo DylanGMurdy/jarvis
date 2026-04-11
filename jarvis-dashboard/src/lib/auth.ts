@@ -1,32 +1,33 @@
-import { createServerComponentClient } from '@supabase/auth-helpers-nextjs'
-import { createRouteHandlerClient } from '@supabase/auth-helpers-nextjs'
-import { cookies } from 'next/headers'
-import { type User } from '@supabase/supabase-js'
-
-export async function getServerSession() {
-  const supabase = createServerComponentClient({ cookies })
-  const { data: { session } } = await supabase.auth.getSession()
-  return session
+export function validateApiSecret(request: Request): boolean {
+  const secret = request.headers.get('x-jarvis-secret');
+  return secret === process.env.JARVIS_API_SECRET;
 }
 
-export async function getServerUser(): Promise<User | null> {
-  const supabase = createServerComponentClient({ cookies })
-  const { data: { user } } = await supabase.auth.getUser()
-  return user
+export function validateBuildToken(request: Request): boolean {
+  const token = request.headers.get('x-build-token');
+  return token === process.env.JARVIS_BUILD_TOKEN;
 }
 
-export function createSupabaseServerClient() {
-  return createServerComponentClient({ cookies })
+export function validateSession(request: Request): boolean {
+  const cookieHeader = request.headers.get('cookie');
+  if (!cookieHeader) return false;
+
+  const cookies = Object.fromEntries(
+    cookieHeader.split(';').map(c => {
+      const [name, value] = c.trim().split('=');
+      return [name, decodeURIComponent(value)];
+    })
+  );
+
+  return cookies.jarvis_session === process.env.JARVIS_PASSWORD;
 }
 
-export function createSupabaseRouteClient() {
-  return createRouteHandlerClient({ cookies })
-}
-
-export async function requireAuth() {
-  const session = await getServerSession()
-  if (!session) {
-    throw new Error('Authentication required')
-  }
-  return session
+export function unauthorized(): Response {
+  return new Response(
+    JSON.stringify({ error: 'Unauthorized' }),
+    {
+      status: 401,
+      headers: { 'Content-Type': 'application/json' }
+    }
+  );
 }

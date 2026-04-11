@@ -89,3 +89,19 @@ export function getRateLimitIdentifier(request: NextRequest): string {
   // Fallback to a default identifier
   return 'unknown'
 }
+
+// Legacy exports used by individual route handlers
+export function isRateLimited(ip: string): boolean {
+  const result = rateLimit(ip, { windowMs: 60 * 1000, maxRequests: 60 })
+  return !result.success
+}
+
+export function getRateLimitResponse(): Response {
+  return new Response(
+    JSON.stringify({ error: 'Rate limit exceeded' }),
+    {
+      status: 429,
+      headers: { 'Content-Type': 'application/json' }
+    }
+  )
+}
