@@ -1,282 +1,141 @@
-'use client'
+'use client';
 
-import { DashboardLayout } from '@/components/DashboardLayout'
-import { Button } from '@/components/ui/button'
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
-import { Input } from '@/components/ui/input'
-import { Textarea } from '@/components/ui/textarea'
-import { Badge } from '@/components/ui/badge'
-import { Lightbulb, Plus, Star, Clock, Users } from 'lucide-react'
-import { useState } from 'react'
+import { useState, useEffect } from 'react';
+import Link from 'next/link';
 
-interface Idea {
-  id: string
-  title: string
-  description: string
-  status: 'draft' | 'in-review' | 'approved' | 'implemented'
-  priority: 'low' | 'medium' | 'high'
-  votes: number
-  author: string
-  createdAt: string
+interface Project {
+  id: string;
+  title: string;
+  description: string;
+  status: string;
+  grade: string;
+  category: string;
+  progress: number;
+  created_at: string;
 }
 
-const mockIdeas: Idea[] = [
-  {
-    id: '1',
-    title: 'AI-Powered Code Review',
-    description: 'Implement an AI system that automatically reviews code for best practices, security vulnerabilities, and performance optimizations.',
-    status: 'in-review',
-    priority: 'high',
-    votes: 23,
-    author: 'John Doe',
-    createdAt: '2024-01-15'
-  },
-  {
-    id: '2',
-    title: 'Dark Mode for Mobile App',
-    description: 'Add a dark theme option to our mobile application to improve user experience during night usage.',
-    status: 'approved',
-    priority: 'medium',
-    votes: 15,
-    author: 'Jane Smith',
-    createdAt: '2024-01-14'
-  },
-  {
-    id: '3',
-    title: 'Real-time Collaboration Features',
-    description: 'Enable real-time editing and collaboration features similar to Google Docs for our document editor.',
-    status: 'draft',
-    priority: 'high',
-    votes: 31,
-    author: 'Mike Johnson',
-    createdAt: '2024-01-13'
-  }
-]
+export default function IdeasPage() {
+  const [projects, setProjects] = useState<Project[]>([]);
+  const [isModalOpen, setIsModalOpen] = useState(false);
+  const [loading, setLoading] = useState(true);
+  const [title, setTitle] = useState('');
+  const [description, setDescription] = useState('');
+  const [isSubmitting, setIsSubmitting] = useState(false);
 
-function getStatusColor(status: Idea['status']) {
-  switch (status) {
-    case 'draft': return 'bg-gray-600'
-    case 'in-review': return 'bg-yellow-600'
-    case 'approved': return 'bg-green-600'
-    case 'implemented': return 'bg-blue-600'
-  }
-}
-
-function getPriorityColor(priority: Idea['priority']) {
-  switch (priority) {
-    case 'low': return 'bg-gray-600'
-    case 'medium': return 'bg-yellow-600'
-    case 'high': return 'bg-red-600'
-  }
-}
-
-export default function IdeasLab() {
-  const [ideas, setIdeas] = useState<Idea[]>(mockIdeas)
-  const [showNewIdeaForm, setShowNewIdeaForm] = useState(false)
-  const [newIdea, setNewIdea] = useState({ title: '', description: '', priority: 'medium' as Idea['priority'] })
-
-  const handleSubmitIdea = () => {
-    if (newIdea.title.trim() && newIdea.description.trim()) {
-      const idea: Idea = {
-        id: Date.now().toString(),
-        title: newIdea.title,
-        description: newIdea.description,
-        status: 'draft',
-        priority: newIdea.priority,
-        votes: 0,
-        author: 'Current User',
-        createdAt: new Date().toISOString().split('T')[0]
-      }
-      setIdeas([idea, ...ideas])
-      setNewIdea({ title: '', description: '', priority: 'medium' })
-      setShowNewIdeaForm(false)
+  const fetchProjects = async () => {
+    try {
+      const res = await fetch('/api/projects');
+      const data = await res.json();
+      setProjects(data.data || []);
+    } catch (error) {
+      console.error('Error fetching projects:', error);
+    } finally {
+      setLoading(false);
     }
-  }
+  };
 
-  const handleVote = (ideaId: string) => {
-    setIdeas(ideas.map(idea => 
-      idea.id === ideaId 
-        ? { ...idea, votes: idea.votes + 1 }
-        : idea
-    ))
-  }
+  const handleDeleteProject = async (id: string) => {
+    if (!confirm('Delete this project? This cannot be undone.')) return;
+    try {
+      const response = await fetch(`/api/projects/${id}`, { method: 'DELETE' });
+      if (response.ok) {
+        setProjects(projects.filter(p => p.id !== id));
+      }
+    } catch (error) {
+      console.error('Error deleting project:', error);
+    }
+  };
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!title.trim()) return;
+    setIsSubmitting(true);
+    try {
+      const response = await fetch('/api/projects', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ title: title.trim(), description: description.trim(), status: 'Idea', grade: 'B', category: 'AI Business', progress: 0 })
+      });
+      if (response.ok) {
+        setTitle('');
+        setDescription('');
+        setIsModalOpen(false);
+        fetchProjects();
+      }
+    } catch (error) {
+      console.error('Error creating project:', error);
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
+  useEffect(() => { fetchProjects(); }, []);
 
   return (
-    <DashboardLayout>
-      <div className="p-6 space-y-6">
-        {/* Header */}
-        <div className="flex items-center justify-between">
+    <div className="min-h-screen bg-black text-white p-8">
+      <div className="max-w-7xl mx-auto">
+        <div className="flex items-center justify-between mb-8">
           <div>
-            <h1 className="text-3xl font-bold text-white flex items-center gap-2">
-              <Lightbulb className="h-8 w-8 text-yellow-400" />
-              Ideas Lab
-            </h1>
-            <p className="text-gray-400 mt-2">Share and collaborate on innovative ideas</p>
+            <h1 className="text-4xl font-bold mb-2">Ideas Lab</h1>
+            <p className="text-gray-400">Explore and develop new project concepts</p>
           </div>
-          <Button 
-            onClick={() => setShowNewIdeaForm(true)}
-            className="bg-blue-600 hover:bg-blue-700"
-          >
-            <Plus className="h-4 w-4 mr-2" />
-            New Idea
-          </Button>
+          <button onClick={() => setIsModalOpen(true)} className="bg-purple-600 hover:bg-purple-700 text-white px-6 py-3 rounded-lg transition-colors">
+            New Project
+          </button>
         </div>
 
-        {/* Stats */}
-        <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-          <Card className="bg-gray-900 border-gray-800">
-            <CardContent className="p-4">
-              <div className="flex items-center space-x-2">
-                <Lightbulb className="h-5 w-5 text-yellow-400" />
-                <div>
-                  <p className="text-sm text-gray-400">Total Ideas</p>
-                  <p className="text-2xl font-bold text-white">{ideas.length}</p>
+        {loading ? (
+          <div className="text-center py-12"><div className="text-gray-400">Loading projects...</div></div>
+        ) : projects.length === 0 ? (
+          <div className="text-center py-12">
+            <div className="text-gray-400 mb-4">No projects yet</div>
+            <p className="text-sm text-gray-500">Click &quot;New Project&quot; to create your first idea</p>
+          </div>
+        ) : (
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+            {projects.map(project => (
+              <Link href={`/ideas/${project.id}`} key={project.id} className="block">
+                <div className="relative bg-gray-900 border border-gray-800 rounded-lg p-6 hover:border-gray-700 transition-colors">
+                  <button onClick={(e) => { e.preventDefault(); handleDeleteProject(project.id); }} className="absolute top-3 right-3 text-gray-500 hover:text-red-400 text-lg leading-none transition-colors" title="Delete project">×</button>
+                  <div className="flex items-start justify-between mb-3 pr-6">
+                    <h3 className="text-lg font-semibold text-white">{project.title}</h3>
+                  </div>
+                  {project.description && <p className="text-gray-400 mb-4 text-sm">{project.description}</p>}
+                  <div className="flex items-center justify-between text-sm">
+                    <div className="flex items-center gap-3">
+                      <span className={`px-2 py-1 rounded text-xs ${project.status === 'Building' ? 'bg-green-500/20 text-green-400' : project.status === 'Idea' ? 'bg-purple-500/20 text-purple-400' : project.status === 'Planning' ? 'bg-blue-500/20 text-blue-400' : 'bg-gray-500/20 text-gray-400'}`}>{project.status}</span>
+                      <span className="text-gray-500">Grade {project.grade}</span>
+                    </div>
+                    <span className="text-gray-500">{project.progress}%</span>
+                  </div>
                 </div>
-              </div>
-            </CardContent>
-          </Card>
-          
-          <Card className="bg-gray-900 border-gray-800">
-            <CardContent className="p-4">
-              <div className="flex items-center space-x-2">
-                <Star className="h-5 w-5 text-green-400" />
-                <div>
-                  <p className="text-sm text-gray-400">Approved</p>
-                  <p className="text-2xl font-bold text-white">
-                    {ideas.filter(idea => idea.status === 'approved').length}
-                  </p>
-                </div>
-              </div>
-            </CardContent>
-          </Card>
-          
-          <Card className="bg-gray-900 border-gray-800">
-            <CardContent className="p-4">
-              <div className="flex items-center space-x-2">
-                <Clock className="h-5 w-5 text-yellow-400" />
-                <div>
-                  <p className="text-sm text-gray-400">In Review</p>
-                  <p className="text-2xl font-bold text-white">
-                    {ideas.filter(idea => idea.status === 'in-review').length}
-                  </p>
-                </div>
-              </div>
-            </CardContent>
-          </Card>
-          
-          <Card className="bg-gray-900 border-gray-800">
-            <CardContent className="p-4">
-              <div className="flex items-center space-x-2">
-                <Users className="h-5 w-5 text-blue-400" />
-                <div>
-                  <p className="text-sm text-gray-400">Total Votes</p>
-                  <p className="text-2xl font-bold text-white">
-                    {ideas.reduce((sum, idea) => sum + idea.votes, 0)}
-                  </p>
-                </div>
-              </div>
-            </CardContent>
-          </Card>
-        </div>
-
-        {/* New Idea Form */}
-        {showNewIdeaForm && (
-          <Card className="bg-gray-900 border-gray-800">
-            <CardHeader>
-              <CardTitle className="text-white">Submit New Idea</CardTitle>
-              <CardDescription className="text-gray-400">
-                Share your innovative idea with the team
-              </CardDescription>
-            </CardHeader>
-            <CardContent className="space-y-4">
-              <Input
-                placeholder="Idea title..."
-                value={newIdea.title}
-                onChange={(e) => setNewIdea({ ...newIdea, title: e.target.value })}
-                className="bg-gray-800 border-gray-700 text-white"
-              />
-              <Textarea
-                placeholder="Describe your idea in detail..."
-                value={newIdea.description}
-                onChange={(e) => setNewIdea({ ...newIdea, description: e.target.value })}
-                className="bg-gray-800 border-gray-700 text-white min-h-[100px]"
-              />
-              <div className="flex items-center space-x-4">
-                <select
-                  value={newIdea.priority}
-                  onChange={(e) => setNewIdea({ ...newIdea, priority: e.target.value as Idea['priority'] })}
-                  className="bg-gray-800 border border-gray-700 rounded-md px-3 py-2 text-white"
-                >
-                  <option value="low">Low Priority</option>
-                  <option value="medium">Medium Priority</option>
-                  <option value="high">High Priority</option>
-                </select>
-                <div className="flex space-x-2">
-                  <Button onClick={handleSubmitIdea} className="bg-blue-600 hover:bg-blue-700">
-                    Submit Idea
-                  </Button>
-                  <Button 
-                    variant="outline" 
-                    onClick={() => setShowNewIdeaForm(false)}
-                    className="border-gray-700 text-gray-300 hover:bg-gray-800"
-                  >
-                    Cancel
-                  </Button>
-                </div>
-              </div>
-            </CardContent>
-          </Card>
+              </Link>
+            ))}
+          </div>
         )}
-
-        {/* Ideas List */}
-        <div className="space-y-4">
-          <h2 className="text-xl font-semibold text-white">All Ideas</h2>
-          {ideas.map((idea) => (
-            <Card key={idea.id} className="bg-gray-900 border-gray-800">
-              <CardHeader>
-                <div className="flex items-start justify-between">
-                  <div className="flex-1">
-                    <CardTitle className="text-white text-lg">{idea.title}</CardTitle>
-                    <CardDescription className="text-gray-400 mt-1">
-                      by {idea.author} • {idea.createdAt}
-                    </CardDescription>
-                  </div>
-                  <div className="flex items-center space-x-2">
-                    <Badge className={getPriorityColor(idea.priority)}>
-                      {idea.priority}
-                    </Badge>
-                    <Badge className={getStatusColor(idea.status)}>
-                      {idea.status}
-                    </Badge>
-                  </div>
-                </div>
-              </CardHeader>
-              <CardContent>
-                <p className="text-gray-300 mb-4">{idea.description}</p>
-                <div className="flex items-center justify-between">
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    onClick={() => handleVote(idea.id)}
-                    className="border-gray-700 text-gray-300 hover:bg-gray-800"
-                  >
-                    <Star className="h-4 w-4 mr-1" />
-                    Vote ({idea.votes})
-                  </Button>
-                  <div className="flex space-x-2">
-                    <Button size="sm" variant="ghost" className="text-gray-400 hover:text-white">
-                      Comment
-                    </Button>
-                    <Button size="sm" variant="ghost" className="text-gray-400 hover:text-white">
-                      Share
-                    </Button>
-                  </div>
-                </div>
-              </CardContent>
-            </Card>
-          ))}
-        </div>
       </div>
-    </DashboardLayout>
-  )
+
+      {isModalOpen && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
+          <div className="bg-gray-900 border border-gray-800 rounded-lg p-6 w-full max-w-md mx-4">
+            <h3 className="text-xl font-bold text-white mb-4">New Project</h3>
+            <form onSubmit={handleSubmit} className="space-y-4">
+              <div>
+                <label className="block text-sm font-medium text-gray-300 mb-1">Project Name *</label>
+                <input type="text" value={title} onChange={(e) => setTitle(e.target.value)} className="w-full px-3 py-2 bg-gray-800 border border-gray-700 rounded-md text-white focus:outline-none focus:ring-2 focus:ring-purple-500" placeholder="Enter project name" required />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-300 mb-1">Description</label>
+                <textarea value={description} onChange={(e) => setDescription(e.target.value)} className="w-full px-3 py-2 bg-gray-800 border border-gray-700 rounded-md text-white focus:outline-none focus:ring-2 focus:ring-purple-500 resize-none" rows={3} placeholder="Optional description" />
+              </div>
+              <div className="flex gap-3 pt-2">
+                <button type="button" onClick={() => { setTitle(''); setDescription(''); setIsModalOpen(false); }} className="flex-1 px-4 py-2 text-gray-300 border border-gray-600 rounded-md hover:bg-gray-800 transition-colors">Cancel</button>
+                <button type="submit" disabled={!title.trim() || isSubmitting} className="flex-1 bg-purple-600 text-white px-4 py-2 rounded-md hover:bg-purple-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors">{isSubmitting ? 'Creating...' : 'Create Project'}</button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+    </div>
+  );
 }
