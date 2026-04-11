@@ -1,6 +1,6 @@
 "use client";
 
-type Tab = "overview" | "ideas" | "agents" | "goals" | "memory" | "history" | "approvals";
+type Tab = "overview" | "ideas" | "agents" | "goals" | "memory" | "history" | "approvals" | "revenue";
 type MobileTab = "overview" | "ideas" | "agents" | "chat";
 
 interface BottomTabBarProps {

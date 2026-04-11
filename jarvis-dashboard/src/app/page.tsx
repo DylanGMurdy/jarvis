@@ -13,9 +13,10 @@ import GoalsTab from "@/components/dashboard/GoalsTab";
 import MemoryTab from "@/components/dashboard/MemoryTab";
 import ChatHistoryTab from "@/components/dashboard/ChatHistoryTab";
 import ApprovalsTab from "@/components/dashboard/ApprovalsTab";
+import RevenueTab from "@/components/dashboard/RevenueTab";
 
 // ─── Types ────────────────────────────────────────────────
-type Tab = "overview" | "ideas" | "agents" | "goals" | "memory" | "history" | "approvals";
+type Tab = "overview" | "ideas" | "agents" | "goals" | "memory" | "history" | "approvals" | "revenue";
 type ModalData = { title: string; body: string; actions?: { label: string; onClick: () => void }[] } | null;
 
 const MEMORY_CATEGORIES: { key: MemoryCategory; label: string; color: string; icon: string }[] = [
@@ -337,6 +338,7 @@ export default function Dashboard() {
     { key: "memory", label: "Memory", icon: "🧠" },
     { key: "history", label: "Chat History", icon: "💬" },
     { key: "approvals", label: "Approvals", icon: "🛡️" },
+    { key: "revenue", label: "Revenue", icon: "💰" },
   ];
 
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
@@ -386,6 +388,7 @@ export default function Dashboard() {
     ),
     history: () => <ChatHistoryTab />,
     approvals: () => <ApprovalsTab />,
+    revenue: () => <RevenueTab />,
   };
 
   return (
