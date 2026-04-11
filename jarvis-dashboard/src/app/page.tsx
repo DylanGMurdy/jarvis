@@ -39,6 +39,8 @@ const AGENTS = [
   { name: "CTO Agent", status: "active" as const, desc: "Tech stack, build roadmap, technical risks, MVP scope.", lastAction: "Defined MVP scope for Lindy Agents" },
   { name: "CLO Agent", status: "idle" as const, desc: "Legal risks, entity structure, contracts, compliance.", lastAction: "Awaiting first project analysis" },
   { name: "CHRO Agent", status: "idle" as const, desc: "Org structure, hiring, culture, compensation.", lastAction: "Awaiting first project analysis" },
+  { name: "CSO Agent", status: "active" as const, desc: "Sales strategy, prospect list, outreach scripts, pricing.", lastAction: "Built GTM sales strategy for Lindy Agents" },
+  { name: "VP of Sales", status: "active" as const, desc: "Pipeline design, objection handling, demo scripts, closing.", lastAction: "Created objection handling guide" },
 ];
 
 const StatusDot = ({ status }: { status: "active" | "idle" | "error" }) => (
