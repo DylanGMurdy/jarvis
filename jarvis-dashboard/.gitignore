@@ -3,6 +3,7 @@
 # secrets / local data
 .spotify-token.json
 .lindy-updates.json
+.build-log.json
 .env.local
 
 # dependencies
