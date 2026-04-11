@@ -34,8 +34,8 @@ export default function IdeasPage() {
     }
   };
 
-  const handleDeleteProject = async (id: string) => {
-    if (!confirm('Delete this project? This cannot be undone.')) return;
+  const handleDeleteProject = async (id: string, name: string) => {
+    if (!confirm(`Delete "${name}"? This is permanent and cannot be undone.`)) return;
     try {
       const response = await fetch(`/api/projects/${id}`, { method: 'DELETE' });
       if (response.ok) {
@@ -57,10 +57,15 @@ export default function IdeasPage() {
         body: JSON.stringify({ title: title.trim(), description: description.trim(), status: 'Idea', grade: 'B', category: 'AI Business', progress: 0 })
       });
       if (response.ok) {
+        const data = await response.json();
+        if (data.data) {
+          setProjects(prev => [data.data, ...prev]);
+        } else {
+          fetchProjects();
+        }
         setTitle('');
         setDescription('');
         setIsModalOpen(false);
-        fetchProjects();
       }
     } catch (error) {
       console.error('Error creating project:', error);
@@ -96,8 +101,7 @@ export default function IdeasPage() {
             {projects.map(project => (
               <Link href={`/ideas/${project.id}`} key={project.id} className="block">
                 <div className="relative bg-gray-900 border border-gray-800 rounded-lg p-6 hover:border-gray-700 transition-colors">
-                  <button onClick={(e) => { e.preventDefault(); handleDeleteProject(project.id); }} className="absolute top-3 right-3 text-gray-500 hover:text-red-400 text-lg leading-none transition-colors" title="Delete project">×</button>
-                  <div className="flex items-start justify-between mb-3 pr-6">
+                  <div className="flex items-start justify-between mb-3">
                     <h3 className="text-lg font-semibold text-white">{project.title}</h3>
                   </div>
                   {project.description && <p className="text-gray-400 mb-4 text-sm">{project.description}</p>}
@@ -106,7 +110,12 @@ export default function IdeasPage() {
                       <span className={`px-2 py-1 rounded text-xs ${project.status === 'Building' ? 'bg-green-500/20 text-green-400' : project.status === 'Idea' ? 'bg-purple-500/20 text-purple-400' : project.status === 'Planning' ? 'bg-blue-500/20 text-blue-400' : 'bg-gray-500/20 text-gray-400'}`}>{project.status}</span>
                       <span className="text-gray-500">Grade {project.grade}</span>
                     </div>
-                    <span className="text-gray-500">{project.progress}%</span>
+                    <div className="flex items-center gap-2">
+                      <span className="text-gray-500">{project.progress}%</span>
+                      <button onClick={(e) => { e.preventDefault(); handleDeleteProject(project.id, project.title); }} className="p-1 text-gray-600 hover:text-red-400 transition-colors" title="Delete project">
+                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><polyline points="3 6 5 6 21 6"></polyline><path d="M19 6l-1 14H6L5 6"></path><path d="M10 11v6"></path><path d="M14 11v6"></path><path d="M9 6V4h6v2"></path></svg>
+                      </button>
+                    </div>
                   </div>
                 </div>
               </Link>
@@ -116,9 +125,9 @@ export default function IdeasPage() {
       </div>
 
       {isModalOpen && (
-        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
-          <div className="bg-gray-900 border border-gray-800 rounded-lg p-6 w-full max-w-md mx-4">
-            <h3 className="text-xl font-bold text-white mb-4">New Project</h3>
+        <div className="fixed inset-0 bg-black/70 flex items-center justify-center z-50" onClick={() => { setTitle(''); setDescription(''); setIsModalOpen(false); }}>
+          <div className="bg-gray-900 border border-gray-800 rounded-lg p-6 w-full max-w-md mx-4" onClick={(e) => e.stopPropagation()}>
+            <h3 className="text-xl font-bold text-white mb-4">New Idea</h3>
             <form onSubmit={handleSubmit} className="space-y-4">
               <div>
                 <label className="block text-sm font-medium text-gray-300 mb-1">Project Name *</label>
