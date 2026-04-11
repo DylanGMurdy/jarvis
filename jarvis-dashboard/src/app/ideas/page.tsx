@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { createClientComponentClient } from '@supabase/auth-helpers-nextjs';
+import Link from 'next/link';
 
 interface Project {
   id: string;
@@ -30,7 +30,7 @@ function NewProjectModal({ isOpen, onClose, onSuccess }: NewProjectModalProps) {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!title.trim()) return;
-    
+
     setIsSubmitting(true);
     try {
       const response = await fetch('/api/projects', {
@@ -45,7 +45,7 @@ function NewProjectModal({ isOpen, onClose, onSuccess }: NewProjectModalProps) {
           progress: 0
         })
       });
-      
+
       if (response.ok) {
         setTitle('');
         setDescription('');
@@ -125,34 +125,37 @@ function ProjectCard({ project, onDelete }: { project: Project; onDelete: (id: s
   };
 
   return (
-    <div className="relative bg-gray-900 border border-gray-800 rounded-lg p-6 hover:border-gray-700 transition-colors">
-      <button
-        onClick={handleDelete}
-        className="absolute top-3 right-3 text-gray-500 hover:text-red-400 text-lg leading-none transition-colors"
-        title="Delete project"
-      >
-        ×
-      </button>
-      <div className="flex items-start justify-between mb-3 pr-6">
-        <h3 className="text-lg font-semibold text-white">{project.title}</h3>
-      </div>
-      {project.description && (
-        <p className="text-gray-400 mb-4 text-sm">{project.description}</p>
-      )}
-      <div className="flex items-center justify-between text-sm">
-        <div className="flex items-center gap-3">
-          <span className={`px-2 py-1 rounded text-xs ${
-            project.status === 'Active' ? 'bg-green-500/20 text-green-400' :
-            project.status === 'Idea' ? 'bg-purple-500/20 text-purple-400' :
-            'bg-gray-500/20 text-gray-400'
-          }`}>
-            {project.status}
-          </span>
-          <span className="text-gray-500">Grade {project.grade}</span>
+    <Link href={`/ideas/${project.id}`} className="block">
+      <div className="relative bg-gray-900 border border-gray-800 rounded-lg p-6 hover:border-gray-700 transition-colors">
+        <button
+          onClick={(e) => { e.preventDefault(); handleDelete(); }}
+          className="absolute top-3 right-3 text-gray-500 hover:text-red-400 text-lg leading-none transition-colors"
+          title="Delete project"
+        >
+          ×
+        </button>
+        <div className="flex items-start justify-between mb-3 pr-6">
+          <h3 className="text-lg font-semibold text-white">{project.title}</h3>
         </div>
-        <span className="text-gray-500">{project.progress}%</span>
+        {project.description && (
+          <p className="text-gray-400 mb-4 text-sm">{project.description}</p>
+        )}
+        <div className="flex items-center justify-between text-sm">
+          <div className="flex items-center gap-3">
+            <span className={`px-2 py-1 rounded text-xs ${
+              project.status === 'Active' || project.status === 'Building' ? 'bg-green-500/20 text-green-400' :
+              project.status === 'Idea' ? 'bg-purple-500/20 text-purple-400' :
+              project.status === 'Planning' ? 'bg-blue-500/20 text-blue-400' :
+              'bg-gray-500/20 text-gray-400'
+            }`}>
+              {project.status}
+            </span>
+            <span className="text-gray-500">Grade {project.grade}</span>
+          </div>
+          <span className="text-gray-500">{project.progress}%</span>
+        </div>
       </div>
-    </div>
+    </Link>
   );
 }
 
@@ -160,17 +163,12 @@ export default function IdeasPage() {
   const [projects, setProjects] = useState<Project[]>([]);
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [loading, setLoading] = useState(true);
-  const supabase = createClientComponentClient();
 
   const fetchProjects = async () => {
     try {
-      const { data, error } = await supabase
-        .from('projects')
-        .select('*')
-        .order('created_at', { ascending: false });
-      
-      if (error) throw error;
-      setProjects(data || []);
+      const res = await fetch('/api/projects');
+      const data = await res.json();
+      setProjects(data.data || []);
     } catch (error) {
       console.error('Error fetching projects:', error);
     } finally {
@@ -183,7 +181,7 @@ export default function IdeasPage() {
       const response = await fetch(`/api/projects/${id}`, {
         method: 'DELETE'
       });
-      
+
       if (response.ok) {
         setProjects(projects.filter(p => p.id !== id));
       }
@@ -196,8 +194,6 @@ export default function IdeasPage() {
     fetchProjects();
   }, []);
 
-  const ideaProjects = projects.filter(p => p.status === 'Idea');
-
   return (
     <div className="min-h-screen bg-black text-white p-8">
       <div className="max-w-7xl mx-auto">
@@ -206,7 +202,7 @@ export default function IdeasPage() {
             <h1 className="text-4xl font-bold mb-2">Ideas Lab</h1>
             <p className="text-gray-400">Explore and develop new project concepts</p>
           </div>
-          <button 
+          <button
             onClick={() => setIsModalOpen(true)}
             className="bg-purple-600 hover:bg-purple-700 text-white px-6 py-3 rounded-lg transition-colors"
           >
@@ -218,29 +214,25 @@ export default function IdeasPage() {
           <div className="text-center py-12">
             <div className="text-gray-400">Loading projects...</div>
           </div>
+        ) : projects.length === 0 ? (
+          <div className="text-center py-12">
+            <div className="text-gray-400 mb-4">No projects yet</div>
+            <p className="text-sm text-gray-500">Click &quot;New Project&quot; to create your first idea</p>
+          </div>
         ) : (
-          <>
-            {ideaProjects.length === 0 ? (
-              <div className="text-center py-12">
-                <div className="text-gray-400 mb-4">No ideas yet</div>
-                <p className="text-sm text-gray-500">Click "New Project" to create your first idea</p>
-              </div>
-            ) : (
-              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-                {ideaProjects.map(project => (
-                  <ProjectCard 
-                    key={project.id} 
-                    project={project} 
-                    onDelete={handleDeleteProject}
-                  />
-                ))}
-              </div>
-            )}
-          </>
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+            {projects.map(project => (
+              <ProjectCard
+                key={project.id}
+                project={project}
+                onDelete={handleDeleteProject}
+              />
+            ))}
+          </div>
         )}
       </div>
-      
-      <NewProjectModal 
+
+      <NewProjectModal
         isOpen={isModalOpen}
         onClose={() => setIsModalOpen(false)}
         onSuccess={fetchProjects}
