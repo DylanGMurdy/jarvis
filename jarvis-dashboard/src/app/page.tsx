@@ -54,6 +54,7 @@ export default function Dashboard() {
   // DB-backed state
   const [projects, setProjects] = useState<Project[]>([]);
   const [goals, setGoals] = useState<Goal[]>([]);
+  const [pendingApprovals, setPendingApprovals] = useState(0);
 
   // Memory state
   const [memories, setMemories] = useState<Memory[]>([]);
@@ -89,6 +90,13 @@ export default function Dashboard() {
       setProjects(projectsData);
       setGoals(goalsData);
       fetchMemories();
+
+      // Fetch pending approval count
+      try {
+        const appRes = await fetch("/api/approvals");
+        const appData = await appRes.json();
+        setPendingApprovals((appData.data || []).length);
+      } catch { /* silent */ }
 
       // Load most recent global conversation so chat continues where you left off
       try {
@@ -416,6 +424,13 @@ export default function Dashboard() {
             <Link href="/chat" className="flex items-center gap-2 w-full text-left text-xs px-2 py-2 rounded hover:bg-jarvis-accent/20 text-jarvis-text hover:text-jarvis-accent transition-colors">
               <span>✉️</span>
               <span>Messages</span>
+            </Link>
+            <Link href="/approvals" className="flex items-center gap-2 w-full text-left text-xs px-2 py-2 rounded hover:bg-jarvis-accent/20 text-jarvis-text hover:text-jarvis-accent transition-colors">
+              <span>🛡️</span>
+              <span>Approvals</span>
+              {pendingApprovals > 0 && (
+                <span className="ml-auto bg-red-500 text-white text-[10px] font-bold px-1.5 py-0.5 rounded-full min-w-[18px] text-center">{pendingApprovals}</span>
+              )}
             </Link>
           </div>
         )}
