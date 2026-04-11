@@ -1,0 +1,6 @@
+# Jarvis Dashboard Rules
+# NEVER import from @supabase/auth-helpers-nextjs
+# NEVER import from @supabase/auth-helpers-react
+# ALWAYS use @/lib/supabase for Supabase client
+# NEVER add shadcn components that don't exist in src/components/ui/
+# Only use components that already exist in the codebase
