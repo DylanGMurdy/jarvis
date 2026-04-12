@@ -91,6 +91,29 @@ export default function ProjectDetailPage({ params }: { params: Promise<{ id: st
   const [showBuildConfirm, setShowBuildConfirm] = useState(false);
   const [moveToBuildLoading, setMoveToBuildLoading] = useState(false);
 
+  // War Room session history
+  interface WarRoomSession { id: string; project_id: string; session_date: string; confidence_score: number; agents_run: number; summary_text: string; status: string }
+  const [warRoomSessions, setWarRoomSessions] = useState<WarRoomSession[]>([]);
+  const [showSessionHistory, setShowSessionHistory] = useState(false);
+
+  const loadWarRoomSessions = useCallback(async () => {
+    try {
+      const res = await fetch(`/api/projects/${id}/war-room/sessions`);
+      const data = await res.json();
+      setWarRoomSessions(data.data || []);
+    } catch { /* silent */ }
+  }, [id]);
+
+  useEffect(() => {
+    if (activeTab === "War Room") loadWarRoomSessions();
+  }, [activeTab, loadWarRoomSessions]);
+
+  function loadSession(session: WarRoomSession) {
+    setWarRoomSummary(session.summary_text);
+    setWarRoomAgents([]); // Historical sessions don't have per-agent details — only the synthesized summary
+    setShowSessionHistory(false);
+  }
+
   const AGENT_ROUTES: Record<string, string> = {
     cfo: "cfo", cto: "cto", clo: "clo", coo: "coo", cmo: "cmo", chro: "chro", cso: "cso",
     vp_product: "vp_product", vp_engineering: "vp_engineering", vp_finance: "vp_finance",
@@ -170,6 +193,7 @@ export default function ProjectDetailPage({ params }: { params: Promise<{ id: st
         setWarRoomSummary(data.summary);
         setWarRoomAgents(data.agents);
         loadData();
+        loadWarRoomSessions();
       } else {
         setWarRoomDeployError(data.error || "Deployment failed");
       }
@@ -1742,216 +1766,332 @@ curl -X POST ${typeof window !== "undefined" ? window.location.origin : ""}/api/
           )}
 
           {/* ── War Room ────────────────────────────────── */}
-          {activeTab === "War Room" && (
-            <div className="space-y-6">
-              {/* ── Deploy Button ───────────────────── */}
-              <div className="bg-gradient-to-r from-purple-500/10 via-violet-500/10 to-indigo-500/10 rounded-xl border border-purple-500/30 p-6">
-                <div className="flex items-center justify-between">
-                  <div>
-                    <h3 className="text-xl font-bold text-white mb-1">War Room</h3>
-                    <p className="text-sm text-[#94a3b8]">Deploy 21 AI agents in two waves. Wave 1 (CFO, CTO, CLO, COO) builds the foundation. Wave 2 uses that briefing as context.</p>
-                  </div>
+          {activeTab === "War Room" && (() => {
+            // Full agent roster (display order matters)
+            const ROSTER = {
+              "C-Suite": [
+                { key: "cmo", name: "CMO", role: "Chief Marketing Officer", color: "bg-pink-500" },
+                { key: "cfo", name: "CFO", role: "Chief Financial Officer", color: "bg-emerald-500" },
+                { key: "cto", name: "CTO", role: "Chief Technology Officer", color: "bg-cyan-500" },
+                { key: "coo", name: "COO", role: "Chief Operations Officer", color: "bg-sky-500" },
+                { key: "clo", name: "CLO", role: "Chief Legal Officer", color: "bg-amber-500" },
+                { key: "chro", name: "CHRO", role: "Chief HR Officer", color: "bg-rose-500" },
+              ],
+              "VP Layer": [
+                { key: "cso", name: "CSO", role: "Chief Sales Officer", color: "bg-violet-500" },
+                { key: "vp_sales", name: "VP Sales", role: "VP of Sales", color: "bg-blue-500" },
+                { key: "vp_product", name: "VP Product", role: "VP of Product", color: "bg-indigo-500" },
+                { key: "vp_engineering", name: "VP Engineering", role: "VP of Engineering", color: "bg-cyan-600" },
+                { key: "vp_marketing", name: "VP Marketing", role: "VP of Marketing", color: "bg-pink-600" },
+                { key: "vp_finance", name: "VP Finance", role: "VP of Finance", color: "bg-teal-500" },
+                { key: "vp_operations", name: "VP Operations", role: "VP of Operations", color: "bg-sky-600" },
+              ],
+              "Specialists": [
+                { key: "head_of_growth", name: "Head of Growth", role: "Head of Growth", color: "bg-green-500" },
+                { key: "head_of_content", name: "Head of Content", role: "Head of Content", color: "bg-orange-500" },
+                { key: "head_of_design", name: "Head of Design", role: "Head of Design", color: "bg-fuchsia-500" },
+                { key: "head_cx", name: "Head of CX", role: "Head of Customer Experience", color: "bg-rose-600" },
+                { key: "sdr", name: "SDR", role: "SDR Team Lead", color: "bg-blue-600" },
+                { key: "partnerships", name: "Partnerships", role: "Head of Partnerships", color: "bg-purple-500" },
+                { key: "customer_success", name: "Customer Success", role: "Head of Customer Success", color: "bg-yellow-500" },
+                { key: "head_of_pr", name: "Head of PR", role: "Head of Public Relations", color: "bg-red-500" },
+                { key: "investor_relations", name: "Investor Relations", role: "Head of IR", color: "bg-slate-500" },
+                { key: "head_of_recruiting", name: "Head of Recruiting", role: "Head of Recruiting", color: "bg-lime-500" },
+                { key: "data_analytics", name: "Master Orchestrator", role: "Data & Orchestration", color: "bg-indigo-600" },
+              ],
+            } as const;
+
+            const WAVE1_KEYS = ["cfo", "cto", "clo", "coo"];
+            const completedKeys = new Set(warRoomAgents.map((a) => a.key));
+            const wave1Done = WAVE1_KEYS.filter((k) => completedKeys.has(k)).length;
+            const wave2Done = warRoomAgents.length - wave1Done;
+
+            function getInitials(name: string): string {
+              return name.split(" ").map((w) => w[0]).join("").slice(0, 2).toUpperCase();
+            }
+
+            // Empty state
+            if (!warRoomDeploying && warRoomAgents.length === 0 && !warRoomSummary) {
+              return (
+                <div className="flex flex-col items-center justify-center py-24 px-4">
+                  <div className="text-6xl mb-6">🏛️</div>
+                  <h3 className="text-2xl font-bold text-white mb-3">Deploy the War Room</h3>
+                  <p className="text-sm text-[#94a3b8] text-center max-w-md mb-8">Deploy the War Room to get your full executive team analysis. 22 specialized AI agents across C-Suite, VP, and Specialist tiers will analyze every angle of this project.</p>
                   <button
                     onClick={deployWarRoom}
                     disabled={warRoomDeploying}
-                    className="px-6 py-3 bg-purple-600 hover:bg-purple-700 text-white rounded-lg font-semibold transition-colors disabled:opacity-50 whitespace-nowrap ml-4"
+                    className="px-8 py-4 bg-purple-600 hover:bg-purple-700 text-white rounded-lg font-semibold transition-colors disabled:opacity-50 flex items-center gap-2"
                   >
-                    {warRoomDeploying ? "Deploying..." : warRoomAgents.length > 0 ? "Re-deploy War Room" : "Deploy Full War Room"}
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z" /></svg>
+                    Deploy War Room
                   </button>
+                  {warRoomDeployError && (
+                    <div className="mt-4 text-sm text-red-400 bg-red-500/10 border border-red-500/20 rounded-lg px-4 py-2">{warRoomDeployError}</div>
+                  )}
                 </div>
-                {warRoomDeploying && (
-                  <div className="mt-4 flex items-center gap-3">
-                    <div className="w-4 h-4 border-2 border-purple-400 border-t-transparent rounded-full animate-spin" />
-                    <span className="text-sm text-purple-300">Running 21 agents in 2 waves... estimated ~2 minutes</span>
-                  </div>
-                )}
-                {warRoomDeployError && (
-                  <div className="mt-3 text-sm text-red-400 bg-red-500/10 border border-red-500/20 rounded-lg px-4 py-2">{warRoomDeployError}</div>
-                )}
-              </div>
+              );
+            }
 
-              {/* ── JARVIS Summary ──────────────────── */}
-              {warRoomSummary && (
-                <div className="bg-gradient-to-br from-purple-900/40 to-indigo-900/40 rounded-xl border border-purple-500/30 p-6">
-                  <div className="flex items-center gap-2 mb-4">
-                    <div className="w-8 h-8 bg-purple-600 rounded-lg flex items-center justify-center text-white font-bold text-sm">J</div>
+            // Determine selected agent for right panel
+            const selectedAgent = warRoomAgents.find((a) => a.key === selectedAgentKey);
+            const isShowingSummary = selectedAgentKey === "summary" && !!warRoomSummary;
+
+            // Parse report into sections
+            function parseSections(text: string): { heading: string | null; body: string }[] {
+              if (!text) return [];
+              const lines = text.split("\n");
+              const sections: { heading: string | null; body: string }[] = [];
+              let currentHeading: string | null = null;
+              let currentBody: string[] = [];
+              const headingRegex = /^#{1,4}\s+(.+)$|^\*\*(.+)\*\*$|^([A-Z][A-Za-z\s&]+):\s*$/;
+              for (const line of lines) {
+                const m = line.match(headingRegex);
+                if (m) {
+                  if (currentHeading !== null || currentBody.length > 0) {
+                    sections.push({ heading: currentHeading, body: currentBody.join("\n").trim() });
+                  }
+                  currentHeading = (m[1] || m[2] || m[3]).trim();
+                  currentBody = [];
+                } else {
+                  currentBody.push(line);
+                }
+              }
+              if (currentHeading !== null || currentBody.length > 0) {
+                sections.push({ heading: currentHeading, body: currentBody.join("\n").trim() });
+              }
+              return sections.filter((s) => s.heading || s.body);
+            }
+
+            // Confidence score from summary (heuristic)
+            function extractConfidence(): number {
+              if (!warRoomSummary) return 7;
+              const m = warRoomSummary.match(/confidence[:\s]+(\d+)/i);
+              if (m) return Math.min(10, parseInt(m[1]));
+              const positiveSignals = (warRoomSummary.match(/strong|clear|aligned|consensus|recommended|ready/gi) || []).length;
+              const negativeSignals = (warRoomSummary.match(/risk|concern|conflict|warning|caution/gi) || []).length;
+              return Math.max(1, Math.min(10, 7 + Math.floor((positiveSignals - negativeSignals) / 2)));
+            }
+
+            return (
+              <div className="flex gap-0 h-[calc(100vh-280px)] min-h-[600px] bg-[#0a0a0f] rounded-xl border border-[#1e1e2e] overflow-hidden">
+                {/* ── LEFT SIDEBAR ──────────────────────── */}
+                <div className="w-60 flex-shrink-0 bg-[#0f0f17] border-r border-[#1e1e2e] flex flex-col">
+                  {/* Progress bar */}
+                  <div className="p-3 border-b border-[#1e1e2e] space-y-2">
                     <div>
-                      <h3 className="text-lg font-bold text-white">JARVIS Summary</h3>
-                      <p className="text-xs text-purple-300">Synthesized from all 21 agent analyses</p>
-                    </div>
-                  </div>
-                  <div className="text-sm text-[#e2e8f0] whitespace-pre-wrap leading-relaxed">{warRoomSummary}</div>
-                </div>
-              )}
-
-              {/* ── Org Chart Layout ────────────────── */}
-              {warRoomAgents.length > 0 && (
-                <>
-                  {/* C-Suite Row */}
-                  <div>
-                    <div className="flex items-center gap-2 mb-3">
-                      <div className="h-px flex-1 bg-gradient-to-r from-yellow-500/30 to-transparent" />
-                      <span className="text-xs font-bold text-yellow-400 uppercase tracking-wider">C-Suite</span>
-                      <div className="h-px flex-1 bg-gradient-to-l from-yellow-500/30 to-transparent" />
-                    </div>
-                    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
-                      {warRoomAgents.filter((a) => a.tier === "c-suite").map((agent) => {
-                        const isExpanded = warRoomExpanded.has(agent.key);
-                        const isRerunning = warRoomRerunning.has(agent.key);
-                        const preview = agent.result.split(/[.!?]\s/).slice(0, 2).join(". ") + ".";
-                        return (
-                          <div key={agent.key} className="bg-[#12121a] rounded-xl border border-yellow-500/20 flex flex-col">
-                            <button
-                              onClick={() => setWarRoomExpanded((prev) => { const next = new Set(prev); next.has(agent.key) ? next.delete(agent.key) : next.add(agent.key); return next; })}
-                              className="p-4 text-left w-full"
-                            >
-                              <div className="flex items-center gap-2 mb-1">
-                                <span className="text-lg">{TIER_ICONS[agent.key] || "🏢"}</span>
-                                <h4 className="text-sm font-bold text-white">{agent.name}</h4>
-                                <span className="ml-auto text-[10px] text-yellow-500">{isExpanded ? "▲" : "▼"}</span>
-                              </div>
-                              <p className="text-[10px] text-[#64748b] uppercase tracking-wider mb-2">{agent.role}</p>
-                              {!isExpanded && <p className="text-xs text-[#94a3b8] line-clamp-2">{preview}</p>}
-                            </button>
-                            {isExpanded && (
-                              <div className="px-4 pb-4">
-                                <div className="text-sm text-[#e2e8f0] whitespace-pre-wrap leading-relaxed max-h-[400px] overflow-y-auto border-t border-[#1e1e2e] pt-3">{agent.result}</div>
-                                <button
-                                  onClick={() => rerunAgent(agent.key)}
-                                  disabled={isRerunning}
-                                  className="mt-3 w-full px-3 py-1.5 text-xs border border-yellow-500/30 text-yellow-400 rounded-lg hover:bg-yellow-500/10 disabled:opacity-50 transition-colors"
-                                >
-                                  {isRerunning ? "Re-running..." : "Re-run"}
-                                </button>
-                              </div>
-                            )}
-                          </div>
-                        );
-                      })}
-                    </div>
-                  </div>
-
-                  {/* VP Layer Row */}
-                  <div>
-                    <div className="flex items-center gap-2 mb-3">
-                      <div className="h-px flex-1 bg-gradient-to-r from-blue-500/30 to-transparent" />
-                      <span className="text-xs font-bold text-blue-400 uppercase tracking-wider">VP Layer</span>
-                      <div className="h-px flex-1 bg-gradient-to-l from-blue-500/30 to-transparent" />
-                    </div>
-                    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
-                      {warRoomAgents.filter((a) => a.tier === "vp").map((agent) => {
-                        const isExpanded = warRoomExpanded.has(agent.key);
-                        const isRerunning = warRoomRerunning.has(agent.key);
-                        const preview = agent.result.split(/[.!?]\s/).slice(0, 2).join(". ") + ".";
-                        return (
-                          <div key={agent.key} className="bg-[#12121a] rounded-xl border border-blue-500/20 flex flex-col">
-                            <button
-                              onClick={() => setWarRoomExpanded((prev) => { const next = new Set(prev); next.has(agent.key) ? next.delete(agent.key) : next.add(agent.key); return next; })}
-                              className="p-4 text-left w-full"
-                            >
-                              <div className="flex items-center gap-2 mb-1">
-                                <span className="text-lg">{TIER_ICONS[agent.key] || "🏢"}</span>
-                                <h4 className="text-sm font-bold text-white">{agent.name}</h4>
-                                <span className="ml-auto text-[10px] text-blue-500">{isExpanded ? "▲" : "▼"}</span>
-                              </div>
-                              <p className="text-[10px] text-[#64748b] uppercase tracking-wider mb-2">{agent.role}</p>
-                              {!isExpanded && <p className="text-xs text-[#94a3b8] line-clamp-2">{preview}</p>}
-                            </button>
-                            {isExpanded && (
-                              <div className="px-4 pb-4">
-                                <div className="text-sm text-[#e2e8f0] whitespace-pre-wrap leading-relaxed max-h-[400px] overflow-y-auto border-t border-[#1e1e2e] pt-3">{agent.result}</div>
-                                <button
-                                  onClick={() => rerunAgent(agent.key)}
-                                  disabled={isRerunning}
-                                  className="mt-3 w-full px-3 py-1.5 text-xs border border-blue-500/30 text-blue-400 rounded-lg hover:bg-blue-500/10 disabled:opacity-50 transition-colors"
-                                >
-                                  {isRerunning ? "Re-running..." : "Re-run"}
-                                </button>
-                              </div>
-                            )}
-                          </div>
-                        );
-                      })}
-                    </div>
-                  </div>
-
-                  {/* Specialists Row */}
-                  <div>
-                    <div className="flex items-center gap-2 mb-3">
-                      <div className="h-px flex-1 bg-gradient-to-r from-emerald-500/30 to-transparent" />
-                      <span className="text-xs font-bold text-emerald-400 uppercase tracking-wider">Specialists</span>
-                      <div className="h-px flex-1 bg-gradient-to-l from-emerald-500/30 to-transparent" />
-                    </div>
-                    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
-                      {warRoomAgents.filter((a) => a.tier === "specialist").map((agent) => {
-                        const isExpanded = warRoomExpanded.has(agent.key);
-                        const isRerunning = warRoomRerunning.has(agent.key);
-                        const preview = agent.result.split(/[.!?]\s/).slice(0, 2).join(". ") + ".";
-                        return (
-                          <div key={agent.key} className="bg-[#12121a] rounded-xl border border-emerald-500/20 flex flex-col">
-                            <button
-                              onClick={() => setWarRoomExpanded((prev) => { const next = new Set(prev); next.has(agent.key) ? next.delete(agent.key) : next.add(agent.key); return next; })}
-                              className="p-4 text-left w-full"
-                            >
-                              <div className="flex items-center gap-2 mb-1">
-                                <span className="text-lg">{TIER_ICONS[agent.key] || "🏢"}</span>
-                                <h4 className="text-sm font-bold text-white">{agent.name}</h4>
-                                <span className="ml-auto text-[10px] text-emerald-500">{isExpanded ? "▲" : "▼"}</span>
-                              </div>
-                              <p className="text-[10px] text-[#64748b] uppercase tracking-wider mb-2">{agent.role}</p>
-                              {!isExpanded && <p className="text-xs text-[#94a3b8] line-clamp-2">{preview}</p>}
-                            </button>
-                            {isExpanded && (
-                              <div className="px-4 pb-4">
-                                <div className="text-sm text-[#e2e8f0] whitespace-pre-wrap leading-relaxed max-h-[400px] overflow-y-auto border-t border-[#1e1e2e] pt-3">{agent.result}</div>
-                                <button
-                                  onClick={() => rerunAgent(agent.key)}
-                                  disabled={isRerunning}
-                                  className="mt-3 w-full px-3 py-1.5 text-xs border border-emerald-500/30 text-emerald-400 rounded-lg hover:bg-emerald-500/10 disabled:opacity-50 transition-colors"
-                                >
-                                  {isRerunning ? "Re-running..." : "Re-run"}
-                                </button>
-                              </div>
-                            )}
-                          </div>
-                        );
-                      })}
-                    </div>
-                  </div>
-                </>
-              )}
-
-              {/* ── Empty state ─────────────────────── */}
-              {!warRoomDeploying && warRoomAgents.length === 0 && !warRoomSummary && (
-                <div className="text-center py-16">
-                  <div className="text-4xl mb-4">🏛️</div>
-                  <h3 className="text-lg font-bold text-white mb-2">War Room Ready</h3>
-                  <p className="text-sm text-[#64748b] max-w-md mx-auto">Deploy the full War Room to get comprehensive analysis from 21 specialized AI agents. Wave 1 builds the financial, technical, legal, and operational foundation. Wave 2 uses that briefing to provide informed recommendations across every function.</p>
-                </div>
-              )}
-
-              {/* ── Move to Build ───────────────────── */}
-              {warRoomAgents.length > 0 && (
-                <div className="bg-[#12121a] rounded-xl border border-[#1e1e2e] p-4">
-                  {!showBuildConfirm ? (
-                    <button onClick={() => setShowBuildConfirm(true)} className="w-full px-4 py-3 bg-green-600 hover:bg-green-700 text-white rounded-lg font-semibold transition-colors">
-                      War Room Complete — Move to Build
-                    </button>
-                  ) : (
-                    <div className="space-y-3">
-                      <p className="text-sm text-white">Move this project to <span className="font-bold text-green-400">Build</span> status? This marks the War Room as complete.</p>
-                      <div className="flex gap-3">
-                        <button onClick={() => setShowBuildConfirm(false)} className="flex-1 px-4 py-2 border border-[#1e1e2e] text-[#94a3b8] rounded-lg hover:bg-[#1e1e2e] transition-colors">Cancel</button>
-                        <button onClick={moveToBuild} disabled={moveToBuildLoading} className="flex-1 px-4 py-2 bg-green-600 hover:bg-green-700 text-white rounded-lg disabled:opacity-50 transition-colors">{moveToBuildLoading ? "Moving..." : "Confirm"}</button>
+                      <div className="flex justify-between items-center text-[10px] text-[#64748b] mb-1">
+                        <span className="font-semibold">Wave 1</span>
+                        <span>{wave1Done}/4</span>
                       </div>
+                      <div className="h-1.5 bg-[#1e1e2e] rounded-full overflow-hidden">
+                        <div className="h-full bg-yellow-500 transition-all duration-500" style={{ width: `${(wave1Done / 4) * 100}%` }} />
+                      </div>
+                    </div>
+                    <div>
+                      <div className="flex justify-between items-center text-[10px] text-[#64748b] mb-1">
+                        <span className="font-semibold">Wave 2</span>
+                        <span>{wave2Done}/17</span>
+                      </div>
+                      <div className="h-1.5 bg-[#1e1e2e] rounded-full overflow-hidden">
+                        <div className="h-full bg-emerald-500 transition-all duration-500" style={{ width: `${(wave2Done / 17) * 100}%` }} />
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="flex-1 overflow-y-auto">
+                    {/* Jarvis Summary */}
+                    <button
+                      onClick={() => setSelectedAgentKey("summary")}
+                      disabled={!warRoomSummary}
+                      className={`w-full flex items-center gap-2 px-3 py-2.5 text-left border-b border-[#1e1e2e] transition-colors ${selectedAgentKey === "summary" ? "bg-purple-600/20 text-white" : "text-[#94a3b8] hover:bg-[#1e1e2e]/50"} disabled:opacity-40 disabled:cursor-not-allowed`}
+                    >
+                      <span className="text-yellow-400">⭐</span>
+                      <span className="text-xs font-semibold flex-1">JARVIS Summary</span>
+                      {warRoomSummary && <span className="text-emerald-400 text-xs">✓</span>}
+                      {warRoomDeploying && !warRoomSummary && <span className="w-1.5 h-1.5 rounded-full bg-purple-400 animate-pulse" />}
+                    </button>
+
+                    {/* Tier groups */}
+                    {(Object.entries(ROSTER) as [string, ReadonlyArray<{ key: string; name: string; role: string; color: string }>][]).map(([tier, agents]) => (
+                      <div key={tier}>
+                        <div className="px-3 py-2 text-[9px] font-bold uppercase tracking-wider text-[#475569] bg-[#0a0a0f]">{tier}</div>
+                        {agents.map((agent) => {
+                          const isComplete = completedKeys.has(agent.key);
+                          const isLoading = warRoomDeploying && !isComplete;
+                          const isSelected = selectedAgentKey === agent.key;
+                          return (
+                            <button
+                              key={agent.key}
+                              onClick={() => setSelectedAgentKey(agent.key)}
+                              disabled={!isComplete}
+                              className={`w-full flex items-center gap-2 px-3 py-2 text-left text-xs transition-colors ${isSelected ? "bg-purple-600/20 text-white" : "text-[#94a3b8] hover:bg-[#1e1e2e]/50"} disabled:opacity-40 disabled:cursor-not-allowed`}
+                            >
+                              <div className={`w-6 h-6 rounded-full flex-shrink-0 flex items-center justify-center text-[9px] font-bold text-white ${agent.color}`}>
+                                {getInitials(agent.name)}
+                              </div>
+                              <span className="flex-1 truncate">{agent.name}</span>
+                              {isComplete && <span className="text-emerald-400 text-xs">✓</span>}
+                              {isLoading && <span className="w-1.5 h-1.5 rounded-full bg-purple-400 animate-pulse" />}
+                            </button>
+                          );
+                        })}
+                      </div>
+                    ))}
+                  </div>
+
+                  {/* Re-deploy button at bottom */}
+                  <div className="p-3 border-t border-[#1e1e2e]">
+                    <button
+                      onClick={deployWarRoom}
+                      disabled={warRoomDeploying}
+                      className="w-full px-3 py-2 bg-purple-600 hover:bg-purple-700 text-white text-xs font-semibold rounded-lg transition-colors disabled:opacity-50"
+                    >
+                      {warRoomDeploying ? "Deploying..." : "Re-deploy"}
+                    </button>
+                  </div>
+                </div>
+
+                {/* ── RIGHT PANEL ──────────────────────── */}
+                <div className="flex-1 overflow-y-auto">
+                  {isShowingSummary ? (
+                    <div>
+                      {/* Purple gradient header */}
+                      <div className="bg-gradient-to-br from-purple-900 via-violet-900 to-indigo-900 p-8">
+                        <div className="flex items-start justify-between mb-4">
+                          <div className="flex items-center gap-3">
+                            <div className="w-12 h-12 bg-purple-600 rounded-xl flex items-center justify-center text-white text-2xl font-bold">J</div>
+                            <div>
+                              <h2 className="text-2xl font-bold text-white">JARVIS Summary</h2>
+                              <p className="text-sm text-purple-200">Synthesized from all 21 agent analyses</p>
+                            </div>
+                          </div>
+                          <button onClick={downloadAllReports} className="px-4 py-2 bg-white/10 hover:bg-white/20 text-white text-sm font-medium rounded-lg transition-colors flex items-center gap-2">
+                            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4M7 10l5 5 5-5M12 15V3" /></svg>
+                            Download All Reports
+                          </button>
+                        </div>
+
+                        {/* Confidence meter */}
+                        <div className="mt-6">
+                          <div className="flex items-center justify-between mb-2">
+                            <span className="text-xs font-semibold text-purple-200 uppercase tracking-wider">Team Confidence</span>
+                            <span className="text-2xl font-bold text-white">{extractConfidence()}<span className="text-sm text-purple-300">/10</span></span>
+                          </div>
+                          <div className="h-3 bg-purple-950/50 rounded-full overflow-hidden">
+                            <div className="h-full bg-gradient-to-r from-yellow-400 via-orange-400 to-emerald-400 transition-all duration-700" style={{ width: `${(extractConfidence() / 10) * 100}%` }} />
+                          </div>
+                        </div>
+                      </div>
+
+                      {/* Summary body */}
+                      <div className="p-8 space-y-6">
+                        {parseSections(warRoomSummary || "").map((section, i) => {
+                          const heading = (section.heading || "").toLowerCase();
+                          const isConsensus = heading.includes("agreed") || heading.includes("consensus");
+                          const isConflict = heading.includes("conflict") || heading.includes("flag");
+                          const isRecommend = heading.includes("recommend") || heading.includes("next");
+                          const bulletLines = section.body.split("\n").filter((l) => l.trim().match(/^[-*•\d]/));
+
+                          return (
+                            <div key={i}>
+                              {section.heading && (
+                                <h3 className="text-lg font-bold text-white mb-3 flex items-center gap-2">
+                                  {isConsensus && <span className="text-emerald-400">✓</span>}
+                                  {isConflict && <span className="text-amber-400">⚠️</span>}
+                                  {isRecommend && <span className="text-blue-400">→</span>}
+                                  {section.heading.replace(/^\d+\.\s*/, "").replace(/\*\*/g, "")}
+                                </h3>
+                              )}
+                              {bulletLines.length > 0 ? (
+                                <ul className="space-y-2">
+                                  {bulletLines.map((line, j) => {
+                                    const cleaned = line.replace(/^[-*•]\s*/, "").replace(/^\d+\.\s*/, "");
+                                    if (isRecommend) {
+                                      return (
+                                        <li key={j} className="flex gap-3 items-start">
+                                          <span className="flex-shrink-0 w-6 h-6 rounded-full bg-blue-500/20 text-blue-400 flex items-center justify-center text-xs font-bold">{j + 1}</span>
+                                          <span className="text-sm text-[#e2e8f0] leading-relaxed">{cleaned}</span>
+                                        </li>
+                                      );
+                                    }
+                                    return (
+                                      <li key={j} className="flex gap-2 items-start">
+                                        <span className={`flex-shrink-0 mt-1 ${isConsensus ? "text-emerald-400" : isConflict ? "text-amber-400" : "text-[#64748b]"}`}>
+                                          {isConsensus ? "✓" : isConflict ? "⚠" : "•"}
+                                        </span>
+                                        <span className="text-sm text-[#e2e8f0] leading-relaxed">{cleaned}</span>
+                                      </li>
+                                    );
+                                  })}
+                                </ul>
+                              ) : (
+                                <p className="text-sm text-[#e2e8f0] whitespace-pre-wrap leading-relaxed">{section.body}</p>
+                              )}
+                            </div>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  ) : selectedAgent ? (
+                    <div>
+                      {/* Agent header */}
+                      <div className="p-8 border-b border-[#1e1e2e] flex items-start justify-between gap-6">
+                        <div className="flex-1 min-w-0">
+                          <h2 className="text-2xl font-bold text-white mb-1">{selectedAgent.name}</h2>
+                          <p className="text-sm text-[#64748b]">{selectedAgent.role}</p>
+                          <p className="text-xs text-[#475569] mt-2">Generated just now</p>
+                        </div>
+                        <div className="flex flex-col gap-2 flex-shrink-0">
+                          <div className="flex gap-2">
+                            <input
+                              type="text"
+                              value={rerunInstructions[selectedAgent.key] || ""}
+                              onChange={(e) => setRerunInstructions((prev) => ({ ...prev, [selectedAgent.key]: e.target.value }))}
+                              placeholder="Add instructions..."
+                              className="w-48 bg-[#0a0a0f] border border-[#1e1e2e] rounded-lg px-3 py-1.5 text-xs text-[#e2e8f0] placeholder-[#64748b] focus:outline-none focus:border-purple-500/50"
+                            />
+                            <button
+                              onClick={() => rerunAgent(selectedAgent.key)}
+                              disabled={warRoomRerunning.has(selectedAgent.key)}
+                              className="px-3 py-1.5 bg-purple-600/20 border border-purple-500/30 text-purple-400 text-xs font-medium rounded-lg hover:bg-purple-600/30 transition-colors whitespace-nowrap disabled:opacity-50"
+                            >
+                              {warRoomRerunning.has(selectedAgent.key) ? "Running..." : "Re-run Agent"}
+                            </button>
+                          </div>
+                          <button
+                            onClick={() => downloadReport(`${selectedAgent.key}-report.txt`, `${selectedAgent.name} — ${selectedAgent.role}\n\n${selectedAgent.result}`)}
+                            className="px-3 py-1.5 bg-[#1e1e2e] hover:bg-[#2a2a3a] text-[#e2e8f0] text-xs font-medium rounded-lg transition-colors flex items-center justify-center gap-2"
+                          >
+                            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4M7 10l5 5 5-5M12 15V3" /></svg>
+                            Download PDF
+                          </button>
+                        </div>
+                      </div>
+
+                      {/* Report body */}
+                      <div className="p-8 space-y-6">
+                        {parseSections(selectedAgent.result).map((section, i) => (
+                          <div key={i}>
+                            {section.heading && (
+                              <h3 className="text-base font-bold text-white mb-3 pb-2 border-b border-[#1e1e2e]">
+                                {section.heading.replace(/^\d+\.\s*/, "").replace(/\*\*/g, "")}
+                              </h3>
+                            )}
+                            <div className="text-sm text-[#cbd5e1] whitespace-pre-wrap leading-relaxed">{section.body}</div>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  ) : (
+                    <div className="flex flex-col items-center justify-center h-full p-8">
+                      <div className="text-4xl mb-4">⏳</div>
+                      <p className="text-sm text-[#64748b]">{warRoomDeploying ? "Agents deploying — results will appear here as they complete." : "Select an agent from the sidebar to view their report."}</p>
                     </div>
                   )}
                 </div>
-              )}
-            </div>
-          )}
-
-          {/* ── History ─────────────────────────────────── */}
+              </div>
+            );
+          })()}
           {activeTab === "History" && (
             <div className="space-y-3">
               <div className="flex items-center justify-between mb-2">
