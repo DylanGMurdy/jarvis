@@ -38,10 +38,13 @@ export interface ProjectNote {
 export interface Goal {
   id: string;
   title: string;
+  description?: string;
   category: string;
   progress: number;
   target: number | string;
   target_date?: string;
+  status?: "On Track" | "At Risk" | "Behind" | "Complete";
+  project_id?: string | null;
   milestones: Milestone[];
   weekly_breakdown?: string[];
   progress_snapshots?: ProgressSnapshot[];

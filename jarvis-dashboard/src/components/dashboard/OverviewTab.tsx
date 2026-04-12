@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect, useCallback } from "react";
 import Link from "next/link";
 import type { Project, Memory } from "@/lib/types";
 import type { MemoryForBrain } from "@/components/JarvisBrain";
@@ -31,15 +31,6 @@ const SCHEDULE = [
   { time: "5:30 PM", event: "Wrap up + planning", type: "work" },
   { time: "6:00 PM", event: "Family time", type: "family" },
   { time: "8:00 PM", event: "Vibe coding session", type: "ai" },
-];
-
-const ACTIVITY_FEED = [
-  { time: "2 min ago", agent: "Lead Nurture Bot", action: "Sent personalized follow-up to Ivory Homes lead #847", type: "action" },
-  { time: "15 min ago", agent: "Inbox Sentinel", action: "Flagged email from broker — contract amendment needs review", type: "alert" },
-  { time: "32 min ago", agent: "Scheduler", action: "Protected family time block 6-8pm on calendar", type: "action" },
-  { time: "1 hr ago", agent: "Lead Nurture Bot", action: "Qualified 2 new leads from Fieldstone Homes campaign", type: "success" },
-  { time: "2 hrs ago", agent: "Market Analyzer", action: "Utah County median up 2.3% — report ready for review", type: "info" },
-  { time: "3 hrs ago", agent: "Content Writer", action: "Drafted 4 new listing descriptions for review", type: "action" },
 ];
 
 const MOODS = ["Fired Up", "Focused", "Tired", "Stressed", "Creative"];
@@ -209,6 +200,36 @@ export default function OverviewTab({ projects, memories, setActiveTab, setMemor
   const [dailyBrief, setDailyBrief] = useState<string | null>(null);
   const [briefLoading, setBriefLoading] = useState(false);
   const [briefingLoading, setBriefingLoading] = useState(false);
+
+  // Live agent activity feed
+  interface ActivityItem { id: string; agent: string; action: string; preview: string; project: string; project_id: string; created_at: string }
+  const [activity, setActivity] = useState<ActivityItem[]>([]);
+  const [activityLoading, setActivityLoading] = useState(true);
+
+  const fetchActivity = useCallback(async () => {
+    try {
+      const res = await fetch("/api/agents/activity");
+      const data = await res.json();
+      setActivity(data.data || []);
+    } catch { /* silent */ }
+    setActivityLoading(false);
+  }, []);
+
+  useEffect(() => {
+    fetchActivity();
+    const interval = setInterval(fetchActivity, 60000); // 60s auto-refresh
+    return () => clearInterval(interval);
+  }, [fetchActivity]);
+
+  function timeAgo(dateStr: string): string {
+    const diff = Date.now() - new Date(dateStr).getTime();
+    const mins = Math.floor(diff / 60000);
+    if (mins < 1) return "Just now";
+    if (mins < 60) return `${mins}m ago`;
+    const hrs = Math.floor(mins / 60);
+    if (hrs < 24) return `${hrs}h ago`;
+    return `${Math.floor(hrs / 24)}d ago`;
+  }
 
   const handleMood = (mood: string) => {
     setSelectedMood(mood);
@@ -403,17 +424,57 @@ export default function OverviewTab({ projects, memories, setActiveTab, setMemor
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
         {/* Activity Feed */}
         <div className="bg-jarvis-card border border-jarvis-border rounded-xl p-4">
-          <h3 className="text-sm font-semibold text-jarvis-muted mb-3">Agent Activity</h3>
-          <div className="space-y-3">
-            {ACTIVITY_FEED.map((a, i) => (
-              <button key={i} onClick={() => openModal({ title: `${a.agent} Activity`, body: `Time: ${a.time}\nAgent: ${a.agent}\nAction: ${a.action}\nType: ${a.type}`, actions: [{ label: "View Details", onClick: closeModal }, { label: "Pause Agent", onClick: closeModal }] })} className="flex gap-3 w-full text-left p-2 rounded-lg hover:bg-jarvis-border/50 transition-colors">
-                <span className={`w-2 h-2 rounded-full mt-1.5 flex-shrink-0 ${a.type === "alert" ? "bg-jarvis-red" : a.type === "success" ? "bg-jarvis-green" : "bg-jarvis-accent"}`} />
-                <div className="flex-1 min-w-0">
-                  <div className="text-sm text-jarvis-text">{a.action}</div>
-                  <div className="text-xs text-jarvis-muted">{a.agent} &middot; {a.time}</div>
-                </div>
+          <div className="flex items-center justify-between mb-3">
+            <h3 className="text-sm font-semibold text-jarvis-muted">Agent Activity</h3>
+            <div className="flex items-center gap-2">
+              {activity.length > 0 && (
+                <span className="text-[10px] px-2 py-0.5 rounded-full bg-jarvis-green/20 text-jarvis-green border border-jarvis-green/30 font-semibold">
+                  {activity.length} action{activity.length !== 1 ? "s" : ""} today
+                </span>
+              )}
+              <button onClick={fetchActivity} className="text-[10px] text-jarvis-muted hover:text-jarvis-accent transition-colors" title="Refresh">
+                ↻
               </button>
-            ))}
+            </div>
+          </div>
+          <div className="space-y-3 max-h-96 overflow-y-auto">
+            {activityLoading ? (
+              <div className="text-center py-6 text-sm text-jarvis-muted animate-pulse">Loading activity...</div>
+            ) : activity.length === 0 ? (
+              <div className="text-center py-6 px-4">
+                <p className="text-sm text-jarvis-muted mb-3">No agent activity in the last 24 hours</p>
+                <button
+                  onClick={() => setActiveTab("agents")}
+                  className="text-xs px-3 py-1.5 bg-jarvis-accent/20 text-jarvis-accent rounded-lg hover:bg-jarvis-accent/30 transition-colors"
+                >
+                  Run Agents Now →
+                </button>
+              </div>
+            ) : (
+              activity.map((a) => (
+                <button
+                  key={a.id}
+                  onClick={() => openModal({
+                    title: `${a.agent}${a.action ? ` — ${a.action}` : ""}`,
+                    body: `Project: ${a.project}\nWhen: ${timeAgo(a.created_at)}\n\n${a.preview}${a.preview.length >= 100 ? "..." : ""}`,
+                    actions: [{ label: "View Project", onClick: () => { closeModal(); window.location.href = `/ideas/${a.project_id}`; } }, { label: "Close", onClick: closeModal }],
+                  })}
+                  className="flex gap-3 w-full text-left p-2 rounded-lg hover:bg-jarvis-border/50 transition-colors"
+                >
+                  <span className="w-2 h-2 rounded-full mt-1.5 flex-shrink-0 bg-jarvis-accent" />
+                  <div className="flex-1 min-w-0">
+                    <div className="text-sm text-jarvis-text truncate">
+                      <span className="font-semibold">{a.agent}</span>
+                      {a.action && <span className="text-jarvis-muted"> — {a.action}</span>}
+                    </div>
+                    <div className="text-xs text-jarvis-muted truncate">{a.preview}</div>
+                    <div className="text-[10px] text-jarvis-muted mt-0.5">
+                      {a.project} &middot; {timeAgo(a.created_at)}
+                    </div>
+                  </div>
+                </button>
+              ))
+            )}
           </div>
         </div>
 
