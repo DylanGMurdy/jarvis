@@ -57,3 +57,29 @@ Three stage pipeline: Idea Lab → War Room → Build
 - /api/build for autonomous builds
 - Dylan talks to Claude, Claude orchestrates all AIs
 - 6 month path to $100K not 12
+
+---
+
+## DAY 3 EVENING — April 11 2026
+
+### BUILT TONIGHT (100+ total commits)
+War Room: results viewer with sidebar nav, markdown rendering, rate limit fix, session history, comparison view, Perplexity research integration
+Dashboard: Cmd+K search, command center, morning briefing, real-time notifications, agent performance tracker, revenue projector, weekly report generator, real data (weather/clock/KPIs)
+Projects: kanban tasks, notes panel, timeline, milestones, shareable links, PDF export
+Mobile: chat fix (no page shift), bottom tabs, voice button
+New pages: settings, memory manager, goals tracker, revenue projector, onboarding wizard
+Landing page LIVE at /landing — waitlist collecting emails
+
+### KEY FACTS
+- Anthropic Tier 2: 450K tokens/min
+- Perplexity API: pplx- key added to Netlify
+- War Room cost: ~$0.38 per full 21-agent run
+- /api/build CORS fix pending — will enable fully autonomous Claude builds
+- Jarvis IP has real acquisition value (software + methodology + proof of concept)
+
+### NEXT SESSION
+1. Fix /api/build CORS for autonomous builds
+2. Full War Room test end to end
+3. Gmail API on SDR agent
+4. Custom domain
+5. Close Narwhal PM leads
