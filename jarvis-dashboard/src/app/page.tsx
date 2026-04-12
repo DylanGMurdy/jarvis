@@ -650,6 +650,56 @@ export default function Dashboard() {
             </div>
           ) : (
           <main className="flex-1 overflow-y-auto p-4 md:p-6 pb-20 md:pb-6">
+            {/* ── Command Center Quick Actions ── */}
+            {activeTab === "overview" && (
+              <div className="mb-6">
+                <div className="flex gap-2 overflow-x-auto no-scrollbar pb-1">
+                  {([
+                    { icon: "☀️", label: "Morning Brief", action: () => sendChat("Give me my morning briefing — status on all projects, what to focus on today, any urgent items") },
+                    { icon: "🏛️", label: "Run War Room", action: () => {
+                      if (projects.length > 0) {
+                        openModal({
+                          title: "Deploy War Room",
+                          body: "Choose a project to analyze with all 21 agents:",
+                          actions: projects.slice(0, 6).map((p) => ({
+                            label: p.title,
+                            onClick: () => { closeModal(); window.open(`/ideas/${p.id}#war-room`, "_self"); },
+                          })),
+                        });
+                      }
+                    }},
+                    { icon: "🎯", label: "Find Leads", action: async () => {
+                      openModal({ title: "Finding Leads...", body: "SDR Agent is identifying prospects for Lindy Agents..." });
+                      try {
+                        const res = await fetch("/api/agents/sdr", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ action: "cold_outreach", projectId: "8f662ef5-df61-45fa-815b-0144739edf6f", projectTitle: "Lindy Agent Business", projectDescription: "Custom AI agents for real estate agents" }) });
+                        const data = await res.json();
+                        openModal({ title: "SDR: Cold Outreach", body: data.ok ? data.result : data.error || "Failed", actions: [{ label: "Close", onClick: closeModal }] });
+                      } catch { openModal({ title: "Error", body: "Connection failed", actions: [{ label: "Close", onClick: closeModal }] }); }
+                    }},
+                    { icon: "✉️", label: "Draft Outreach", action: async () => {
+                      openModal({ title: "Drafting Outreach...", body: "SDR Agent is writing personalized messages..." });
+                      try {
+                        const res = await fetch("/api/agents/sdr", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ action: "outreach_personalization", projectId: "8f662ef5-df61-45fa-815b-0144739edf6f", projectTitle: "Lindy Agent Business", projectDescription: "Custom AI agents for real estate agents" }) });
+                        const data = await res.json();
+                        openModal({ title: "SDR: Personalized Outreach", body: data.ok ? data.result : data.error || "Failed", actions: [{ label: "Close", onClick: closeModal }] });
+                      } catch { openModal({ title: "Error", body: "Connection failed", actions: [{ label: "Close", onClick: closeModal }] }); }
+                    }},
+                    { icon: "🛡️", label: "Approvals", badge: pendingApprovals, action: () => setActiveTab("approvals") },
+                    { icon: "🤖", label: "Agent Status", action: () => setActiveTab("agents") },
+                  ] as { icon: string; label: string; badge?: number; action: () => void }[]).map((cmd) => (
+                    <button
+                      key={cmd.label}
+                      onClick={cmd.action}
+                      className="flex items-center gap-2 px-4 py-2.5 bg-jarvis-card border border-jarvis-border rounded-full text-sm text-jarvis-text hover:border-jarvis-accent/40 hover:bg-jarvis-accent/5 transition-colors whitespace-nowrap shrink-0 min-h-[44px]"
+                    >
+                      <span>{cmd.icon}</span>
+                      <span>{cmd.label}</span>
+                      {cmd.badge ? <span className="bg-red-500 text-white text-[10px] font-bold px-1.5 py-0.5 rounded-full min-w-[18px] text-center">{cmd.badge}</span> : null}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            )}
             {tabContent[activeTab]()}
           </main>
           )}
