@@ -528,6 +528,12 @@ export default function ProjectDetailPage({ params }: { params: Promise<{ id: st
             ...prev,
             { key: AGENT_NAME_TO_KEY[agentName] || agentName.toLowerCase(), name: agentName, role: r.role, tier: tierForAgent(agentName), result: r.result },
           ]);
+          // Persist this agent's result immediately so it survives page refresh
+          fetch(`/api/projects/${id}/war-room/save-agent`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ projectId: id, agentName, agentRole: r.role, result: r.result }),
+          }).catch(() => {});
         }
         setProgressDone((p) => p + 1);
         await new Promise((res) => setTimeout(res, 1000));
@@ -550,6 +556,11 @@ export default function ProjectDetailPage({ params }: { params: Promise<{ id: st
             ...prev,
             { key: AGENT_NAME_TO_KEY[agentName] || agentName.toLowerCase(), name: agentName, role: r.role, tier: tierForAgent(agentName), result: r.result },
           ]);
+          fetch(`/api/projects/${id}/war-room/save-agent`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ projectId: id, agentName, agentRole: r.role, result: r.result }),
+          }).catch(() => {});
         }
         setProgressDone((p) => p + 1);
         await new Promise((res) => setTimeout(res, 1000));
@@ -570,7 +581,14 @@ export default function ProjectDetailPage({ params }: { params: Promise<{ id: st
         : "Summary generation failed.";
       setWarRoomSummary(summaryText);
 
-      // ── Save to Supabase ──
+      // Persist Jarvis Summary as its own war_room_jarvis_summary note
+      fetch(`/api/projects/${id}/war-room/save-agent`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ projectId: id, agentName: "Jarvis Summary", agentRole: "AI Chief of Staff", result: summaryText }),
+      }).catch(() => {});
+
+      // ── Save to Supabase (full session record + notification) ──
       const resultsMap: Record<string, string> = {};
       for (const [name, v] of Object.entries(collected)) resultsMap[name] = v.result;
       await fetch(`/api/projects/${id}/war-room/save`, {
@@ -1227,6 +1245,47 @@ export default function ProjectDetailPage({ params }: { params: Promise<{ id: st
       const mData = await mRes.json();
       setMilestones(mData.data || []);
     } catch { /* silent */ }
+
+    // ── Hydrate War Room state from persisted project_notes ──
+    // So results survive page refresh.
+    try {
+      const warNotes = (n || []).filter(
+        (note: { source?: string }) => note.source && note.source.startsWith("war_room_")
+      );
+      if (warNotes.length > 0) {
+        // Map each note → WarRoomAgent state shape
+        const agents: WarRoomAgent[] = [];
+        let savedSummary: string | null = null;
+        for (const note of warNotes) {
+          if (note.source === "war_room_jarvis_summary") {
+            // Strip the [War Room — Jarvis Summary (...)]\n\n prefix
+            const m = note.content.match(/^\[War Room — [^\]]+\]\s*\n\n([\s\S]*)$/);
+            savedSummary = m ? m[1] : note.content;
+            continue;
+          }
+          // Parse the leading [War Room — Name (Role)] header
+          const headerMatch = note.content.match(/^\[War Room — ([^(\]]+?)(?:\s*\(([^)]+)\))?\]\s*\n\n([\s\S]*)$/);
+          const name = headerMatch ? headerMatch[1].trim() : (note.source || "").replace("war_room_", "").replace(/_/g, " ");
+          const role = headerMatch?.[2] || "";
+          const result = headerMatch ? headerMatch[3] : note.content;
+          const key = (note.source || "").replace("war_room_", "");
+          // Skip if already added (oldest first wins for de-dup since list is asc by created_at via filter order)
+          if (agents.some((a) => a.key === key)) continue;
+          agents.push({
+            key,
+            name,
+            role,
+            tier: ["cfo", "cto", "clo", "coo", "cmo", "chro", "cso"].includes(key)
+              ? "c-suite"
+              : key.startsWith("vp_") ? "vp" : "specialist",
+            result,
+          });
+        }
+        if (agents.length > 0) setWarRoomAgents(agents);
+        if (savedSummary) setWarRoomSummary(savedSummary);
+      }
+    } catch { /* silent */ }
+
     setLoading(false);
   }, [id]);
 
