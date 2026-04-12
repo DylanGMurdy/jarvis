@@ -9,8 +9,8 @@ interface AgentDef {
   tier: "c-suite" | "vp" | "specialist";
 }
 
-// Sleep helper
-const sleep = (ms: number) => new Promise<void>((r) => setTimeout(r, ms));
+// Delay helper
+const delay = (ms: number) => new Promise<void>((resolve) => setTimeout(resolve, ms));
 
 // ─── Concise prompts (~200 tokens each) ──────────────────
 const WAVE_1: AgentDef[] = [
@@ -77,7 +77,7 @@ async function callAgent(client: Anthropic, agent: AgentDef, context: string, br
   const doCall = async () => {
     const response = await client.messages.create({
       model: "claude-sonnet-4-20250514",
-      max_tokens: 600,
+      max_tokens: 500,
       system,
       messages: [{ role: "user", content: `Analyze:\n\n${context}` }],
     });
@@ -93,7 +93,7 @@ async function callAgent(client: Anthropic, agent: AgentDef, context: string, br
     const isRateLimit = e?.status === 429 || (e?.message || "").toLowerCase().includes("rate");
     if (isRateLimit) {
       // Exponential backoff: wait 10s then retry once
-      await sleep(10000);
+      await delay(10000);
       try {
         const result = await doCall();
         return { key: agent.key, name: agent.name, role: agent.role, tier: agent.tier, result };
@@ -114,41 +114,36 @@ export async function POST(_request: Request, { params }: { params: Promise<{ id
   if (!sb) return Response.json({ error: "Supabase not configured" }, { status: 500 });
 
   const client = new Anthropic({ apiKey });
-  const { lean: leanContext, full: fullContext, title: projectTitle } = await buildLeanContext(sb, projectId);
+  const { lean: leanContext, title: projectTitle } = await buildLeanContext(sb, projectId);
 
   try {
     // ── Initial 3-second buffer to let any prior requests clear ──
-    await sleep(3000);
+    await delay(3000);
 
-    // ── Wave 1: staggered (CFO 0s, CTO 4s, CLO 8s, COO 12s) ──
-    // Use lean context only (no full chat history) in Wave 1
-    const wave1Promises: Promise<{ key: string; name: string; role: string; tier: string; result: string }>[] = [];
+    // ── Wave 1: SEQUENTIAL — CFO → CTO → CLO → COO with 2s pauses ──
+    // Lean context only (title + description) keeps token count low per request
+    const wave1Results: { key: string; name: string; role: string; tier: string; result: string }[] = [];
     for (let i = 0; i < WAVE_1.length; i++) {
-      const agent = WAVE_1[i];
-      // Schedule each agent with a delay
-      const delay = i * 4000;
-      wave1Promises.push(
-        sleep(delay).then(() => callAgent(client, agent, leanContext))
-      );
+      const result = await callAgent(client, WAVE_1[i], leanContext);
+      wave1Results.push(result);
+      if (i < WAVE_1.length - 1) await delay(2000);
     }
-    // Wait for ALL Wave 1 to complete before moving on
-    const wave1Results = await Promise.all(wave1Promises);
     const briefing = wave1Results.map((r) => `## ${r.name}\n${r.result}`).join("\n\n---\n\n");
 
     // ── Buffer between waves ──
-    await sleep(3000);
+    await delay(3000);
 
-    // ── Wave 2: staggered (1.5s apart to avoid rate limits) ──
-    // Wave 2 gets full context (including chat history/notes) + briefing
-    const wave2Promises: Promise<{ key: string; name: string; role: string; tier: string; result: string }>[] = [];
-    for (let i = 0; i < WAVE_2.length; i++) {
-      const agent = WAVE_2[i];
-      const delay = i * 1500;
-      wave2Promises.push(
-        sleep(delay).then(() => callAgent(client, agent, fullContext, briefing))
+    // ── Wave 2: BATCHES of 2 with 3s gaps between batches ──
+    // Lean context + Wave 1 briefing keeps each request small
+    const wave2Results: { key: string; name: string; role: string; tier: string; result: string }[] = [];
+    for (let i = 0; i < WAVE_2.length; i += 2) {
+      const batch = WAVE_2.slice(i, i + 2);
+      const batchResults = await Promise.all(
+        batch.map((agent) => callAgent(client, agent, leanContext, briefing))
       );
+      wave2Results.push(...batchResults);
+      if (i + 2 < WAVE_2.length) await delay(3000);
     }
-    const wave2Results = await Promise.all(wave2Promises);
     const allResults = [...wave1Results, ...wave2Results];
 
     // Save all to project_notes
@@ -159,7 +154,7 @@ export async function POST(_request: Request, { params }: { params: Promise<{ id
     })));
 
     // ── Buffer before summary ──
-    await sleep(2000);
+    await delay(2000);
 
     // JARVIS Summary (with retry on rate limit)
     let summary = "Summary generation failed.";
@@ -178,7 +173,7 @@ export async function POST(_request: Request, { params }: { params: Promise<{ id
     } catch (err: unknown) {
       const e = err as { status?: number };
       if (e?.status === 429) {
-        await sleep(10000);
+        await delay(10000);
         try { summary = await doSummary(); } catch { /* keep default */ }
       }
     }
