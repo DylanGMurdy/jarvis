@@ -1013,19 +1013,41 @@ curl -X POST ${typeof window !== "undefined" ? window.location.origin : ""}/api/
           </div>
         </div>
 
-        {/* ── Status Pipeline ────────────────────────────── */}
-        <div className="mb-8 px-4 hidden sm:block">
-          <div className="flex items-center justify-between relative">
-            <div className="absolute top-4 left-0 right-0 h-0.5 bg-[#1e1e2e]" />
-            <div className="absolute top-4 left-0 h-0.5 bg-[#6366f1] transition-all duration-500" style={{ width: `${(statusIdx / (STATUSES.length - 1)) * 100}%` }} />
-            {STATUSES.map((s, i) => (
-              <div key={s} className="flex flex-col items-center relative z-10">
-                <div className={`w-8 h-8 rounded-full flex items-center justify-center text-xs font-bold transition-colors duration-300 ${i <= statusIdx ? "bg-[#6366f1] text-white" : "bg-[#1e1e2e] text-[#64748b]"}`}>{i + 1}</div>
-                <span className={`mt-2 text-xs transition-colors duration-300 ${i <= statusIdx ? "text-[#e2e8f0]" : "text-[#64748b]"}`}>{s}</span>
+        {/* ── Pipeline Progress Bar ────────────────────── */}
+        {(() => {
+          const PIPELINE = [
+            { label: "Idea", icon: "💡" },
+            { label: "Planning", icon: "📋" },
+            { label: "War Room", icon: "🏛️" },
+            { label: "Building", icon: "🔨" },
+            { label: "Launched", icon: "🚀" },
+            { label: "Revenue", icon: "💰" },
+          ];
+          const statusMap: Record<string, number> = { Idea: 0, Planning: 1, Building: 3, Launched: 4, Revenue: 5 };
+          const pipelineIdx = statusMap[project.status] ?? 0;
+          const warRoomComplete = notes.some((n) => n.content.startsWith("[War Room — JARVIS Summary]"));
+          const effectiveIdx = warRoomComplete && pipelineIdx < 3 ? 2 : pipelineIdx;
+          return (
+            <div className="mb-8 px-4 hidden sm:block">
+              <div className="flex items-center justify-between relative">
+                <div className="absolute top-5 left-0 right-0 h-0.5 bg-[#1e1e2e]" />
+                <div className="absolute top-5 left-0 h-0.5 bg-gradient-to-r from-purple-500 to-indigo-500 transition-all duration-700" style={{ width: `${(effectiveIdx / (PIPELINE.length - 1)) * 100}%` }} />
+                {PIPELINE.map((stage, i) => {
+                  const isActive = i <= effectiveIdx;
+                  const isCurrent = i === effectiveIdx;
+                  return (
+                    <div key={stage.label} className="flex flex-col items-center relative z-10 group">
+                      <div className={`w-10 h-10 rounded-full flex items-center justify-center text-sm transition-all duration-300 ${isCurrent ? "bg-purple-600 text-white ring-2 ring-purple-400/50 ring-offset-2 ring-offset-[#0a0a0f] scale-110" : isActive ? "bg-purple-600/80 text-white" : "bg-[#1e1e2e] text-[#64748b]"}`}>
+                        {stage.icon}
+                      </div>
+                      <span className={`mt-2 text-xs font-medium transition-colors duration-300 ${isCurrent ? "text-purple-400" : isActive ? "text-[#e2e8f0]" : "text-[#64748b]"}`}>{stage.label}</span>
+                    </div>
+                  );
+                })}
               </div>
-            ))}
-          </div>
-        </div>
+            </div>
+          );
+        })()}
 
         {/* ── Tabs ───────────────────────────────────────── */}
         <div className="flex gap-1 mb-6 border-b border-[#1e1e2e] overflow-x-auto">
@@ -1081,6 +1103,26 @@ curl -X POST ${typeof window !== "undefined" ? window.location.origin : ""}/api/
                     </ul>
                   )}
                 </div>
+                {/* ── Deploy War Room CTA ───────────────── */}
+                {(project.status === "Idea" || project.status === "Planning") && (
+                  <div className="bg-gradient-to-r from-purple-900/30 to-indigo-900/30 rounded-xl border border-purple-500/30 p-6">
+                    <div className="flex items-center gap-3 mb-3">
+                      <span className="text-2xl">🏛️</span>
+                      <div>
+                        <h3 className="text-sm font-bold text-white">Ready for War Room?</h3>
+                        <p className="text-xs text-purple-300">Deploy 21 AI agents to analyze every angle of this project</p>
+                      </div>
+                    </div>
+                    <p className="text-sm text-[#94a3b8] mb-4">Your full C-suite, VPs, and specialists will review financials, tech, legal, operations, marketing, sales, and more — all grounded in your project data.</p>
+                    <button
+                      onClick={() => { setActiveTab("War Room"); setTimeout(() => deployWarRoom(), 300); }}
+                      className="w-full px-4 py-3 bg-purple-600 hover:bg-purple-700 text-white rounded-lg font-semibold transition-colors flex items-center justify-center gap-2"
+                    >
+                      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z" /></svg>
+                      Deploy War Room
+                    </button>
+                  </div>
+                )}
               </div>
               <div className="space-y-6">
                 <div className="bg-[#12121a] rounded-xl border border-[#1e1e2e] p-6">
