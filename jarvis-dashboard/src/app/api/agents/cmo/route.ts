@@ -131,7 +131,22 @@ ${notes.map((n: { content: string }) => n.content).join("\n---\n") || "None"}`;
       content: `[CMO Agent — ${CMO_ACTIONS[action].name}]\n\n${result}`,
     });
 
-    return Response.json({ ok: true, result, action: CMO_ACTIONS[action].name });
+    // Route external-facing content through approval queue
+    const PUBLISH_ACTIONS = ["content_strategy", "brand_voice"];
+    let approvalNote = "";
+    if (PUBLISH_ACTIONS.includes(action)) {
+      await sb.from("approval_queue").insert({
+        project_id: projectId,
+        project_title: projectTitle,
+        action_type: "publish_content",
+        description: `CMO Agent created content for review: ${CMO_ACTIONS[action].name} for "${projectTitle}"`,
+        payload: { agent: "cmo", action, content: result },
+        status: "pending",
+      });
+      approvalNote = "\n\n---\nThis has been sent to your approval queue.";
+    }
+
+    return Response.json({ ok: true, result: result + approvalNote, action: CMO_ACTIONS[action].name });
   } catch (error: unknown) {
     const msg = error instanceof Error ? error.message : "Unknown error";
     return Response.json({ error: msg }, { status: 500 });

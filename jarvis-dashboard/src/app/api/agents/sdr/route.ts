@@ -158,7 +158,22 @@ ${notes.map((n: { content: string }) => n.content).join("\n---\n") || "None"}`;
       content: `[SDR Agent — ${SDR_ACTIONS[action].name}]\n\n${result}`,
     });
 
-    return Response.json({ ok: true, result, action: SDR_ACTIONS[action].name });
+    // Route external-facing outreach through approval queue
+    const OUTREACH_ACTIONS = ["cold_outreach", "follow_up_sequences", "outreach_personalization"];
+    let approvalNote = "";
+    if (OUTREACH_ACTIONS.includes(action)) {
+      await sb.from("approval_queue").insert({
+        project_id: projectId,
+        project_title: projectTitle,
+        action_type: "send_email",
+        description: `SDR Agent wants to send outreach: ${SDR_ACTIONS[action].name} for "${projectTitle}"`,
+        payload: { agent: "sdr", action, content: result },
+        status: "pending",
+      });
+      approvalNote = "\n\n---\nThis has been sent to your approval queue.";
+    }
+
+    return Response.json({ ok: true, result: result + approvalNote, action: SDR_ACTIONS[action].name });
   } catch (error: unknown) {
     const msg = error instanceof Error ? error.message : "Unknown error";
     return Response.json({ error: msg }, { status: 500 });

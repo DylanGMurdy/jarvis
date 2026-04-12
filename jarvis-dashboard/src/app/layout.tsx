@@ -2,12 +2,17 @@ import type { Metadata, Viewport } from "next"
 import { Inter } from "next/font/google"
 import "./globals.css"
 import Footer from "@/components/Footer"
+import PWAInstallBanner from "@/components/mobile/PWAInstallBanner"
 
 const inter = Inter({ subsets: ["latin"] })
 
 export const metadata: Metadata = {
   title: "JARVIS",
   description: "AI-powered command center",
+  metadataBase: new URL("https://jarvis.dylangmurdy.com"),
+  alternates: {
+    canonical: "/",
+  },
   appleWebApp: {
     capable: true,
     statusBarStyle: "black-translucent",
@@ -45,6 +50,7 @@ export default function RootLayout({
             <Footer />
           </div>
         </div>
+        <PWAInstallBanner />
       </body>
     </html>
   )
