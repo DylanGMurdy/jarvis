@@ -1239,11 +1239,22 @@ curl -X POST ${typeof window !== "undefined" ? window.location.origin : ""}/api/
               <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4M17 8l-5-5-5 5M12 3v12" /></svg>
               Sync from Claude.ai
             </button>
+            <button onClick={generateShareLink} disabled={shareLoading} className="px-4 py-2 bg-[#1e1e2e] text-[#e2e8f0] rounded-lg text-sm font-medium hover:bg-[#6366f1]/20 transition-colors flex items-center gap-2 disabled:opacity-50">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><circle cx="18" cy="5" r="3"/><circle cx="6" cy="12" r="3"/><circle cx="18" cy="19" r="3"/><path d="M8.59 13.51l6.83 3.98M15.41 6.51l-6.82 3.98"/></svg>
+              {shareLoading ? "Generating..." : shareUrl ? "Share Link ✓" : "Share"}
+            </button>
             <button onClick={() => setShowExportModal(true)} className="px-4 py-2 bg-[#1e1e2e] text-[#e2e8f0] rounded-lg text-sm font-medium hover:bg-emerald-500/20 hover:text-emerald-400 transition-colors flex items-center gap-2">
               <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4M7 10l5 5 5-5M12 15V3" /></svg>
               Export
             </button>
           </div>
+          {shareUrl && (
+            <div className="mt-3 p-3 bg-[#0a0a0f] border border-[#6366f1]/30 rounded-lg flex items-center gap-2 animate-[slideUp_0.2s_ease-out]">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#6366f1" strokeWidth="2" className="shrink-0"><circle cx="18" cy="5" r="3"/><circle cx="6" cy="12" r="3"/><circle cx="18" cy="19" r="3"/><path d="M8.59 13.51l6.83 3.98M15.41 6.51l-6.82 3.98"/></svg>
+              <input type="text" value={shareUrl} readOnly onClick={(e) => e.currentTarget.select()} className="flex-1 bg-transparent text-xs text-[#e2e8f0] focus:outline-none" />
+              <button onClick={copyShareUrl} className="px-3 py-1.5 bg-[#6366f1] text-white text-xs font-semibold rounded hover:bg-[#5558e6] transition-colors whitespace-nowrap">{shareCopied ? "Copied!" : "Copy"}</button>
+            </div>
+          )}
         </div>
 
         {/* ── Pipeline Progress Bar ────────────────────── */}
