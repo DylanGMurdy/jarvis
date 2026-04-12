@@ -127,6 +127,18 @@ Return ONLY valid JSON, no markdown fences.`,
       project_id: id,
       content: `[Jarvis War Room Summary]\n\nVerdict: ${summary?.verdict || "N/A"}\nConfidence: ${summary?.confidence_score || "N/A"}/10\n\nConsensus:\n${(summary?.consensus || []).map((c: string) => `• ${c}`).join("\n")}\n\nConflicts:\n${(summary?.conflicts || []).map((c: string) => `• ${c}`).join("\n")}\n\nRecommendations:\n${(summary?.recommendations || []).map((r: string, i: number) => `${i + 1}. ${r}`).join("\n")}`,
     });
+
+    // Save war_room_summary to the project record
+    const topRec = (summary?.recommendations || [])[0] || summary?.verdict?.slice(0, 200) || "Review War Room results";
+    await sb.from("projects").update({
+      war_room_completed_at: new Date().toISOString(),
+      war_room_summary: {
+        completed_at: new Date().toISOString(),
+        confidence_score: summary?.confidence_score || 0,
+        agents_ran: allResults.filter((r) => r.ok).length,
+        top_recommendation: typeof topRec === "string" ? topRec : String(topRec),
+      },
+    }).eq("id", id);
   } catch {
     // Summary generation failed but agent results are still valid
   }

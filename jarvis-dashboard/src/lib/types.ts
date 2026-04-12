@@ -9,6 +9,13 @@ export interface Project {
   grade: "A" | "B" | "C";
   drive_folder_id?: string | null;
   war_room_completed_at?: string | null;
+  war_room_summary?: {
+    completed_at: string;
+    confidence_score: number;
+    agents_ran: number;
+    top_recommendation: string;
+  } | null;
+  updated_at?: string | null;
   created_at: string;
 }
 
