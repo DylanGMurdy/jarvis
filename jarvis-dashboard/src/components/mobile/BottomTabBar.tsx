@@ -54,8 +54,8 @@ const MOBILE_TABS: { key: MobileTab; label: string; icon: React.ReactNode }[] = 
 
 export default function BottomTabBar({ activeTab, onTabChange, mobileChatActive, onMobileChatToggle }: BottomTabBarProps) {
   return (
-    <nav className="md:hidden fixed bottom-0 left-0 right-0 z-50 bg-jarvis-card/95 backdrop-blur-lg border-t border-jarvis-border safe-area-bottom">
-      <div className="flex items-center justify-around" style={{ height: 60 }}>
+    <nav className="md:hidden fixed bottom-0 left-0 right-0 z-50 bg-jarvis-card/95 backdrop-blur-lg border-t border-jarvis-border safe-area-bottom" id="bottom-tab-bar">
+      <div className="flex items-center justify-around" style={{ height: 60, minHeight: 60 }}>
         {MOBILE_TABS.map((tab) => {
           const isChat = tab.key === "chat";
           const isActive = isChat ? mobileChatActive : (!mobileChatActive && tab.key === activeTab);
