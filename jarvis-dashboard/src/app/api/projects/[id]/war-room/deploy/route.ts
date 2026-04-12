@@ -202,6 +202,17 @@ export async function POST(_request: Request, { params }: { params: Promise<{ id
       status: "complete",
     });
 
+    // Real-time notification for War Room completion
+    try {
+      await sb.from("notifications").insert({
+        title: "War Room Complete",
+        body: `${projectTitle} — ${allResults.length} agents analyzed your idea. Confidence score: ${confidenceScore}/10. View results →`,
+        type: "success",
+        link: `/ideas/${projectId}`,
+        read: false,
+      });
+    } catch { /* notification failure should not fail the war room */ }
+
     const researchUsed = researchMap.size > 0 && [...researchMap.values()].some((v) => v !== null);
     return Response.json({ ok: true, summary, researchUsed, agents: allResults.map((r) => ({ key: r.key, name: r.name, role: r.role, tier: r.tier, result: r.result })) });
   } catch (error: unknown) {

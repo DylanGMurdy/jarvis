@@ -6,6 +6,7 @@ import { api } from "@/lib/api";
 import type { Project, Goal, ChatMessage, Memory, MemoryCategory } from "@/lib/types";
 import VoiceChatInput from "@/components/VoiceChatInput";
 import FloatingVoiceButton from "@/components/mobile/FloatingVoiceButton";
+import NotificationBell from "@/components/NotificationBell";
 import BottomTabBar from "@/components/mobile/BottomTabBar";
 import OverviewTab from "@/components/dashboard/OverviewTab";
 import IdeasTab from "@/components/dashboard/IdeasTab";
@@ -562,6 +563,8 @@ export default function Dashboard() {
               <span className="hidden md:inline">Search</span>
               <kbd className="hidden md:inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded bg-jarvis-border text-[10px] text-jarvis-muted font-mono tap-target-auto">⌘K</kbd>
             </button>
+            {/* Notification bell with realtime updates */}
+            <NotificationBell />
             {/* Show/Hide chat — desktop only */}
             <button onClick={() => setChatOpen(!chatOpen)} className="hidden md:block text-sm text-jarvis-muted hover:text-jarvis-accent transition-colors px-3 py-1 rounded-lg hover:bg-jarvis-border/50">
               {chatOpen ? "Hide Chat" : "Show Chat"}

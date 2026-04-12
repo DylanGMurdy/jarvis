@@ -55,18 +55,85 @@ const KPICard = ({ label, value, sub, icon, onClick }: { label: string; value: s
   </button>
 );
 
+interface WeatherData {
+  tempF: number;
+  desc: string;
+  highF: number;
+  lowF: number;
+  windMph: number;
+  humidity: number;
+  forecast: { date: string; high: number; low: number; desc: string }[];
+}
+
 function WeatherWidget({ openModal }: { openModal: (d: ModalData) => void }) {
+  const [weather, setWeather] = useState<WeatherData | null>(null);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    (async () => {
+      try {
+        const res = await fetch("https://wttr.in/SaltLakeCity?format=j1");
+        const j = await res.json();
+        const cur = j.current_condition?.[0];
+        const today = j.weather?.[0];
+        if (!cur || !today) { setLoading(false); return; }
+        setWeather({
+          tempF: parseInt(cur.temp_F, 10),
+          desc: cur.weatherDesc?.[0]?.value || "",
+          highF: parseInt(today.maxtempF, 10),
+          lowF: parseInt(today.mintempF, 10),
+          windMph: parseInt(cur.windspeedMiles, 10),
+          humidity: parseInt(cur.humidity, 10),
+          forecast: (j.weather || []).slice(1, 4).map((d: { date: string; maxtempF: string; mintempF: string; hourly: { weatherDesc: { value: string }[] }[] }) => ({
+            date: d.date,
+            high: parseInt(d.maxtempF, 10),
+            low: parseInt(d.mintempF, 10),
+            desc: d.hourly?.[4]?.weatherDesc?.[0]?.value || "",
+          })),
+        });
+      } catch { /* silent */ }
+      setLoading(false);
+    })();
+  }, []);
+
+  if (loading) {
+    return (
+      <div className="w-full bg-jarvis-card border border-jarvis-border rounded-xl p-4">
+        <h3 className="text-sm font-semibold text-jarvis-muted mb-2">Salt Lake City, UT</h3>
+        <div className="text-sm text-jarvis-muted animate-pulse">Loading weather...</div>
+      </div>
+    );
+  }
+
+  if (!weather) {
+    return (
+      <div className="w-full bg-jarvis-card border border-jarvis-border rounded-xl p-4">
+        <h3 className="text-sm font-semibold text-jarvis-muted mb-2">Salt Lake City, UT</h3>
+        <div className="text-sm text-jarvis-muted">Weather unavailable</div>
+      </div>
+    );
+  }
+
+  const forecastBody = weather.forecast.map((f) => `- ${f.date}: ${f.high}\u00B0F / ${f.low}\u00B0F, ${f.desc}`).join("\n");
+
   return (
-    <button onClick={() => openModal({ title: "Weather — Eagle Mountain, UT", body: "Current: 52\u00B0F, Partly Cloudy\nHigh: 61\u00B0F | Low: 38\u00B0F\nWind: 8 mph NW\nHumidity: 34%\n\nForecast:\n- Tomorrow: 58\u00B0F, Sunny\n- Thursday: 63\u00B0F, Clear\n- Friday: 55\u00B0F, Chance of Rain\n- Saturday: 59\u00B0F, Partly Cloudy", actions: [{ label: "5-Day Forecast", onClick: () => {} }] })} className="w-full bg-jarvis-card border border-jarvis-border rounded-xl p-4 text-left hover:border-jarvis-accent/50 transition-all cursor-pointer">
-      <h3 className="text-sm font-semibold text-jarvis-muted mb-2">Eagle Mountain, UT</h3>
+    <button
+      onClick={() => openModal({
+        title: "Weather — Salt Lake City, UT",
+        body: `Current: ${weather.tempF}\u00B0F, ${weather.desc}\nHigh: ${weather.highF}\u00B0F | Low: ${weather.lowF}\u00B0F\nWind: ${weather.windMph} mph\nHumidity: ${weather.humidity}%\n\n3-Day Forecast:\n${forecastBody}`,
+        actions: [{ label: "Close", onClick: () => {} }],
+      })}
+      className="w-full bg-jarvis-card border border-jarvis-border rounded-xl p-4 text-left hover:border-jarvis-accent/50 transition-all cursor-pointer"
+    >
+      <h3 className="text-sm font-semibold text-jarvis-muted mb-2">Salt Lake City, UT</h3>
       <div className="flex items-center justify-between">
         <div>
-          <div className="text-3xl font-bold text-white">52&deg;F</div>
-          <div className="text-sm text-jarvis-muted">Partly Cloudy</div>
+          <div className="text-3xl font-bold text-white">{weather.tempF}&deg;F</div>
+          <div className="text-sm text-jarvis-muted">{weather.desc}</div>
         </div>
         <div className="text-right text-sm">
-          <div className="text-jarvis-text">H: 61&deg; L: 38&deg;</div>
-          <div className="text-jarvis-muted">Wind: 8 mph</div>
+          <div className="text-jarvis-text">H: {weather.highF}&deg; L: {weather.lowF}&deg;</div>
+          <div className="text-jarvis-muted">Wind: {weather.windMph} mph</div>
         </div>
       </div>
     </button>
@@ -193,8 +260,30 @@ function MotoTTT() {
   );
 }
 
+interface DailyTask { id: string | number; text: string; done: boolean; priority: "high" | "medium" | "low" }
+
 export default function OverviewTab({ projects, memories, setActiveTab, setMemoryFilter, openModal, closeModal }: OverviewTabProps) {
-  const [tasks, setTasks] = useState(TASKS_INIT);
+  const [tasks, setTasks] = useState<DailyTask[]>(TASKS_INIT);
+  const [tasksLoading, setTasksLoading] = useState(true);
+
+  // Fetch today's tasks from project_notes where source=daily_agent
+  useEffect(() => {
+    (async () => {
+      try {
+        const res = await fetch("/api/tasks/today");
+        const data = await res.json();
+        const items: DailyTask[] = (data.data || []).map((t: { id: string; text: string }) => ({
+          id: t.id,
+          text: t.text,
+          done: false,
+          priority: "medium" as const,
+        }));
+        if (items.length > 0) setTasks(items);
+      } catch { /* silent — keep static fallback */ }
+      setTasksLoading(false);
+    })();
+  }, []);
+
   const [selectedMood, setSelectedMood] = useState<string | null>(null);
   const [moodResponse, setMoodResponse] = useState<string | null>(null);
   const [dailyBrief, setDailyBrief] = useState<string | null>(null);
@@ -266,7 +355,7 @@ export default function OverviewTab({ projects, memories, setActiveTab, setMemor
     setMoodResponse(responses[mood] || "Noted. Let's make the most of today.");
   };
 
-  const toggleTask = (id: number) => {
+  const toggleTask = (id: string | number) => {
     setTasks((prev) => prev.map((t) => (t.id === id ? { ...t, done: !t.done } : t)));
   };
 
@@ -334,12 +423,40 @@ export default function OverviewTab({ projects, memories, setActiveTab, setMemor
         </div>
       )}
 
-      {/* KPI Row */}
+      {/* KPI Row — real data from Supabase */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-        <KPICard label="Emails Processed" value="47" sub="+12 today" icon="📧" onClick={() => openModal({ title: "Email Processing", body: "47 emails processed this week.\n\n12 today:\n- 3 flagged for review\n- 5 auto-responded\n- 4 archived", actions: [{ label: "Review Flagged", onClick: closeModal }] })} />
-        <KPICard label="Active Leads" value="23" sub="3 hot prospects" icon="🎯" onClick={() => openModal({ title: "Lead Pipeline", body: "23 active leads across builders:\n\nHot (3):\n- Sarah M. \u2014 Ivory Homes\n- Mike R. \u2014 Fieldstone\n- Jennifer L. \u2014 Ivory Homes\n\nWarm (8): Regular engagement\nCold (12): Need re-engagement", actions: [{ label: "View Hot Leads", onClick: closeModal }] })} />
-        <KPICard label="AI Projects" value={String(projects.length)} sub={`${projects.filter((p) => p.grade === "A").length} Grade A`} icon="💡" onClick={() => setActiveTab("ideas")} />
-        <KPICard label="Days to Goal" value="67" sub="90-day sprint" icon="📅" onClick={() => setActiveTab("goals")} />
+        <KPICard
+          label="Agent Actions"
+          value={String(activity.length)}
+          sub="last 24h"
+          icon="⚡"
+          onClick={() => setActiveTab("agents")}
+        />
+        <KPICard
+          label="Memories"
+          value={String(memories.length)}
+          sub={`${memories.filter((m) => {
+            const d = new Date(m.created_at);
+            const today = new Date();
+            return d.toDateString() === today.toDateString();
+          }).length} added today`}
+          icon="🧠"
+          onClick={() => setActiveTab("memory")}
+        />
+        <KPICard
+          label="AI Projects"
+          value={String(projects.length)}
+          sub={`${projects.filter((p) => p.grade === "A").length} Grade A`}
+          icon="💡"
+          onClick={() => setActiveTab("ideas")}
+        />
+        <KPICard
+          label="Days to Goal"
+          value={String(Math.max(0, 90 - Math.floor((Date.now() - new Date(new Date().getFullYear(), 0, 1).getTime()) / 86400000) % 90))}
+          sub="90-day sprint"
+          icon="📅"
+          onClick={() => setActiveTab("goals")}
+        />
       </div>
 
       {/* Mood Check-In */}

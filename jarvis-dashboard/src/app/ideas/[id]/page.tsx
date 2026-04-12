@@ -97,22 +97,8 @@ export default function ProjectDetailPage({ params }: { params: Promise<{ id: st
   const [showBuildConfirm, setShowBuildConfirm] = useState(false);
   const [moveToBuildLoading, setMoveToBuildLoading] = useState(false);
 
-  // War Room session history
-  interface WarRoomSession { id: string; project_id: string; session_date: string; confidence_score: number; agents_run: number; summary_text: string; status: string }
-  const [warRoomSessions, setWarRoomSessions] = useState<WarRoomSession[]>([]);
+  // War Room session history (legacy state kept for compatibility)
   const [showSessionHistory, setShowSessionHistory] = useState(false);
-
-  const loadWarRoomSessions = useCallback(async () => {
-    try {
-      const res = await fetch(`/api/projects/${id}/war-room/sessions`);
-      const data = await res.json();
-      setWarRoomSessions(data.data || []);
-    } catch { /* silent */ }
-  }, [id]);
-
-  useEffect(() => {
-    if (activeTab === "War Room") loadWarRoomSessions();
-  }, [activeTab, loadWarRoomSessions]);
 
   function loadSession(session: WarRoomSession) {
     setWarRoomSummary(session.summary_text);
@@ -155,6 +141,55 @@ export default function ProjectDetailPage({ params }: { params: Promise<{ id: st
   // ── War Room viewer state ────────────────────────────────
   const [selectedAgentKey, setSelectedAgentKey] = useState<string>("summary");
   const [rerunInstructions, setRerunInstructions] = useState<Record<string, string>>({});
+
+  // ── War Room session history ────────────────────────────
+  interface WarRoomSession { id: string; session_date: string; confidence_score: number; agents_run: number; summary_text: string; status: string }
+  const [warRoomSessions, setWarRoomSessions] = useState<WarRoomSession[]>([]);
+  const [selectedSessionId, setSelectedSessionId] = useState<string>("current");
+
+  const loadWarRoomSessions = useCallback(async () => {
+    try {
+      const res = await fetch(`/api/projects/${id}/war-room/sessions`);
+      const data = await res.json();
+      setWarRoomSessions(data.data || []);
+    } catch { /* silent */ }
+  }, [id]);
+
+  useEffect(() => { loadWarRoomSessions(); }, [loadWarRoomSessions]);
+
+  async function loadSessionResults(sessionId: string) {
+    setSelectedSessionId(sessionId);
+    if (sessionId === "current") return; // current state already loaded
+    const session = warRoomSessions.find((s) => s.id === sessionId);
+    if (!session) return;
+    // Fetch project notes around the session date (within 5 minutes)
+    try {
+      const res = await fetch(`/api/projects/${id}/notes`);
+      const data = await res.json();
+      const notes = data.data || [];
+      const sessionTime = new Date(session.session_date).getTime();
+      const sessionNotes = notes.filter((n: { created_at: string; source?: string }) => {
+        const t = new Date(n.created_at).getTime();
+        return n.source?.startsWith("war_room_") && Math.abs(t - sessionTime) < 5 * 60 * 1000;
+      });
+      const agents = sessionNotes
+        .filter((n: { source?: string }) => n.source !== "war_room_summary")
+        .map((n: { content: string; source?: string }) => {
+          const key = (n.source || "").replace("war_room_", "");
+          const match = n.content.match(/^\[War Room — (.+?)\]\n\n([\s\S]*)$/);
+          return {
+            key,
+            name: match?.[1] || key,
+            role: key,
+            tier: ["cfo", "cto", "clo", "coo", "cmo", "chro", "cso"].includes(key) ? "c-suite" : key.startsWith("vp_") ? "vp" : "specialist",
+            result: match?.[2] || n.content,
+          };
+        });
+      setWarRoomAgents(agents);
+      setWarRoomSummary(session.summary_text);
+      setSelectedAgentKey("summary");
+    } catch { /* silent */ }
+  }
 
   function downloadReport(filename: string, content: string) {
     const blob = new Blob([content], { type: "text/plain;charset=utf-8" });
@@ -207,6 +242,7 @@ export default function ProjectDetailPage({ params }: { params: Promise<{ id: st
       setWarRoomDeployError("Connection error");
     }
     setWarRoomDeploying(false);
+    loadWarRoomSessions();
   }
 
   async function rerunAgent(agentKey: string) {
@@ -2018,6 +2054,25 @@ curl -X POST ${typeof window !== "undefined" ? window.location.origin : ""}/api/
               <div className="flex gap-0 h-[calc(100vh-280px)] min-h-[600px] bg-[#0a0a0f] rounded-xl border border-[#1e1e2e] overflow-hidden">
                 {/* ── LEFT SIDEBAR ──────────────────────── */}
                 <div className="w-60 flex-shrink-0 bg-[#0f0f17] border-r border-[#1e1e2e] flex flex-col">
+                  {/* Previous Sessions dropdown */}
+                  {warRoomSessions.length > 0 && (
+                    <div className="p-3 border-b border-[#1e1e2e]">
+                      <label className="text-[9px] font-bold uppercase tracking-wider text-[#475569] block mb-1.5">Previous Sessions</label>
+                      <select
+                        value={selectedSessionId}
+                        onChange={(e) => loadSessionResults(e.target.value)}
+                        className="w-full bg-[#0a0a0f] border border-[#1e1e2e] rounded-md px-2 py-1.5 text-[11px] text-[#e2e8f0] focus:outline-none focus:border-purple-500/50 cursor-pointer"
+                      >
+                        <option value="current">Current Session</option>
+                        {warRoomSessions.map((s) => {
+                          const date = new Date(s.session_date).toLocaleDateString("en-US", { month: "short", day: "numeric", hour: "numeric", minute: "2-digit" });
+                          const score = s.confidence_score ? ` (${s.confidence_score}/10)` : "";
+                          return <option key={s.id} value={s.id}>{date}{score}</option>;
+                        })}
+                      </select>
+                      <p className="text-[9px] text-[#475569] mt-1">{warRoomSessions.length} past run{warRoomSessions.length !== 1 ? "s" : ""}</p>
+                    </div>
+                  )}
                   {/* Progress bar */}
                   <div className="p-3 border-b border-[#1e1e2e] space-y-2">
                     <div>

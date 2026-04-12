@@ -59,6 +59,32 @@ async function migrate() {
       });
       console.log('Created lindy_clients table');
 
+      await supabase.rpc('exec_sql', {
+        sql: `CREATE TABLE IF NOT EXISTS notifications (
+          id uuid default gen_random_uuid() primary key,
+          title text not null,
+          body text not null,
+          type text default 'info',
+          link text,
+          read boolean default false,
+          created_at timestamp with time zone default now()
+        )`
+      });
+      console.log('Created notifications table');
+
+      await supabase.rpc('exec_sql', {
+        sql: `CREATE TABLE IF NOT EXISTS war_room_sessions (
+          id uuid default gen_random_uuid() primary key,
+          project_id uuid references projects(id),
+          session_date timestamp with time zone default now(),
+          confidence_score integer,
+          agents_run integer default 21,
+          summary_text text,
+          status text default 'complete'
+        )`
+      });
+      console.log('Created war_room_sessions table');
+
       console.log('✅ Migrations completed successfully');
     } catch (rpcError) {
       console.log('RPC exec_sql failed, testing connection with existing tables...');
