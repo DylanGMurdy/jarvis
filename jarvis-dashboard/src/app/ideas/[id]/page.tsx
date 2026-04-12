@@ -1810,9 +1810,61 @@ curl -X POST ${typeof window !== "undefined" ? window.location.origin : ""}/api/
               return name.split(" ").map((w) => w[0]).join("").slice(0, 2).toUpperCase();
             }
 
+            // History dropdown — shown above all states if sessions exist
+            const historyDropdown = warRoomSessions.length > 0 ? (
+              <div className="mb-4 relative">
+                <button
+                  onClick={() => setShowSessionHistory(!showSessionHistory)}
+                  className="flex items-center gap-2 px-4 py-2 bg-[#12121a] border border-[#1e1e2e] rounded-lg text-sm text-[#e2e8f0] hover:border-[#6366f1]/40 transition-colors"
+                >
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><circle cx="12" cy="12" r="10" /><polyline points="12 6 12 12 16 14" /></svg>
+                  <span>History</span>
+                  <span className="text-xs text-[#64748b]">({warRoomSessions.length} session{warRoomSessions.length !== 1 ? "s" : ""})</span>
+                  <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className={`transition-transform ${showSessionHistory ? "rotate-180" : ""}`}><polyline points="6 9 12 15 18 9" /></svg>
+                </button>
+                {showSessionHistory && (
+                  <div className="absolute top-full left-0 mt-1 w-[420px] max-w-[90vw] bg-[#12121a] border border-[#1e1e2e] rounded-xl shadow-xl z-20 max-h-[400px] overflow-y-auto">
+                    <div className="px-4 py-2 border-b border-[#1e1e2e] text-[10px] font-semibold uppercase text-[#64748b] tracking-wider">
+                      War Room Sessions
+                    </div>
+                    {warRoomSessions.map((s, i) => {
+                      const date = new Date(s.session_date);
+                      const isLatest = i === 0;
+                      const scoreColor = s.confidence_score >= 7 ? "text-[#22c55e]" : s.confidence_score >= 4 ? "text-[#eab308]" : "text-[#ef4444]";
+                      return (
+                        <button
+                          key={s.id}
+                          onClick={() => loadSession(s)}
+                          className="w-full px-4 py-3 text-left hover:bg-[#6366f1]/5 transition-colors border-b border-[#1e1e2e] last:border-0 flex items-center gap-3"
+                        >
+                          <div className="flex-1 min-w-0">
+                            <div className="flex items-center gap-2">
+                              <p className="text-sm text-[#e2e8f0] font-medium">
+                                {date.toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })}
+                              </p>
+                              {isLatest && <span className="text-[9px] px-1.5 py-0.5 rounded-full bg-[#6366f1]/20 text-[#6366f1]">Latest</span>}
+                            </div>
+                            <p className="text-xs text-[#64748b] mt-0.5">
+                              {date.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })} · {s.agents_run} agents
+                            </p>
+                          </div>
+                          <div className="text-right">
+                            <div className={`text-lg font-bold ${scoreColor}`}>{s.confidence_score}/10</div>
+                            <div className="text-[10px] text-[#64748b]">confidence</div>
+                          </div>
+                        </button>
+                      );
+                    })}
+                  </div>
+                )}
+              </div>
+            ) : null;
+
             // Empty state
             if (!warRoomDeploying && warRoomAgents.length === 0 && !warRoomSummary) {
               return (
+                <div>
+                  {historyDropdown}
                 <div className="flex flex-col items-center justify-center py-24 px-4">
                   <div className="text-6xl mb-6">🏛️</div>
                   <h3 className="text-2xl font-bold text-white mb-3">Deploy the War Room</h3>
@@ -1828,6 +1880,7 @@ curl -X POST ${typeof window !== "undefined" ? window.location.origin : ""}/api/
                   {warRoomDeployError && (
                     <div className="mt-4 text-sm text-red-400 bg-red-500/10 border border-red-500/20 rounded-lg px-4 py-2">{warRoomDeployError}</div>
                   )}
+                </div>
                 </div>
               );
             }
@@ -1873,6 +1926,8 @@ curl -X POST ${typeof window !== "undefined" ? window.location.origin : ""}/api/
             }
 
             return (
+              <div>
+              {historyDropdown}
               <div className="flex gap-0 h-[calc(100vh-280px)] min-h-[600px] bg-[#0a0a0f] rounded-xl border border-[#1e1e2e] overflow-hidden">
                 {/* ── LEFT SIDEBAR ──────────────────────── */}
                 <div className="w-60 flex-shrink-0 bg-[#0f0f17] border-r border-[#1e1e2e] flex flex-col">
@@ -2090,6 +2145,7 @@ curl -X POST ${typeof window !== "undefined" ? window.location.origin : ""}/api/
                   )}
                 </div>
               </div>
+              </div>
             );
           })()}
           {activeTab === "History" && (
@@ -2236,6 +2292,51 @@ curl -X POST ${typeof window !== "undefined" ? window.location.origin : ""}/api/
                   </div>
                 </div>
                 <button onClick={() => setShowIngestModal(false)} className="w-full px-4 py-3 bg-[#6366f1] text-white rounded-lg text-sm font-medium hover:bg-[#5558e6]">Done</button>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* ── Export Modal ────────────────────────────────── */}
+      {showExportModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm" onClick={() => { setShowExportModal(false); setShareUrl(null); }}>
+          <div className="bg-[#12121a] border border-[#1e1e2e] rounded-2xl p-6 max-w-md w-full" onClick={(e) => e.stopPropagation()}>
+            <div className="flex items-center justify-between mb-4">
+              <h2 className="text-lg font-bold text-white">Export Project</h2>
+              <button onClick={() => { setShowExportModal(false); setShareUrl(null); }} className="text-[#64748b] hover:text-white text-xl p-1 leading-none">×</button>
+            </div>
+            <p className="text-sm text-[#94a3b8] mb-5">Choose how you want to export &ldquo;{project?.title}&rdquo;.</p>
+            <div className="space-y-2">
+              <button onClick={downloadPdf} className="w-full flex items-center gap-3 p-4 bg-[#0a0a0f] border border-[#1e1e2e] rounded-xl hover:border-[#6366f1]/40 transition-colors text-left group">
+                <div className="w-10 h-10 rounded-lg bg-red-500/10 border border-red-500/20 flex items-center justify-center text-xl">📄</div>
+                <div className="flex-1">
+                  <h3 className="text-sm font-semibold text-white group-hover:text-[#6366f1]">Export as PDF</h3>
+                  <p className="text-xs text-[#64748b]">Full project including overview, notes, War Room, and tasks</p>
+                </div>
+              </button>
+              <button onClick={downloadMarkdown} className="w-full flex items-center gap-3 p-4 bg-[#0a0a0f] border border-[#1e1e2e] rounded-xl hover:border-[#6366f1]/40 transition-colors text-left group">
+                <div className="w-10 h-10 rounded-lg bg-emerald-500/10 border border-emerald-500/20 flex items-center justify-center text-xl">📝</div>
+                <div className="flex-1">
+                  <h3 className="text-sm font-semibold text-white group-hover:text-[#6366f1]">Export as Markdown</h3>
+                  <p className="text-xs text-[#64748b]">Clean .md file ready for any editor or wiki</p>
+                </div>
+              </button>
+              <button onClick={generateShareLink} disabled={shareLoading} className="w-full flex items-center gap-3 p-4 bg-[#0a0a0f] border border-[#1e1e2e] rounded-xl hover:border-[#6366f1]/40 transition-colors text-left group disabled:opacity-50">
+                <div className="w-10 h-10 rounded-lg bg-[#6366f1]/10 border border-[#6366f1]/20 flex items-center justify-center text-xl">🔗</div>
+                <div className="flex-1">
+                  <h3 className="text-sm font-semibold text-white group-hover:text-[#6366f1]">{shareLoading ? "Generating..." : "Share Link"}</h3>
+                  <p className="text-xs text-[#64748b]">Read-only public link to share with anyone</p>
+                </div>
+              </button>
+            </div>
+            {shareUrl && (
+              <div className="mt-4 p-3 bg-[#0a0a0f] border border-[#6366f1]/30 rounded-lg">
+                <p className="text-xs text-[#64748b] mb-2">Read-only share link:</p>
+                <div className="flex gap-2">
+                  <input type="text" value={shareUrl} readOnly onClick={(e) => e.currentTarget.select()} className="flex-1 bg-[#12121a] border border-[#1e1e2e] rounded px-3 py-2 text-xs text-[#e2e8f0] focus:outline-none focus:border-[#6366f1]" />
+                  <button onClick={copyShareUrl} className="px-3 py-2 bg-[#6366f1] text-white text-xs font-semibold rounded hover:bg-[#5558e6] transition-colors whitespace-nowrap">{shareCopied ? "Copied!" : "Copy"}</button>
+                </div>
               </div>
             )}
           </div>

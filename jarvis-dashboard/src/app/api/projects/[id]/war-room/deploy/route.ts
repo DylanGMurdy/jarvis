@@ -190,6 +190,18 @@ export async function POST(_request: Request, { params }: { params: Promise<{ id
 
     await sb.from("project_notes").insert({ project_id: projectId, content: `[War Room — JARVIS Summary]\n\n${summary}`, source: "war_room_summary" });
 
+    // Save session record for history tracking
+    // Try to extract a confidence score from the summary text (e.g. "Confidence: 8/10" or "8/10")
+    const confMatch = summary.match(/(?:confidence|score)[:\s]+(\d+)\s*\/\s*10/i);
+    const confidenceScore = confMatch ? parseInt(confMatch[1], 10) : 0;
+    await sb.from("war_room_sessions").insert({
+      project_id: projectId,
+      confidence_score: confidenceScore,
+      agents_run: allResults.length,
+      summary_text: summary,
+      status: "complete",
+    });
+
     const researchUsed = researchMap.size > 0 && [...researchMap.values()].some((v) => v !== null);
     return Response.json({ ok: true, summary, researchUsed, agents: allResults.map((r) => ({ key: r.key, name: r.name, role: r.role, tier: r.tier, result: r.result })) });
   } catch (error: unknown) {
