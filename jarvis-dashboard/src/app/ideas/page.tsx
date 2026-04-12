@@ -3,6 +3,13 @@
 import { useState, useEffect, useMemo } from "react";
 import Link from "next/link";
 
+interface WarRoomSummary {
+  completed_at: string;
+  confidence_score: number;
+  agents_ran: number;
+  top_recommendation: string;
+}
+
 interface Project {
   id: string;
   title: string;
@@ -13,6 +20,8 @@ interface Project {
   progress: number;
   revenue_goal: string;
   war_room_completed_at?: string | null;
+  war_room_summary?: WarRoomSummary | null;
+  updated_at?: string | null;
   created_at: string;
 }
 
@@ -35,12 +44,41 @@ const STATUS_COLORS: Record<string, string> = {
   Revenue: "bg-cyan-500/20 text-cyan-400",
 };
 
+function timeAgo(dateStr: string | null | undefined): string {
+  if (!dateStr) return "No activity";
+  const diff = Date.now() - new Date(dateStr).getTime();
+  const mins = Math.floor(diff / 60000);
+  if (mins < 1) return "Just now";
+  if (mins < 60) return `${mins}m ago`;
+  const hrs = Math.floor(mins / 60);
+  if (hrs < 24) return `${hrs}h ago`;
+  const days = Math.floor(hrs / 24);
+  if (days < 7) return `${days}d ago`;
+  return new Date(dateStr).toLocaleDateString("en-US", { month: "short", day: "numeric" });
+}
+
+const ShieldIcon = () => (
+  <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" className="inline-block -mt-px">
+    <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z" />
+  </svg>
+);
+
+const HammerIcon = () => (
+  <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" className="inline-block -mt-px">
+    <path d="M15 12l-8.5 8.5c-.83.83-2.17.83-3 0a2.12 2.12 0 010-3L12 9" />
+    <path d="M17.64 15L22 10.64" />
+    <path d="M20.91 11.7l-1.25-1.25c-.6-.6-.93-1.4-.93-2.25V6.5l-4-2-1.4 2.8L16 10l2.76-2.76" />
+  </svg>
+);
+
 export default function IdeasPage() {
   const [projects, setProjects] = useState<Project[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [showModal, setShowModal] = useState(false);
   const [newTitle, setNewTitle] = useState("");
   const [newDescription, setNewDescription] = useState("");
+
+  const [lastActivity, setLastActivity] = useState<Record<string, string>>({});
 
   // Filter & sort state
   const [search, setSearch] = useState("");
@@ -57,7 +95,24 @@ export default function IdeasPage() {
       const response = await fetch("/api/projects");
       if (response.ok) {
         const json = await response.json();
-        setProjects(json.data || json || []);
+        const data: Project[] = json.data || json || [];
+        setProjects(data);
+
+        // Fetch last activity for each project (most recent note timestamp)
+        const actMap: Record<string, string> = {};
+        await Promise.all(
+          data.map(async (p) => {
+            try {
+              const r = await fetch(`/api/projects/${p.id}/notes`);
+              const nd = await r.json();
+              const notes = Array.isArray(nd) ? nd : nd.data || [];
+              actMap[p.id] = notes.length > 0 ? notes[0].created_at : (p.updated_at || p.war_room_completed_at || p.created_at);
+            } catch {
+              actMap[p.id] = p.updated_at || p.created_at;
+            }
+          })
+        );
+        setLastActivity(actMap);
       }
     } catch (error) {
       console.error("Error fetching projects:", error);
@@ -299,14 +354,14 @@ export default function IdeasPage() {
                       {project.status}
                     </span>
                   )}
-                  {project.war_room_completed_at && project.status !== "Building" && (
-                    <span className="px-2 py-0.5 rounded text-[10px] font-semibold bg-green-500/20 text-green-400 border border-green-500/30">
-                      War Room
+                  {(project.war_room_completed_at || project.war_room_summary) && (
+                    <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-[10px] font-semibold bg-green-500/20 text-green-400 border border-green-500/30">
+                      <ShieldIcon /> War Room
                     </span>
                   )}
                   {project.status === "Building" && (
-                    <span className="px-2 py-0.5 rounded text-[10px] font-semibold bg-purple-500/20 text-purple-400 border border-purple-500/30">
-                      In Build
+                    <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-[10px] font-semibold bg-[#6366f1]/20 text-[#6366f1] border border-[#6366f1]/30">
+                      <HammerIcon /> Building
                     </span>
                   )}
                 </div>
@@ -324,9 +379,18 @@ export default function IdeasPage() {
                   </div>
                 )}
 
+                {/* War Room confidence */}
+                {project.war_room_summary && (
+                  <div className="mb-2 text-[10px] text-green-400/70">
+                    Confidence: {project.war_room_summary.confidence_score}/10 · {project.war_room_summary.agents_ran} agents ran
+                  </div>
+                )}
+
                 {/* Footer */}
                 <div className="flex items-center justify-between pt-2 border-t border-[#1e1e2e]">
-                  <span className="text-[10px] text-[#64748b]">{project.revenue_goal || "No revenue goal"}</span>
+                  <span className="text-[10px] text-[#64748b]">
+                    {lastActivity[project.id] ? `Last activity: ${timeAgo(lastActivity[project.id])}` : (project.revenue_goal || "No revenue goal")}
+                  </span>
                   <span className="text-[10px] text-[#6366f1] group-hover:translate-x-1 transition-transform">Open &rarr;</span>
                 </div>
 
