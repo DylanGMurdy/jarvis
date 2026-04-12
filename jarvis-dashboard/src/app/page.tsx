@@ -602,7 +602,10 @@ export default function Dashboard() {
         <div className="flex-1 flex overflow-hidden">
           {/* ── Mobile Fullscreen Chat ─── */}
           {isMobile && mobileChatActive ? (
-            <div className="flex-1 flex flex-col overflow-hidden">
+            <div
+              className="flex-1 flex flex-col overflow-hidden"
+              style={{ height: "100%", willChange: "transform", contain: "layout paint" }}
+            >
               {/* Chat header */}
               <div className="flex items-center gap-2 px-4 py-3 border-b border-jarvis-border flex-shrink-0">
                 <div className="w-8 h-8 bg-jarvis-accent rounded-full flex items-center justify-center text-white text-xs font-bold">J</div>
@@ -801,7 +804,10 @@ export default function Dashboard() {
 
           {/* Chat panel — desktop sidebar */}
           {chatOpen && (
-            <aside className="hidden md:flex w-96 bg-jarvis-card border-l border-jarvis-border flex-col flex-shrink-0">
+            <aside
+              className="hidden md:flex w-96 bg-jarvis-card border-l border-jarvis-border flex-col flex-shrink-0 overflow-hidden"
+              style={{ height: "100%", willChange: "transform", contain: "layout paint" }}
+            >
               <div className="p-3 border-b border-jarvis-border flex items-center gap-2">
                 <div className="w-6 h-6 bg-jarvis-accent rounded-full flex items-center justify-center text-white text-xs font-bold">J</div>
                 <span className="text-sm font-semibold text-white">JARVIS Chat</span>

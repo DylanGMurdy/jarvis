@@ -1,418 +1,309 @@
 "use client";
 
-import { useState, useEffect, useMemo } from "react";
+import { useState, useMemo } from "react";
 import Link from "next/link";
-import RevenueTab from "@/components/dashboard/RevenueTab";
 
-// ── Scenarios ─────────────────────────────────────────────
-type Scenario = "conservative" | "realistic" | "aggressive";
+// ── Scenarios ────────────────────────────────────────────
+const SCENARIOS = {
+  conservative: { label: "Conservative", clientsPerMonth: 2, churn: 5, arpu: 97 },
+  realistic:    { label: "Realistic",    clientsPerMonth: 4, churn: 3, arpu: 97 },
+  aggressive:   { label: "Aggressive",   clientsPerMonth: 8, churn: 1, arpu: 97 },
+} as const;
+type ScenarioKey = keyof typeof SCENARIOS;
 
-const SCENARIOS: Record<Scenario, { label: string; growth: number; churn: number; arpu: number; desc: string }> = {
-  conservative: { label: "Conservative", growth: 1, churn: 8, arpu: 97, desc: "1 new client/mo, 8% churn" },
-  realistic:    { label: "Realistic",    growth: 2, churn: 4, arpu: 97, desc: "2 new clients/mo, 4% churn" },
-  aggressive:   { label: "Aggressive",   growth: 4, churn: 2, arpu: 97, desc: "4 new clients/mo, 2% churn" },
-};
-
-// ── Milestones ────────────────────────────────────────────
+// ── Milestones (in MRR $) ────────────────────────────────
 const MILESTONES = [
-  { mrr: 1067, label: "11 Lindy clients", color: "#22c55e", emoji: "🚀" },
-  { mrr: 5000, label: "$5K/mo", color: "#06b6d4", emoji: "💎" },
-  { mrr: 10000, label: "$10K/mo", color: "#a855f7", emoji: "🔥" },
-  { mrr: 8333, label: "$100K ARR", color: "#f59e0b", emoji: "🏆" },
+  { mrr: 1067, label: "11 Lindy clients", color: "#22c55e" },
+  { mrr: 5000, label: "$5K MRR", color: "#06b6d4" },
+  { mrr: 8333, label: "$100K ARR", color: "#f59e0b" },
+  { mrr: 10000, label: "$10K MRR", color: "#a855f7" },
 ];
 
-interface MonthData {
+interface MonthRow {
   month: number;
   label: string;
   clients: number;
   mrr: number;
-  cumulative: number;
-  hitMilestones: typeof MILESTONES;
 }
 
-function projectRevenue(currentMrr: number, currentClients: number, growthRate: number, churnPct: number, arpu: number): MonthData[] {
-  const months: MonthData[] = [];
-  let mrr = currentMrr;
-  let clients = currentClients;
-  let cumulative = 0;
-  const trackedMilestones = new Set<number>();
-
+function projectRevenue(startMrr: number, newClientsPerMonth: number, churnPct: number, arpu: number): MonthRow[] {
+  const months: MonthRow[] = [];
+  let clients = arpu > 0 ? Math.round(startMrr / arpu) : 0;
   const start = new Date();
   for (let i = 0; i < 12; i++) {
-    // Apply churn: lose churn% of clients
-    const churned = clients * (churnPct / 100);
-    clients = Math.max(0, clients - churned + growthRate);
-    mrr = clients * arpu;
-    cumulative += mrr;
-
-    const date = new Date(start.getFullYear(), start.getMonth() + i + 1, 1);
-    const label = date.toLocaleDateString("en-US", { month: "short", year: "2-digit" });
-
-    const hit = MILESTONES.filter((m) => mrr >= m.mrr && !trackedMilestones.has(m.mrr));
-    hit.forEach((m) => trackedMilestones.add(m.mrr));
-
+    const lost = clients * (churnPct / 100);
+    clients = Math.max(0, clients - lost + newClientsPerMonth);
+    const mrr = Math.round(clients * arpu);
+    const date = new Date(start.getFullYear(), start.getMonth() + i, 1);
     months.push({
       month: i + 1,
-      label,
+      label: date.toLocaleDateString("en-US", { month: "short" }),
       clients: Math.round(clients),
-      mrr: Math.round(mrr),
-      cumulative: Math.round(cumulative),
-      hitMilestones: hit,
+      mrr,
     });
   }
   return months;
 }
 
-// ── Bar Chart ─────────────────────────────────────────────
-function BarChart({ months }: { months: MonthData[] }) {
-  const maxMrr = Math.max(...months.map((m) => m.mrr), 1000);
-  const w = 600, h = 240, pad = 30;
-  const barW = (w - pad * 2) / months.length - 4;
-
-  return (
-    <div className="w-full overflow-x-auto">
-      <svg viewBox={`0 0 ${w} ${h + 40}`} className="w-full min-w-[500px]" preserveAspectRatio="xMidYMid meet">
-        {/* Y-axis grid lines */}
-        {[0, 0.25, 0.5, 0.75, 1].map((p) => {
-          const y = h - p * h + 10;
-          return (
-            <g key={p}>
-              <line x1={pad} y1={y} x2={w - pad} y2={y} stroke="#1e1e2e" strokeWidth="1" strokeDasharray="2 4" />
-              <text x={pad - 4} y={y + 3} textAnchor="end" className="fill-[#64748b]" fontSize="9">
-                ${Math.round((p * maxMrr) / 100) * 100}
-              </text>
-            </g>
-          );
-        })}
-
-        {/* Milestone reference lines */}
-        {MILESTONES.filter((m) => m.mrr <= maxMrr).map((m) => {
-          const y = h - (m.mrr / maxMrr) * h + 10;
-          return (
-            <g key={m.mrr}>
-              <line x1={pad} y1={y} x2={w - pad} y2={y} stroke={m.color} strokeWidth="1" strokeDasharray="3 3" opacity="0.5" />
-              <text x={w - pad + 2} y={y + 3} className="fill-current" fontSize="8" fill={m.color}>
-                {m.emoji} {m.label}
-              </text>
-            </g>
-          );
-        })}
-
-        {/* Bars */}
-        {months.map((m, i) => {
-          const x = pad + i * (barW + 4);
-          const barH = (m.mrr / maxMrr) * h;
-          const y = h - barH + 10;
-          const isMilestone = m.hitMilestones.length > 0;
-          return (
-            <g key={i}>
-              <rect
-                x={x}
-                y={y}
-                width={barW}
-                height={barH}
-                rx="2"
-                fill={isMilestone ? "url(#milestoneGrad)" : "url(#barGrad)"}
-              />
-              <text x={x + barW / 2} y={h + 22} textAnchor="middle" className="fill-[#64748b]" fontSize="9">
-                {m.label}
-              </text>
-              <text x={x + barW / 2} y={y - 4} textAnchor="middle" className="fill-white" fontSize="8" fontWeight="600">
-                ${m.mrr >= 1000 ? `${(m.mrr / 1000).toFixed(1)}k` : m.mrr}
-              </text>
-            </g>
-          );
-        })}
-
-        {/* Gradients */}
-        <defs>
-          <linearGradient id="barGrad" x1="0" y1="0" x2="0" y2="1">
-            <stop offset="0%" stopColor="#6366f1" />
-            <stop offset="100%" stopColor="#6366f1" stopOpacity="0.5" />
-          </linearGradient>
-          <linearGradient id="milestoneGrad" x1="0" y1="0" x2="0" y2="1">
-            <stop offset="0%" stopColor="#a855f7" />
-            <stop offset="100%" stopColor="#6366f1" stopOpacity="0.7" />
-          </linearGradient>
-        </defs>
-      </svg>
-    </div>
-  );
-}
-
-// ── Page ──────────────────────────────────────────────────
 export default function RevenuePage() {
-  const [scenario, setScenario] = useState<Scenario>("realistic");
   const [currentMrr, setCurrentMrr] = useState(0);
-  const [growthRate, setGrowthRate] = useState(SCENARIOS.realistic.growth);
-  const [churnPct, setChurnPct] = useState(SCENARIOS.realistic.churn);
+  const [newClients, setNewClients] = useState(4);
+  const [churn, setChurn] = useState(3);
   const [arpu, setArpu] = useState(97);
-  const [savingMrr, setSavingMrr] = useState(false);
 
-  // Load saved MRR on mount
-  useEffect(() => {
-    (async () => {
-      try {
-        const res = await fetch("/api/revenue-settings");
-        const data = await res.json();
-        if (typeof data.data?.current_mrr === "number") {
-          setCurrentMrr(data.data.current_mrr);
-        }
-      } catch { /* silent */ }
-    })();
-  }, []);
-
-  // Apply scenario presets
-  function applyScenario(s: Scenario) {
-    setScenario(s);
-    setGrowthRate(SCENARIOS[s].growth);
-    setChurnPct(SCENARIOS[s].churn);
-    setArpu(SCENARIOS[s].arpu);
+  function applyScenario(key: ScenarioKey) {
+    const s = SCENARIOS[key];
+    setNewClients(s.clientsPerMonth);
+    setChurn(s.churn);
+    setArpu(s.arpu);
   }
 
-  async function saveCurrentMrr() {
-    setSavingMrr(true);
-    try {
-      await fetch("/api/revenue-settings", {
-        method: "PUT",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ current_mrr: currentMrr }),
-      });
-    } catch { /* silent */ }
-    setSavingMrr(false);
-  }
-
-  const currentClients = arpu > 0 ? Math.round(currentMrr / arpu) : 0;
-  const months = useMemo(
-    () => projectRevenue(currentMrr, currentClients, growthRate, churnPct, arpu),
-    [currentMrr, currentClients, growthRate, churnPct, arpu]
+  const projection = useMemo(
+    () => projectRevenue(currentMrr, newClients, churn, arpu),
+    [currentMrr, newClients, churn, arpu]
   );
 
-  const finalMrr = months[months.length - 1]?.mrr || 0;
-  const finalClients = months[months.length - 1]?.clients || 0;
-  const totalRevenue = months[months.length - 1]?.cumulative || 0;
-  const finalArr = finalMrr * 12;
+  const peakMrr = Math.max(...projection.map((m) => m.mrr), currentMrr);
+  const totalRevenue = projection.reduce((acc, m) => acc + m.mrr, 0);
+  const monthsTo100kARR = projection.findIndex((m) => m.mrr * 12 >= 100000);
+
+  // SVG dimensions
+  const W = 800;
+  const H = 320;
+  const padL = 50;
+  const padR = 20;
+  const padT = 20;
+  const padB = 40;
+  const chartW = W - padL - padR;
+  const chartH = H - padT - padB;
+  const barGap = 6;
+  const barWidth = (chartW - barGap * 11) / 12;
+
+  const yMax = Math.max(peakMrr, 11000) * 1.1;
+  const yScale = (v: number) => padT + chartH - (v / yMax) * chartH;
 
   return (
-    <div className="min-h-screen bg-[#0a0a0f] text-[#e2e8f0]">
-      <div className="max-w-[1200px] mx-auto px-4 sm:px-6 py-6 sm:py-8 pb-24 md:pb-8">
+    <div className="min-h-screen bg-[#0a0a0f] px-4 sm:px-6 py-8">
+      <div className="max-w-6xl mx-auto">
         {/* Header */}
-        <Link
-          href="/"
-          className="inline-flex items-center gap-2 text-[#64748b] hover:text-white transition-colors text-sm mb-4 tap-target-auto"
-        >
-          <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
-            <path d="M10 12L6 8l4-4" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
-          </svg>
-          Back to Dashboard
-        </Link>
-
-        <div className="mb-6">
-          <h1 className="text-2xl font-bold text-white mb-1">Revenue Projector</h1>
-          <p className="text-sm text-[#64748b]">12-month forecast based on growth and churn assumptions</p>
+        <div className="flex items-center justify-between mb-6 flex-wrap gap-3">
+          <div>
+            <Link href="/" className="text-xs text-jarvis-muted hover:text-jarvis-accent">← Back to Dashboard</Link>
+            <h1 className="text-2xl font-bold text-white mt-1">Revenue Projector</h1>
+            <p className="text-sm text-jarvis-muted">12-month MRR forecast based on your inputs</p>
+          </div>
         </div>
 
-        {/* Scenario Toggle */}
-        <div className="bg-[#12121a] border border-[#1e1e2e] rounded-xl p-4 mb-6">
-          <h3 className="text-xs uppercase tracking-wider text-[#64748b] font-semibold mb-3">Scenario</h3>
-          <div className="grid grid-cols-3 gap-2">
-            {(Object.keys(SCENARIOS) as Scenario[]).map((key) => {
-              const s = SCENARIOS[key];
-              const active = scenario === key;
-              return (
-                <button
-                  key={key}
-                  onClick={() => applyScenario(key)}
-                  className={`px-3 py-3 rounded-lg text-left transition-all ${
-                    active
-                      ? "bg-[#6366f1]/10 border border-[#6366f1]/50 text-[#6366f1]"
-                      : "bg-[#0a0a0f] border border-[#1e1e2e] text-[#64748b] hover:text-white hover:border-[#6366f1]/30"
-                  }`}
-                >
-                  <div className="text-sm font-semibold">{s.label}</div>
-                  <div className="text-[10px] opacity-80 mt-0.5">{s.desc}</div>
-                </button>
-              );
-            })}
-          </div>
+        {/* Scenario buttons */}
+        <div className="flex gap-2 mb-6 flex-wrap">
+          {(Object.keys(SCENARIOS) as ScenarioKey[]).map((key) => {
+            const s = SCENARIOS[key];
+            const isActive = newClients === s.clientsPerMonth && churn === s.churn && arpu === s.arpu;
+            return (
+              <button
+                key={key}
+                onClick={() => applyScenario(key)}
+                className={`px-4 py-2 rounded-lg text-sm font-medium transition-all border ${
+                  isActive
+                    ? "bg-jarvis-accent text-white border-jarvis-accent"
+                    : "bg-jarvis-card text-jarvis-muted hover:text-white border-jarvis-border hover:border-jarvis-accent/50"
+                }`}
+              >
+                <div>{s.label}</div>
+                <div className="text-[10px] opacity-80">{s.clientsPerMonth} clients/mo · {s.churn}% churn</div>
+              </button>
+            );
+          })}
         </div>
 
         {/* Inputs */}
-        <div className="bg-[#12121a] border border-[#1e1e2e] rounded-xl p-5 mb-6">
-          <h3 className="text-xs uppercase tracking-wider text-[#64748b] font-semibold mb-4">Assumptions</h3>
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-            {/* Current MRR */}
-            <div>
-              <label className="block text-xs text-[#64748b] mb-1.5">Current MRR ($)</label>
-              <div className="flex gap-2">
-                <input
-                  type="number"
-                  value={currentMrr}
-                  onChange={(e) => setCurrentMrr(Math.max(0, parseInt(e.target.value) || 0))}
-                  className="flex-1 bg-[#0a0a0f] border border-[#1e1e2e] rounded-lg px-3 py-2.5 text-sm text-white focus:outline-none focus:border-[#6366f1]"
-                />
-                <button
-                  onClick={saveCurrentMrr}
-                  disabled={savingMrr}
-                  className="px-3 py-2 bg-[#6366f1]/10 border border-[#6366f1]/30 text-[#6366f1] rounded-lg text-xs font-medium hover:bg-[#6366f1]/20 transition-colors disabled:opacity-50"
-                >
-                  {savingMrr ? "..." : "Save"}
-                </button>
-              </div>
-              <p className="text-[10px] text-[#64748b] mt-1">≈ {currentClients} clients at ${arpu}/mo</p>
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
+          {/* Current MRR */}
+          <div className="bg-jarvis-card border border-jarvis-border rounded-xl p-4">
+            <label className="text-xs text-jarvis-muted block mb-2">Current MRR</label>
+            <div className="flex items-center gap-2">
+              <span className="text-jarvis-muted">$</span>
+              <input
+                type="number"
+                value={currentMrr}
+                onChange={(e) => setCurrentMrr(Math.max(0, Number(e.target.value) || 0))}
+                className="flex-1 bg-jarvis-bg border border-jarvis-border rounded px-3 py-2 text-sm text-white focus:outline-none focus:border-jarvis-accent"
+              />
             </div>
+          </div>
 
-            {/* ARPU */}
-            <div>
-              <label className="block text-xs text-[#64748b] mb-1.5">Average Revenue Per User ($/mo)</label>
+          {/* ARPU */}
+          <div className="bg-jarvis-card border border-jarvis-border rounded-xl p-4">
+            <label className="text-xs text-jarvis-muted block mb-2">Average Revenue Per Client</label>
+            <div className="flex items-center gap-2">
+              <span className="text-jarvis-muted">$</span>
               <input
                 type="number"
                 value={arpu}
-                onChange={(e) => setArpu(Math.max(1, parseInt(e.target.value) || 97))}
-                className="w-full bg-[#0a0a0f] border border-[#1e1e2e] rounded-lg px-3 py-2.5 text-sm text-white focus:outline-none focus:border-[#6366f1]"
+                onChange={(e) => setArpu(Math.max(1, Number(e.target.value) || 1))}
+                className="flex-1 bg-jarvis-bg border border-jarvis-border rounded px-3 py-2 text-sm text-white focus:outline-none focus:border-jarvis-accent"
               />
+              <span className="text-xs text-jarvis-muted">/mo</span>
             </div>
+          </div>
 
-            {/* Growth slider */}
-            <div>
-              <div className="flex justify-between text-xs text-[#64748b] mb-1.5">
-                <span>New clients per month</span>
-                <span className="text-[#6366f1] font-semibold">{growthRate}</span>
-              </div>
-              <input
-                type="range"
-                min={1}
-                max={5}
-                step={1}
-                value={growthRate}
-                onChange={(e) => setGrowthRate(parseInt(e.target.value))}
-                className="w-full accent-[#6366f1] tap-target-auto"
-              />
-              <div className="flex justify-between text-[10px] text-[#64748b] mt-1">
-                <span>1</span><span>2</span><span>3</span><span>4</span><span>5</span>
-              </div>
+          {/* New clients/month slider */}
+          <div className="bg-jarvis-card border border-jarvis-border rounded-xl p-4">
+            <div className="flex items-center justify-between mb-2">
+              <label className="text-xs text-jarvis-muted">New Clients per Month</label>
+              <span className="text-sm font-bold text-jarvis-accent">{newClients}</span>
             </div>
+            <input
+              type="range"
+              min={1}
+              max={10}
+              value={newClients}
+              onChange={(e) => setNewClients(Number(e.target.value))}
+              className="w-full accent-jarvis-accent"
+            />
+            <div className="flex justify-between text-[10px] text-jarvis-muted mt-1">
+              <span>1</span><span>10</span>
+            </div>
+          </div>
 
-            {/* Churn slider */}
-            <div>
-              <div className="flex justify-between text-xs text-[#64748b] mb-1.5">
-                <span>Monthly churn rate</span>
-                <span className="text-[#6366f1] font-semibold">{churnPct}%</span>
-              </div>
-              <input
-                type="range"
-                min={0}
-                max={10}
-                step={1}
-                value={churnPct}
-                onChange={(e) => setChurnPct(parseInt(e.target.value))}
-                className="w-full accent-[#6366f1] tap-target-auto"
-              />
-              <div className="flex justify-between text-[10px] text-[#64748b] mt-1">
-                <span>0%</span><span>5%</span><span>10%</span>
-              </div>
+          {/* Churn slider */}
+          <div className="bg-jarvis-card border border-jarvis-border rounded-xl p-4">
+            <div className="flex items-center justify-between mb-2">
+              <label className="text-xs text-jarvis-muted">Monthly Churn Rate</label>
+              <span className="text-sm font-bold text-jarvis-accent">{churn}%</span>
+            </div>
+            <input
+              type="range"
+              min={0}
+              max={20}
+              step={1}
+              value={churn}
+              onChange={(e) => setChurn(Number(e.target.value))}
+              className="w-full accent-jarvis-accent"
+            />
+            <div className="flex justify-between text-[10px] text-jarvis-muted mt-1">
+              <span>0%</span><span>20%</span>
             </div>
           </div>
         </div>
 
-        {/* Forecast Summary KPIs */}
-        <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 mb-6">
-          <div className="bg-[#12121a] border border-[#1e1e2e] rounded-xl p-4">
-            <div className="text-xs text-[#64748b] mb-1">MRR in 12 mo</div>
-            <div className="text-2xl font-bold text-white">${finalMrr.toLocaleString()}</div>
+        {/* Summary cards */}
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-6">
+          <div className="bg-jarvis-card border border-jarvis-border rounded-xl p-4">
+            <div className="text-[10px] uppercase tracking-wider text-jarvis-muted">Months to $100K ARR</div>
+            <div className="text-2xl font-bold text-jarvis-accent mt-1">
+              {monthsTo100kARR === -1 ? ">12" : `${monthsTo100kARR + 1}`}
+            </div>
+            <div className="text-[10px] text-jarvis-muted mt-1">at current pace</div>
           </div>
-          <div className="bg-[#12121a] border border-[#1e1e2e] rounded-xl p-4">
-            <div className="text-xs text-[#64748b] mb-1">ARR projected</div>
-            <div className="text-2xl font-bold text-[#a855f7]">${finalArr.toLocaleString()}</div>
+          <div className="bg-jarvis-card border border-jarvis-border rounded-xl p-4">
+            <div className="text-[10px] uppercase tracking-wider text-jarvis-muted">Total 12-month Revenue</div>
+            <div className="text-2xl font-bold text-jarvis-green mt-1">
+              ${totalRevenue.toLocaleString()}
+            </div>
+            <div className="text-[10px] text-jarvis-muted mt-1">cumulative MRR</div>
           </div>
-          <div className="bg-[#12121a] border border-[#1e1e2e] rounded-xl p-4">
-            <div className="text-xs text-[#64748b] mb-1">Total clients</div>
-            <div className="text-2xl font-bold text-white">{finalClients}</div>
-          </div>
-          <div className="bg-[#12121a] border border-[#1e1e2e] rounded-xl p-4">
-            <div className="text-xs text-[#64748b] mb-1">12-mo revenue</div>
-            <div className="text-2xl font-bold text-[#22c55e]">${totalRevenue.toLocaleString()}</div>
+          <div className="bg-jarvis-card border border-jarvis-border rounded-xl p-4">
+            <div className="text-[10px] uppercase tracking-wider text-jarvis-muted">Peak MRR</div>
+            <div className="text-2xl font-bold text-purple-400 mt-1">
+              ${peakMrr.toLocaleString()}
+            </div>
+            <div className="text-[10px] text-jarvis-muted mt-1">highest month</div>
           </div>
         </div>
 
-        {/* Bar Chart */}
-        <div className="bg-[#12121a] border border-[#1e1e2e] rounded-xl p-5 mb-6">
-          <h3 className="text-xs uppercase tracking-wider text-[#64748b] font-semibold mb-4">Monthly MRR Forecast</h3>
-          <BarChart months={months} />
-        </div>
-
-        {/* Milestones */}
-        <div className="bg-[#12121a] border border-[#1e1e2e] rounded-xl p-5 mb-6">
-          <h3 className="text-xs uppercase tracking-wider text-[#64748b] font-semibold mb-4">Milestones</h3>
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-            {MILESTONES.map((m) => {
-              const hitMonth = months.find((mo) => mo.mrr >= m.mrr);
+        {/* Chart */}
+        <div className="bg-jarvis-card border border-jarvis-border rounded-xl p-4 mb-6 overflow-x-auto">
+          <h3 className="text-sm font-bold text-white mb-4">12-Month MRR Forecast</h3>
+          <svg viewBox={`0 0 ${W} ${H}`} className="w-full h-auto" preserveAspectRatio="xMidYMid meet">
+            {/* Y axis grid lines */}
+            {[0, 0.25, 0.5, 0.75, 1].map((frac) => {
+              const v = yMax * frac;
+              const y = yScale(v);
               return (
-                <div
-                  key={m.mrr}
-                  className="flex items-center gap-3 p-3 rounded-lg border"
-                  style={{
-                    borderColor: hitMonth ? `${m.color}50` : "#1e1e2e",
-                    backgroundColor: hitMonth ? `${m.color}10` : "transparent",
-                  }}
-                >
-                  <div className="text-2xl tap-target-auto">{m.emoji}</div>
-                  <div className="flex-1 min-w-0">
-                    <div className="text-sm font-semibold" style={{ color: hitMonth ? m.color : "#94a3b8" }}>
-                      ${m.mrr.toLocaleString()}/mo · {m.label}
-                    </div>
-                    <div className="text-xs text-[#64748b] mt-0.5">
-                      {hitMonth ? `Hit in ${hitMonth.label} (month ${hitMonth.month})` : "Not reached in 12 months"}
-                    </div>
-                  </div>
-                  {hitMonth && <span className="text-xs font-bold text-[#22c55e] tap-target-auto">✓</span>}
-                </div>
+                <g key={frac}>
+                  <line x1={padL} y1={y} x2={W - padR} y2={y} stroke="#1e1e2e" strokeWidth={1} />
+                  <text x={padL - 6} y={y + 3} textAnchor="end" fontSize={9} fill="#64748b">${Math.round(v).toLocaleString()}</text>
+                </g>
               );
             })}
+
+            {/* Milestone lines */}
+            {MILESTONES.filter((m) => m.mrr <= yMax).map((m) => {
+              const y = yScale(m.mrr);
+              return (
+                <g key={m.label}>
+                  <line x1={padL} y1={y} x2={W - padR} y2={y} stroke={m.color} strokeWidth={1} strokeDasharray="4 3" opacity={0.7} />
+                  <text x={W - padR - 4} y={y - 3} textAnchor="end" fontSize={9} fill={m.color} fontWeight="bold">
+                    {m.label} (${m.mrr.toLocaleString()})
+                  </text>
+                </g>
+              );
+            })}
+
+            {/* Bars */}
+            {projection.map((m, i) => {
+              const x = padL + i * (barWidth + barGap);
+              const y = yScale(m.mrr);
+              const h = padT + chartH - y;
+              const hitsMilestone = MILESTONES.find((ms) => m.mrr >= ms.mrr && (i === 0 || projection[i - 1].mrr < ms.mrr));
+              return (
+                <g key={i}>
+                  <rect
+                    x={x}
+                    y={y}
+                    width={barWidth}
+                    height={Math.max(h, 1)}
+                    fill={hitsMilestone ? hitsMilestone.color : "#6366f1"}
+                    rx={3}
+                  />
+                  <text x={x + barWidth / 2} y={H - padB + 14} textAnchor="middle" fontSize={9} fill="#64748b">
+                    {m.label}
+                  </text>
+                  <text x={x + barWidth / 2} y={H - padB + 26} textAnchor="middle" fontSize={8} fill="#94a3b8">
+                    ${(m.mrr / 1000).toFixed(1)}K
+                  </text>
+                </g>
+              );
+            })}
+          </svg>
+
+          {/* Legend */}
+          <div className="flex flex-wrap items-center gap-3 mt-4 text-[10px] text-jarvis-muted">
+            <div className="flex items-center gap-1.5"><span className="w-3 h-3 rounded-sm bg-[#6366f1]" /> MRR</div>
+            {MILESTONES.map((m) => (
+              <div key={m.label} className="flex items-center gap-1.5">
+                <span className="w-3 h-0.5" style={{ background: m.color }} /> {m.label}
+              </div>
+            ))}
           </div>
         </div>
 
-        {/* Detailed Table */}
-        <div className="bg-[#12121a] border border-[#1e1e2e] rounded-xl p-5 mb-6">
-          <h3 className="text-xs uppercase tracking-wider text-[#64748b] font-semibold mb-4">Month-by-Month Breakdown</h3>
+        {/* Monthly breakdown table */}
+        <div className="bg-jarvis-card border border-jarvis-border rounded-xl p-4">
+          <h3 className="text-sm font-bold text-white mb-3">Month-by-Month Breakdown</h3>
           <div className="overflow-x-auto">
-            <table className="w-full text-sm">
+            <table className="w-full text-xs">
               <thead>
-                <tr className="text-[10px] uppercase tracking-wider text-[#64748b] border-b border-[#1e1e2e]">
-                  <th className="text-left py-2 font-semibold tap-target-auto">Month</th>
-                  <th className="text-right py-2 font-semibold tap-target-auto">Clients</th>
-                  <th className="text-right py-2 font-semibold tap-target-auto">MRR</th>
-                  <th className="text-right py-2 font-semibold tap-target-auto">Cumulative</th>
+                <tr className="border-b border-jarvis-border text-jarvis-muted">
+                  <th className="text-left py-2 px-2">Month</th>
+                  <th className="text-right py-2 px-2">Clients</th>
+                  <th className="text-right py-2 px-2">MRR</th>
+                  <th className="text-right py-2 px-2">ARR</th>
                 </tr>
               </thead>
               <tbody>
-                {months.map((m, i) => (
-                  <tr
-                    key={i}
-                    className={`border-b border-[#1e1e2e]/50 ${m.hitMilestones.length > 0 ? "bg-[#6366f1]/5" : ""}`}
-                  >
-                    <td className="py-2 text-[#e2e8f0] tap-target-auto">
-                      {m.label}
-                      {m.hitMilestones.map((ms) => (
-                        <span key={ms.mrr} className="ml-1.5 text-[10px]" style={{ color: ms.color }}>
-                          {ms.emoji}
-                        </span>
-                      ))}
-                    </td>
-                    <td className="py-2 text-right text-[#94a3b8] tap-target-auto">{m.clients}</td>
-                    <td className="py-2 text-right text-white font-semibold tap-target-auto">${m.mrr.toLocaleString()}</td>
-                    <td className="py-2 text-right text-[#22c55e] tap-target-auto">${m.cumulative.toLocaleString()}</td>
+                {projection.map((m, i) => (
+                  <tr key={i} className="border-b border-jarvis-border/40 hover:bg-jarvis-border/20">
+                    <td className="py-2 px-2 text-white">M{m.month} — {m.label}</td>
+                    <td className="text-right py-2 px-2 text-jarvis-text">{m.clients}</td>
+                    <td className="text-right py-2 px-2 text-jarvis-accent font-semibold">${m.mrr.toLocaleString()}</td>
+                    <td className="text-right py-2 px-2 text-jarvis-green">${(m.mrr * 12).toLocaleString()}</td>
                   </tr>
                 ))}
               </tbody>
             </table>
           </div>
-        </div>
-
-        {/* Existing live tracker (Lindy clients etc) */}
-        <div className="bg-[#12121a] border border-[#1e1e2e] rounded-xl p-5">
-          <h3 className="text-xs uppercase tracking-wider text-[#64748b] font-semibold mb-4">Live Revenue Tracker</h3>
-          <RevenueTab />
         </div>
       </div>
     </div>
