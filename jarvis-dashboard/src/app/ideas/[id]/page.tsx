@@ -2553,6 +2553,198 @@ curl -X POST ${typeof window !== "undefined" ? window.location.origin : ""}/api/
               </div>
             );
           })()}
+
+          {/* ── Compare Sessions Modal ──────────────────── */}
+          {showCompareModal && (() => {
+            const sessionA = warRoomSessions.find((s) => s.id === compareSessionA);
+            const sessionB = warRoomSessions.find((s) => s.id === compareSessionB);
+
+            function extractSection(text: string, sectionKeywords: string[]): string[] {
+              if (!text) return [];
+              const lines = text.split("\n");
+              const items: string[] = [];
+              let inSection = false;
+              for (const line of lines) {
+                const trimmed = line.trim();
+                const lower = trimmed.toLowerCase();
+                const isHeader = /^(#{1,4}\s+|\*\*[^*]+\*\*\s*$)/.test(trimmed) || /^\d+\.\s+\*\*/.test(trimmed) || /^[A-Z][A-Za-z\s&]+:\s*$/.test(trimmed);
+                if (isHeader) {
+                  inSection = sectionKeywords.some((k) => lower.includes(k));
+                  continue;
+                }
+                if (inSection && /^[-*•]\s+/.test(trimmed)) {
+                  items.push(trimmed.replace(/^[-*•]\s+/, "").replace(/^\*\*([^*]+)\*\*:?\s*/, "$1: "));
+                } else if (inSection && /^\d+\.\s+/.test(trimmed)) {
+                  items.push(trimmed.replace(/^\d+\.\s+/, "").replace(/^\*\*([^*]+)\*\*:?\s*/, "$1: "));
+                }
+              }
+              return items;
+            }
+
+            function diffItems(itemsA: string[], itemsB: string[]) {
+              const setA = new Set(itemsA.map((i) => i.toLowerCase().slice(0, 50)));
+              const setB = new Set(itemsB.map((i) => i.toLowerCase().slice(0, 50)));
+              return {
+                newInB: itemsB.filter((i) => !setA.has(i.toLowerCase().slice(0, 50))),
+                removedFromA: itemsA.filter((i) => !setB.has(i.toLowerCase().slice(0, 50))),
+                shared: itemsA.filter((i) => setB.has(i.toLowerCase().slice(0, 50))),
+              };
+            }
+
+            const risksA = sessionA ? extractSection(sessionA.summary_text, ["conflict", "risk", "flag", "warning"]) : [];
+            const risksB = sessionB ? extractSection(sessionB.summary_text, ["conflict", "risk", "flag", "warning"]) : [];
+            const recsA = sessionA ? extractSection(sessionA.summary_text, ["recommend", "next step", "action"]) : [];
+            const recsB = sessionB ? extractSection(sessionB.summary_text, ["recommend", "next step", "action"]) : [];
+            const consensusA = sessionA ? extractSection(sessionA.summary_text, ["agreed", "consensus"]) : [];
+            const consensusB = sessionB ? extractSection(sessionB.summary_text, ["agreed", "consensus"]) : [];
+
+            const riskDiff = diffItems(risksA, risksB);
+            const recDiff = diffItems(recsA, recsB);
+            const consensusDiff = diffItems(consensusA, consensusB);
+
+            const scoreDelta = sessionA && sessionB ? (sessionB.confidence_score || 0) - (sessionA.confidence_score || 0) : 0;
+            const arrow = scoreDelta > 0 ? "↑" : scoreDelta < 0 ? "↓" : "→";
+            const arrowColor = scoreDelta > 0 ? "text-emerald-400" : scoreDelta < 0 ? "text-red-400" : "text-[#64748b]";
+
+            return (
+              <div className="fixed inset-0 bg-black/80 z-50 flex items-center justify-center p-4 overflow-y-auto" onClick={() => setShowCompareModal(false)}>
+                <div className="bg-[#0a0a0f] border border-purple-500/30 rounded-xl w-full max-w-6xl max-h-[90vh] overflow-y-auto" onClick={(e) => e.stopPropagation()}>
+                  <div className="p-6 border-b border-[#1e1e2e] flex items-start justify-between bg-gradient-to-r from-purple-900/30 to-indigo-900/30 sticky top-0 z-10">
+                    <div>
+                      <h2 className="text-xl font-bold text-white">Compare War Room Sessions</h2>
+                      <p className="text-sm text-[#94a3b8] mt-1">See how the analysis evolved between runs</p>
+                    </div>
+                    <button onClick={() => setShowCompareModal(false)} className="text-[#64748b] hover:text-white text-2xl leading-none">✕</button>
+                  </div>
+
+                  <div className="p-6 grid grid-cols-1 md:grid-cols-2 gap-4 border-b border-[#1e1e2e]">
+                    <div>
+                      <label className="text-[10px] font-bold uppercase tracking-wider text-[#475569] block mb-1.5">Session A (Earlier)</label>
+                      <select value={compareSessionA} onChange={(e) => setCompareSessionA(e.target.value)} className="w-full bg-[#0f0f17] border border-[#1e1e2e] rounded-md px-3 py-2 text-sm text-[#e2e8f0] focus:outline-none focus:border-purple-500/50">
+                        <option value="">Select a session...</option>
+                        {warRoomSessions.map((s) => {
+                          const date = new Date(s.session_date).toLocaleDateString("en-US", { month: "short", day: "numeric", hour: "numeric", minute: "2-digit" });
+                          return <option key={s.id} value={s.id}>{date} ({s.confidence_score || 0}/10)</option>;
+                        })}
+                      </select>
+                    </div>
+                    <div>
+                      <label className="text-[10px] font-bold uppercase tracking-wider text-[#475569] block mb-1.5">Session B (Later)</label>
+                      <select value={compareSessionB} onChange={(e) => setCompareSessionB(e.target.value)} className="w-full bg-[#0f0f17] border border-[#1e1e2e] rounded-md px-3 py-2 text-sm text-[#e2e8f0] focus:outline-none focus:border-purple-500/50">
+                        <option value="">Select a session...</option>
+                        {warRoomSessions.map((s) => {
+                          const date = new Date(s.session_date).toLocaleDateString("en-US", { month: "short", day: "numeric", hour: "numeric", minute: "2-digit" });
+                          return <option key={s.id} value={s.id}>{date} ({s.confidence_score || 0}/10)</option>;
+                        })}
+                      </select>
+                    </div>
+                  </div>
+
+                  {!sessionA || !sessionB ? (
+                    <div className="p-12 text-center text-[#64748b] text-sm">Select two sessions above to see the comparison.</div>
+                  ) : sessionA.id === sessionB.id ? (
+                    <div className="p-12 text-center text-amber-400 text-sm">Pick two different sessions to compare.</div>
+                  ) : (
+                    <div className="p-6 space-y-6">
+                      {/* Confidence Score Change */}
+                      <div className="bg-[#0f0f17] border border-[#1e1e2e] rounded-xl p-5">
+                        <div className="text-[10px] font-bold uppercase tracking-wider text-[#475569] mb-3">Confidence Score Change</div>
+                        <div className="flex items-center justify-around">
+                          <div className="text-center">
+                            <div className="text-[10px] text-[#64748b] mb-1">Session A</div>
+                            <div className="text-3xl font-bold text-white">{sessionA.confidence_score || 0}<span className="text-sm text-[#64748b]">/10</span></div>
+                            <div className="text-[10px] text-[#475569] mt-1">{new Date(sessionA.session_date).toLocaleDateString("en-US", { month: "short", day: "numeric" })}</div>
+                          </div>
+                          <div className={`text-5xl font-bold ${arrowColor} flex items-center gap-2`}>
+                            <span>{arrow}</span>
+                            {scoreDelta !== 0 && <span className="text-2xl">{scoreDelta > 0 ? "+" : ""}{scoreDelta}</span>}
+                          </div>
+                          <div className="text-center">
+                            <div className="text-[10px] text-[#64748b] mb-1">Session B</div>
+                            <div className="text-3xl font-bold text-white">{sessionB.confidence_score || 0}<span className="text-sm text-[#64748b]">/10</span></div>
+                            <div className="text-[10px] text-[#475569] mt-1">{new Date(sessionB.session_date).toLocaleDateString("en-US", { month: "short", day: "numeric" })}</div>
+                          </div>
+                        </div>
+                      </div>
+
+                      {/* Verdict comparison */}
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        <div className="bg-[#0f0f17] border border-[#1e1e2e] rounded-xl p-4">
+                          <div className="text-[10px] font-bold uppercase tracking-wider text-purple-400 mb-2">Session A Verdict</div>
+                          <div className="text-xs text-[#cbd5e1] whitespace-pre-wrap leading-relaxed max-h-48 overflow-y-auto">{(sessionA.summary_text || "").slice(0, 500)}{(sessionA.summary_text || "").length > 500 ? "..." : ""}</div>
+                        </div>
+                        <div className="bg-[#0f0f17] border border-[#1e1e2e] rounded-xl p-4">
+                          <div className="text-[10px] font-bold uppercase tracking-wider text-purple-400 mb-2">Session B Verdict</div>
+                          <div className="text-xs text-[#cbd5e1] whitespace-pre-wrap leading-relaxed max-h-48 overflow-y-auto">{(sessionB.summary_text || "").slice(0, 500)}{(sessionB.summary_text || "").length > 500 ? "..." : ""}</div>
+                        </div>
+                      </div>
+
+                      {/* Risks */}
+                      <div className="bg-[#0f0f17] border border-amber-500/20 rounded-xl p-5">
+                        <div className="text-[10px] font-bold uppercase tracking-wider text-amber-400 mb-3">⚠ Risks Flagged Differently</div>
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                          <div>
+                            <div className="text-[11px] font-semibold text-emerald-400 mb-2">✓ Resolved (in A, not in B)</div>
+                            {riskDiff.removedFromA.length === 0 ? <p className="text-xs text-[#64748b] italic">None</p> : (
+                              <ul className="space-y-1.5">{riskDiff.removedFromA.map((r, i) => (<li key={i} className="text-xs text-[#cbd5e1] flex gap-2"><span className="text-emerald-400 flex-shrink-0">✓</span><span>{r}</span></li>))}</ul>
+                            )}
+                          </div>
+                          <div>
+                            <div className="text-[11px] font-semibold text-amber-400 mb-2">+ New in Session B</div>
+                            {riskDiff.newInB.length === 0 ? <p className="text-xs text-[#64748b] italic">None</p> : (
+                              <ul className="space-y-1.5">{riskDiff.newInB.map((r, i) => (<li key={i} className="text-xs text-[#cbd5e1] flex gap-2"><span className="text-amber-400 flex-shrink-0">+</span><span>{r}</span></li>))}</ul>
+                            )}
+                          </div>
+                        </div>
+                      </div>
+
+                      {/* Recommendations */}
+                      <div className="bg-[#0f0f17] border border-blue-500/20 rounded-xl p-5">
+                        <div className="text-[10px] font-bold uppercase tracking-wider text-blue-400 mb-3">→ Recommendations Changed</div>
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                          <div>
+                            <div className="text-[11px] font-semibold text-[#94a3b8] mb-2">Dropped (in A, not in B)</div>
+                            {recDiff.removedFromA.length === 0 ? <p className="text-xs text-[#64748b] italic">None</p> : (
+                              <ul className="space-y-1.5">{recDiff.removedFromA.map((r, i) => (<li key={i} className="text-xs text-[#cbd5e1] flex gap-2"><span className="text-[#64748b] flex-shrink-0">-</span><span>{r}</span></li>))}</ul>
+                            )}
+                          </div>
+                          <div>
+                            <div className="text-[11px] font-semibold text-blue-400 mb-2">New in Session B</div>
+                            {recDiff.newInB.length === 0 ? <p className="text-xs text-[#64748b] italic">None</p> : (
+                              <ul className="space-y-1.5">{recDiff.newInB.map((r, i) => (<li key={i} className="text-xs text-[#cbd5e1] flex gap-2"><span className="text-blue-400 flex-shrink-0">+</span><span>{r}</span></li>))}</ul>
+                            )}
+                          </div>
+                        </div>
+                        {recDiff.shared.length > 0 && (
+                          <div className="mt-4 pt-4 border-t border-[#1e1e2e] text-[11px] text-[#94a3b8]">{recDiff.shared.length} consistent recommendation{recDiff.shared.length !== 1 ? "s" : ""} across both sessions</div>
+                        )}
+                      </div>
+
+                      {/* Consensus */}
+                      <div className="bg-[#0f0f17] border border-emerald-500/20 rounded-xl p-5">
+                        <div className="text-[10px] font-bold uppercase tracking-wider text-emerald-400 mb-3">✓ Team Consensus Evolution</div>
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                          <div>
+                            <div className="text-[11px] font-semibold text-[#94a3b8] mb-2">Lost (in A, not in B)</div>
+                            {consensusDiff.removedFromA.length === 0 ? <p className="text-xs text-[#64748b] italic">None</p> : (
+                              <ul className="space-y-1.5">{consensusDiff.removedFromA.map((r, i) => (<li key={i} className="text-xs text-[#cbd5e1] flex gap-2"><span className="text-[#64748b] flex-shrink-0">-</span><span>{r}</span></li>))}</ul>
+                            )}
+                          </div>
+                          <div>
+                            <div className="text-[11px] font-semibold text-emerald-400 mb-2">Gained in Session B</div>
+                            {consensusDiff.newInB.length === 0 ? <p className="text-xs text-[#64748b] italic">None</p> : (
+                              <ul className="space-y-1.5">{consensusDiff.newInB.map((r, i) => (<li key={i} className="text-xs text-[#cbd5e1] flex gap-2"><span className="text-emerald-400 flex-shrink-0">✓</span><span>{r}</span></li>))}</ul>
+                            )}
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  )}
+                </div>
+              </div>
+            );
+          })()}
+
           {activeTab === "History" && (
             <div className="space-y-3">
               <div className="flex items-center justify-between mb-2">
