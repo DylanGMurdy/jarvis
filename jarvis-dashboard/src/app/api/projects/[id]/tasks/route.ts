@@ -22,10 +22,21 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
 
   const body = await request.json();
   const taskId = body.id || crypto.randomUUID();
+  const status = body.status || (body.done ? "done" : "todo");
 
   const { data, error } = await sb
     .from("project_tasks")
-    .insert({ id: taskId, project_id: id, title: body.title, done: body.done ?? false, created_at: new Date().toISOString() })
+    .insert({
+      id: taskId,
+      project_id: id,
+      title: body.title,
+      done: status === "done",
+      priority: body.priority || "medium",
+      status,
+      due_date: body.due_date || null,
+      source: body.source || "manual",
+      created_at: new Date().toISOString(),
+    })
     .select()
     .single();
 
@@ -40,7 +51,25 @@ export async function PATCH(request: Request) {
   const { taskId, ...updates } = await request.json();
   if (!taskId) return Response.json({ error: "taskId required" }, { status: 400 });
 
+  // Sync done flag with status
+  if (updates.status) {
+    updates.done = updates.status === "done";
+  }
+
   const { error } = await sb.from("project_tasks").update(updates).eq("id", taskId);
+  if (error) return Response.json({ error: error.message }, { status: 500 });
+  return Response.json({ success: true });
+}
+
+export async function DELETE(request: Request) {
+  const sb = getSupabase();
+  if (!sb) return Response.json({ error: "Supabase not configured" }, { status: 500 });
+
+  const url = new URL(request.url);
+  const taskId = url.searchParams.get("taskId");
+  if (!taskId) return Response.json({ error: "taskId required" }, { status: 400 });
+
+  const { error } = await sb.from("project_tasks").delete().eq("id", taskId);
   if (error) return Response.json({ error: error.message }, { status: 500 });
   return Response.json({ success: true });
 }

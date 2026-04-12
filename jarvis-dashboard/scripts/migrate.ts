@@ -60,6 +60,17 @@ async function migrate() {
       console.log('Created lindy_clients table');
 
       await supabase.rpc('exec_sql', {
+        sql: `CREATE TABLE IF NOT EXISTS weekly_reports (
+          id uuid default gen_random_uuid() primary key,
+          report_text text not null,
+          week_ending timestamp with time zone default now(),
+          stats jsonb,
+          created_at timestamp with time zone default now()
+        )`
+      });
+      console.log('Created weekly_reports table');
+
+      await supabase.rpc('exec_sql', {
         sql: `CREATE TABLE IF NOT EXISTS notifications (
           id uuid default gen_random_uuid() primary key,
           title text not null,

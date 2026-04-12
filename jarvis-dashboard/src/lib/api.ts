@@ -49,12 +49,15 @@ export const api = {
       const res = await fetchJSON<{ data: ProjectTask[] }>(`/api/projects/${projectId}/tasks`);
       return res.data || [];
     },
-    async create(projectId: string, title: string): Promise<ProjectTask | null> {
-      const res = await post(`/api/projects/${projectId}/tasks`, { title, done: false });
+    async create(projectId: string, title: string, opts?: Partial<ProjectTask>): Promise<ProjectTask | null> {
+      const res = await post(`/api/projects/${projectId}/tasks`, { title, done: false, ...opts });
       return (res as { data?: ProjectTask }).data || null;
     },
     async update(projectId: string, taskId: string, updates: Partial<ProjectTask>): Promise<void> {
       await patch(`/api/projects/${projectId}/tasks`, { taskId, ...updates });
+    },
+    async delete(projectId: string, taskId: string): Promise<void> {
+      await fetch(`/api/projects/${projectId}/tasks?taskId=${encodeURIComponent(taskId)}`, { method: "DELETE" });
     },
   },
 

@@ -34,6 +34,8 @@ export default function ProjectDetailPage({ params }: { params: Promise<{ id: st
   const [activeTab, setActiveTab] = useState<Tab>("Overview");
 
   const [newTaskTitle, setNewTaskTitle] = useState("");
+  const [newTaskPriority, setNewTaskPriority] = useState<"low" | "medium" | "high">("medium");
+  const [newTaskDueDate, setNewTaskDueDate] = useState<string>("");
   const [newNoteContent, setNewNoteContent] = useState("");
   const [editDesc, setEditDesc] = useState("");
   const [editingProgress, setEditingProgress] = useState(false);
@@ -988,8 +990,26 @@ export default function ProjectDetailPage({ params }: { params: Promise<{ id: st
   async function handleAddTask() {
     const title = newTaskTitle.trim();
     if (!title) return;
-    await api.projectTasks.create(id, title);
+    await api.projectTasks.create(id, title, {
+      priority: newTaskPriority,
+      status: "todo",
+      due_date: newTaskDueDate || null,
+      source: "manual",
+    });
     setNewTaskTitle("");
+    setNewTaskDueDate("");
+    setNewTaskPriority("medium");
+    loadData();
+  }
+
+  async function handleMoveTask(taskId: string, newStatus: "todo" | "in_progress" | "done") {
+    await api.projectTasks.update(id, taskId, { status: newStatus, done: newStatus === "done" });
+    loadData();
+  }
+
+  async function handleDeleteTask(taskId: string) {
+    if (!confirm("Delete this task?")) return;
+    await api.projectTasks.delete(id, taskId);
     loadData();
   }
 
@@ -1583,29 +1603,132 @@ curl -X POST ${typeof window !== "undefined" ? window.location.origin : ""}/api/
           )}
 
           {/* ── Tasks ────────────────────────────────────── */}
-          {activeTab === "Tasks" && (
-            <div className="space-y-4">
-              <div className="flex items-center justify-between">
-                <p className="text-sm text-[#64748b]">{doneTasks} / {tasks.length} completed</p>
-              </div>
-              <div className="flex gap-2">
-                <input type="text" value={newTaskTitle} onChange={(e) => setNewTaskTitle(e.target.value)} onKeyDown={(e) => e.key === "Enter" && handleAddTask()} placeholder="Add a new task..." className="flex-1 bg-[#12121a] border border-[#1e1e2e] rounded-lg px-4 py-2.5 text-sm text-[#e2e8f0] placeholder-[#64748b] focus:outline-none focus:border-[#6366f1]" />
-                <button onClick={handleAddTask} className="px-4 py-2.5 bg-[#6366f1] hover:bg-[#5558e6] text-white text-sm font-medium rounded-lg">Add Task</button>
-              </div>
-              <div className="space-y-2">
-                {tasks.length === 0 ? (
-                  <p className="text-[#64748b] text-sm text-center py-8">No tasks yet.</p>
-                ) : tasks.map((task) => (
-                  <div key={task.id} onClick={() => handleToggleTask(task.id, task.done)} className="flex items-center gap-3 bg-[#12121a] border border-[#1e1e2e] rounded-lg px-4 py-3 cursor-pointer hover:border-[#6366f1]/30 transition-colors">
-                    <div className={`w-5 h-5 rounded border-2 flex items-center justify-center transition-colors ${task.done ? "bg-[#6366f1] border-[#6366f1]" : "border-[#64748b]"}`}>
-                      {task.done && <svg width="12" height="12" viewBox="0 0 12 12" fill="none"><path d="M2 6l3 3 5-5" stroke="white" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" /></svg>}
-                    </div>
-                    <span className={`text-sm ${task.done ? "line-through text-[#64748b]" : "text-[#e2e8f0]"}`}>{task.title}</span>
+          {activeTab === "Tasks" && (() => {
+            const PRIORITY_STYLES: Record<string, string> = {
+              high: "bg-red-500/15 text-red-400 border-red-500/30",
+              medium: "bg-amber-500/15 text-amber-400 border-amber-500/30",
+              low: "bg-emerald-500/15 text-emerald-400 border-emerald-500/30",
+            };
+            const SOURCE_LABELS: Record<string, { label: string; color: string }> = {
+              daily_agent: { label: "Daily Agent", color: "bg-blue-500/15 text-blue-400" },
+              chat: { label: "Chat", color: "bg-cyan-500/15 text-cyan-400" },
+              war_room: { label: "War Room", color: "bg-purple-500/15 text-purple-400" },
+            };
+            // Derive current status (fallback to done flag for legacy tasks)
+            const tasksWithStatus = tasks.map((t) => ({
+              ...t,
+              _status: (t.status as "todo" | "in_progress" | "done") || (t.done ? "done" : "todo"),
+              _priority: (t.priority as "low" | "medium" | "high") || "medium",
+            }));
+            const todoTasks = tasksWithStatus.filter((t) => t._status === "todo");
+            const inProgressTasks = tasksWithStatus.filter((t) => t._status === "in_progress");
+            const doneTasksKanban = tasksWithStatus.filter((t) => t._status === "done");
+
+            const COLUMNS: { key: "todo" | "in_progress" | "done"; label: string; tasks: typeof tasksWithStatus; accent: string; icon: string }[] = [
+              { key: "todo", label: "To Do", tasks: todoTasks, accent: "border-[#64748b]/40", icon: "📋" },
+              { key: "in_progress", label: "In Progress", tasks: inProgressTasks, accent: "border-amber-500/40", icon: "⚡" },
+              { key: "done", label: "Done", tasks: doneTasksKanban, accent: "border-emerald-500/40", icon: "✓" },
+            ];
+
+            return (
+              <div className="space-y-4">
+                {/* Add Task Form */}
+                <div className="bg-[#12121a] border border-[#1e1e2e] rounded-xl p-4">
+                  <div className="flex flex-wrap gap-2 items-end">
+                    <input
+                      type="text"
+                      value={newTaskTitle}
+                      onChange={(e) => setNewTaskTitle(e.target.value)}
+                      onKeyDown={(e) => e.key === "Enter" && handleAddTask()}
+                      placeholder="What needs to get done?"
+                      className="flex-1 min-w-[200px] bg-[#0a0a0f] border border-[#1e1e2e] rounded-lg px-4 py-2.5 text-sm text-[#e2e8f0] placeholder-[#64748b] focus:outline-none focus:border-[#6366f1]"
+                    />
+                    <select
+                      value={newTaskPriority}
+                      onChange={(e) => setNewTaskPriority(e.target.value as "low" | "medium" | "high")}
+                      className="bg-[#0a0a0f] border border-[#1e1e2e] rounded-lg px-3 py-2.5 text-sm text-[#e2e8f0] focus:outline-none focus:border-[#6366f1]"
+                    >
+                      <option value="low">Low</option>
+                      <option value="medium">Medium</option>
+                      <option value="high">High</option>
+                    </select>
+                    <input
+                      type="date"
+                      value={newTaskDueDate}
+                      onChange={(e) => setNewTaskDueDate(e.target.value)}
+                      className="bg-[#0a0a0f] border border-[#1e1e2e] rounded-lg px-3 py-2.5 text-sm text-[#e2e8f0] focus:outline-none focus:border-[#6366f1]"
+                    />
+                    <button
+                      onClick={handleAddTask}
+                      disabled={!newTaskTitle.trim()}
+                      className="px-5 py-2.5 bg-[#6366f1] hover:bg-[#5558e6] disabled:opacity-50 text-white text-sm font-semibold rounded-lg transition-colors"
+                    >
+                      Add Task
+                    </button>
                   </div>
-                ))}
+                  <p className="text-xs text-[#64748b] mt-3">{tasks.length} total · {doneTasks} done · {inProgressTasks.length} in progress · {todoTasks.length} to do</p>
+                </div>
+
+                {/* Kanban Board */}
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                  {COLUMNS.map((col) => (
+                    <div key={col.key} className={`bg-[#0a0a0f] border-2 ${col.accent} rounded-xl p-3 min-h-[300px]`}>
+                      <div className="flex items-center justify-between mb-3 px-1">
+                        <div className="flex items-center gap-2">
+                          <span className="text-base">{col.icon}</span>
+                          <h3 className="text-sm font-bold text-white">{col.label}</h3>
+                        </div>
+                        <span className="text-xs px-2 py-0.5 rounded-full bg-[#1e1e2e] text-[#94a3b8]">{col.tasks.length}</span>
+                      </div>
+                      <div className="space-y-2">
+                        {col.tasks.length === 0 ? (
+                          <p className="text-xs text-[#64748b] text-center py-6 italic">No tasks</p>
+                        ) : col.tasks.map((task) => {
+                          const sourceBadge = task.source && SOURCE_LABELS[task.source];
+                          const isOverdue = task.due_date && task._status !== "done" && new Date(task.due_date) < new Date();
+                          return (
+                            <div key={task.id} className="bg-[#12121a] border border-[#1e1e2e] rounded-lg p-3 group hover:border-[#6366f1]/40 transition-colors">
+                              <div className="flex items-start justify-between gap-2 mb-2">
+                                <p className={`text-sm flex-1 ${task._status === "done" ? "line-through text-[#64748b]" : "text-[#e2e8f0]"}`}>{task.title}</p>
+                                <button
+                                  onClick={() => handleDeleteTask(task.id)}
+                                  className="opacity-0 group-hover:opacity-100 text-[#64748b] hover:text-red-400 text-xs leading-none p-1 transition-all"
+                                  title="Delete task"
+                                >×</button>
+                              </div>
+                              <div className="flex items-center flex-wrap gap-1.5 mb-2">
+                                <span className={`text-[10px] font-medium px-2 py-0.5 rounded-full border ${PRIORITY_STYLES[task._priority]}`}>{task._priority}</span>
+                                {sourceBadge && (
+                                  <span className={`text-[10px] font-medium px-2 py-0.5 rounded-full ${sourceBadge.color}`}>{sourceBadge.label}</span>
+                                )}
+                                {task.due_date && (
+                                  <span className={`text-[10px] font-medium px-2 py-0.5 rounded-full ${isOverdue ? "bg-red-500/15 text-red-400" : "bg-[#1e1e2e] text-[#94a3b8]"}`}>
+                                    {isOverdue ? "⚠ " : "📅 "}{new Date(task.due_date).toLocaleDateString("en-US", { month: "short", day: "numeric" })}
+                                  </span>
+                                )}
+                              </div>
+                              {/* Move Buttons */}
+                              <div className="flex gap-1 pt-2 border-t border-[#1e1e2e]">
+                                {col.key !== "todo" && (
+                                  <button onClick={() => handleMoveTask(task.id, "todo")} className="flex-1 text-[10px] px-2 py-1 rounded bg-[#1e1e2e] text-[#94a3b8] hover:text-white transition-colors" title="Move to To Do">← To Do</button>
+                                )}
+                                {col.key !== "in_progress" && (
+                                  <button onClick={() => handleMoveTask(task.id, "in_progress")} className="flex-1 text-[10px] px-2 py-1 rounded bg-amber-500/10 text-amber-400 hover:bg-amber-500/20 transition-colors" title="Move to In Progress">{col.key === "todo" ? "→" : "←"} In Prog</button>
+                                )}
+                                {col.key !== "done" && (
+                                  <button onClick={() => handleMoveTask(task.id, "done")} className="flex-1 text-[10px] px-2 py-1 rounded bg-emerald-500/10 text-emerald-400 hover:bg-emerald-500/20 transition-colors" title="Move to Done">Done →</button>
+                                )}
+                              </div>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  ))}
+                </div>
               </div>
-            </div>
-          )}
+            );
+          })()}
 
           {/* ── Notes ────────────────────────────────────── */}
           {activeTab === "Notes" && (() => {

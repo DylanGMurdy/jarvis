@@ -21,6 +21,45 @@ function daysUntil(date: string): number {
   return Math.ceil((target.getTime() - now.getTime()) / 86400000);
 }
 
+interface GoalUpdate {
+  id: string;
+  goal_id: string;
+  note: string;
+  progress: number | null;
+  created_at: string;
+}
+
+interface Recommendation {
+  title: string;
+  description: string;
+  target_days: number;
+  rationale: string;
+  suggested_status: string;
+}
+
+// Inline SVG sparkline of progress over time
+function Sparkline({ updates, currentProgress }: { updates: GoalUpdate[]; currentProgress: number }) {
+  const points = [...updates.filter((u) => u.progress !== null).map((u) => u.progress as number), currentProgress];
+  if (points.length < 2) {
+    return <div className="text-[10px] text-[#64748b] italic tap-target-auto">Log updates to see your progress trend</div>;
+  }
+  const w = 180, h = 30;
+  const max = 100, min = 0;
+  const step = w / (points.length - 1);
+  const path = points.map((p, i) => `${i === 0 ? "M" : "L"} ${i * step} ${h - ((p - min) / (max - min)) * h}`).join(" ");
+  const last = points[points.length - 1];
+  const trend = last >= points[0];
+
+  return (
+    <svg width={w} height={h} viewBox={`0 0 ${w} ${h}`} className="overflow-visible tap-target-auto">
+      <path d={path} fill="none" stroke={trend ? "#22c55e" : "#ef4444"} strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
+      {points.map((p, i) => (
+        <circle key={i} cx={i * step} cy={h - ((p - min) / (max - min)) * h} r="1.5" fill={trend ? "#22c55e" : "#ef4444"} />
+      ))}
+    </svg>
+  );
+}
+
 export default function GoalsPage() {
   const [goals, setGoals] = useState<Goal[]>([]);
   const [projects, setProjects] = useState<Project[]>([]);
@@ -36,14 +75,102 @@ export default function GoalsPage() {
   const [status, setStatus] = useState<Status>("On Track");
   const [projectId, setProjectId] = useState<string>("");
 
+  // Goal updates state
+  const [updatesByGoal, setUpdatesByGoal] = useState<Record<string, GoalUpdate[]>>({});
+  const [logUpdateGoal, setLogUpdateGoal] = useState<Goal | null>(null);
+  const [updateNote, setUpdateNote] = useState("");
+  const [updateProgress, setUpdateProgress] = useState<number>(0);
+  const [savingUpdate, setSavingUpdate] = useState(false);
+
+  // Recommendations state
+  const [recommendations, setRecommendations] = useState<Recommendation[]>([]);
+  const [loadingRecs, setLoadingRecs] = useState(false);
+  const [showRecs, setShowRecs] = useState(false);
+
   const loadGoals = useCallback(async () => {
     const [g, p] = await Promise.all([api.goals.list(), api.projects.list()]);
     setGoals(g);
     setProjects(p);
+    // Load updates for each goal in parallel
+    const updatesMap: Record<string, GoalUpdate[]> = {};
+    await Promise.all(
+      g.map(async (goal) => {
+        try {
+          const r = await fetch(`/api/db/goals/${goal.id}/updates`);
+          const j = await r.json();
+          updatesMap[goal.id] = j.data || [];
+        } catch {
+          updatesMap[goal.id] = [];
+        }
+      })
+    );
+    setUpdatesByGoal(updatesMap);
     setLoading(false);
   }, []);
 
   useEffect(() => { loadGoals(); }, [loadGoals]);
+
+  async function handleLogUpdate() {
+    if (!logUpdateGoal || !updateNote.trim()) return;
+    setSavingUpdate(true);
+    try {
+      // Save update
+      await fetch(`/api/db/goals/${logUpdateGoal.id}/updates`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ note: updateNote.trim(), progress: updateProgress }),
+      });
+      // Sync goal progress
+      await fetch(`/api/db/goals/${logUpdateGoal.id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          progress: updateProgress,
+          status: updateProgress >= 100 ? "Complete" : (logUpdateGoal.status as Status) || "On Track",
+        }),
+      });
+      setLogUpdateGoal(null);
+      setUpdateNote("");
+      loadGoals();
+    } catch { /* silent */ }
+    setSavingUpdate(false);
+  }
+
+  function openLogUpdate(g: Goal) {
+    setLogUpdateGoal(g);
+    setUpdateNote("");
+    setUpdateProgress(g.progress);
+  }
+
+  async function generateRecommendations() {
+    setLoadingRecs(true);
+    setShowRecs(true);
+    try {
+      const res = await fetch("/api/goals/recommendations", { method: "POST" });
+      const data = await res.json();
+      setRecommendations(data.recommendations || []);
+    } catch { /* silent */ }
+    setLoadingRecs(false);
+  }
+
+  async function adoptRecommendation(rec: Recommendation) {
+    const targetDate = new Date();
+    targetDate.setDate(targetDate.getDate() + (rec.target_days || 90));
+    await fetch("/api/db/goals", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        title: rec.title,
+        description: rec.description,
+        target_date: targetDate.toISOString().split("T")[0],
+        progress: 0,
+        status: "On Track",
+        category: "business",
+      }),
+    });
+    setRecommendations((prev) => prev.filter((r) => r.title !== rec.title));
+    loadGoals();
+  }
 
   function resetForm() {
     setTitle("");
@@ -138,13 +265,65 @@ export default function GoalsPage() {
             <h1 className="text-3xl font-bold mb-1">90-Day Goals</h1>
             <p className="text-sm text-[#64748b]">Track and crush your most important objectives</p>
           </div>
-          <button
-            onClick={() => { resetForm(); setShowCreate(true); }}
-            className="px-5 py-2.5 bg-[#6366f1] text-white rounded-lg text-sm font-semibold hover:bg-[#5558e6] transition-colors"
-          >
-            + New Goal
-          </button>
+          <div className="flex gap-2 flex-wrap">
+            <button
+              onClick={generateRecommendations}
+              disabled={loadingRecs}
+              className="px-4 py-2.5 bg-gradient-to-r from-[#6366f1]/20 to-purple-500/20 border border-[#6366f1]/40 text-[#6366f1] rounded-lg text-sm font-semibold hover:from-[#6366f1]/30 hover:to-purple-500/30 transition-all disabled:opacity-50"
+            >
+              {loadingRecs ? "Thinking..." : "✨ Generate Recommendations"}
+            </button>
+            <button
+              onClick={() => { resetForm(); setShowCreate(true); }}
+              className="px-5 py-2.5 bg-[#6366f1] text-white rounded-lg text-sm font-semibold hover:bg-[#5558e6] transition-colors"
+            >
+              + New Goal
+            </button>
+          </div>
         </div>
+
+        {/* Recommendations Panel */}
+        {showRecs && (
+          <div className="bg-[#12121a] rounded-2xl border border-[#6366f1]/30 p-6 mb-6 animate-[slideUp_0.3s_ease-out]">
+            <div className="flex items-center justify-between mb-4">
+              <h3 className="text-lg font-bold text-white flex items-center gap-2">
+                <span>✨</span>
+                <span>JARVIS Recommendations</span>
+              </h3>
+              <button onClick={() => setShowRecs(false)} className="text-[#64748b] hover:text-white text-sm tap-target-auto">×</button>
+            </div>
+            {loadingRecs ? (
+              <div className="text-center py-6 text-sm text-[#64748b] animate-pulse">
+                Analyzing your projects and goals...
+              </div>
+            ) : recommendations.length === 0 ? (
+              <div className="text-center py-6 text-sm text-[#64748b]">
+                No recommendations available. Try again with more project data.
+              </div>
+            ) : (
+              <div className="space-y-3">
+                {recommendations.map((rec, i) => (
+                  <div key={i} className="bg-[#0a0a0f] border border-[#1e1e2e] rounded-xl p-4">
+                    <div className="flex items-start justify-between gap-3 mb-2">
+                      <h4 className="text-sm font-semibold text-white flex-1">{rec.title}</h4>
+                      <span className="text-[10px] text-[#6366f1] bg-[#6366f1]/10 px-2 py-0.5 rounded-full whitespace-nowrap tap-target-auto">
+                        {rec.target_days} days
+                      </span>
+                    </div>
+                    <p className="text-xs text-[#94a3b8] mb-2">{rec.description}</p>
+                    <p className="text-[11px] text-[#64748b] italic mb-3">→ {rec.rationale}</p>
+                    <button
+                      onClick={() => adoptRecommendation(rec)}
+                      className="px-3 py-1.5 bg-[#6366f1] text-white rounded-lg text-xs font-medium hover:bg-[#5558e6] transition-colors"
+                    >
+                      Adopt this goal
+                    </button>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        )}
 
         {/* Master Progress */}
         <div className="bg-[#12121a] rounded-2xl border border-[#1e1e2e] p-6 mb-6">
@@ -279,8 +458,17 @@ export default function GoalsPage() {
                     </Link>
                   )}
 
+                  {/* Sparkline of progress over time */}
+                  <div className="mb-3 pb-3 border-b border-[#1e1e2e]">
+                    <div className="flex items-center justify-between mb-1.5">
+                      <span className="text-[10px] uppercase tracking-wider text-[#64748b] font-semibold tap-target-auto">Progress trend</span>
+                      <span className="text-[10px] text-[#64748b] tap-target-auto">{(updatesByGoal[g.id] || []).length} updates</span>
+                    </div>
+                    <Sparkline updates={updatesByGoal[g.id] || []} currentProgress={g.progress} />
+                  </div>
+
                   <div className="flex items-center gap-2 pt-3 border-t border-[#1e1e2e]">
-                    <button onClick={() => quickProgressUpdate(g, -10)} className="px-2.5 py-1 bg-[#1e1e2e] text-[#94a3b8] rounded text-xs hover:text-white transition-colors">-10%</button>
+                    <button onClick={() => openLogUpdate(g)} className="px-2.5 py-1.5 bg-[#6366f1]/10 border border-[#6366f1]/30 text-[#6366f1] rounded text-xs font-medium hover:bg-[#6366f1]/20 transition-colors">+ Log Update</button>
                     <button onClick={() => quickProgressUpdate(g, 10)} className="px-2.5 py-1 bg-[#1e1e2e] text-[#94a3b8] rounded text-xs hover:text-white transition-colors">+10%</button>
                     <button onClick={() => startEdit(g)} className="ml-auto px-2.5 py-1 text-[#94a3b8] hover:text-white text-xs transition-colors">Edit</button>
                     <button onClick={() => handleDelete(g.id)} className="px-2.5 py-1 text-[#94a3b8] hover:text-red-400 text-xs transition-colors">Delete</button>
@@ -291,6 +479,53 @@ export default function GoalsPage() {
           </div>
         )}
       </div>
+
+      {/* Log Update Modal */}
+      {logUpdateGoal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4" onClick={() => setLogUpdateGoal(null)}>
+          <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" />
+          <div onClick={(e) => e.stopPropagation()} className="relative bg-[#12121a] border border-[#1e1e2e] rounded-2xl p-6 w-full max-w-md animate-[slideUp_0.3s_ease-out]">
+            <h3 className="text-lg font-bold text-white mb-1">Log Progress Update</h3>
+            <p className="text-xs text-[#64748b] mb-4 truncate">{logUpdateGoal.title}</p>
+
+            <label className="block text-xs text-[#64748b] mb-1">What happened?</label>
+            <textarea
+              value={updateNote}
+              onChange={(e) => setUpdateNote(e.target.value)}
+              placeholder="e.g. Closed 2 new builder leads, prototype 80% complete..."
+              rows={3}
+              className="w-full bg-[#0a0a0f] border border-[#1e1e2e] rounded-lg px-3 py-2.5 text-sm text-white placeholder-[#64748b] focus:outline-none focus:border-[#6366f1] resize-none mb-4"
+              autoFocus
+            />
+
+            <label className="block text-xs text-[#64748b] mb-1">New progress: {updateProgress}%</label>
+            <input
+              type="range"
+              min={0}
+              max={100}
+              value={updateProgress}
+              onChange={(e) => setUpdateProgress(parseInt(e.target.value))}
+              className="w-full accent-[#6366f1] mb-4"
+            />
+
+            <div className="flex gap-2">
+              <button
+                onClick={() => setLogUpdateGoal(null)}
+                className="flex-1 px-4 py-2.5 bg-[#1e1e2e] text-[#94a3b8] rounded-lg text-sm hover:text-white transition-colors"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleLogUpdate}
+                disabled={!updateNote.trim() || savingUpdate}
+                className="flex-1 px-4 py-2.5 bg-[#6366f1] text-white rounded-lg text-sm font-semibold hover:bg-[#5558e6] disabled:opacity-50 transition-colors"
+              >
+                {savingUpdate ? "Saving..." : "Save Update"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
