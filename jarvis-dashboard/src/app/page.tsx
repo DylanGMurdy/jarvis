@@ -7,6 +7,7 @@ import type { Project, Goal, ChatMessage, Memory, MemoryCategory } from "@/lib/t
 import VoiceChatInput from "@/components/VoiceChatInput";
 import FloatingVoiceButton from "@/components/mobile/FloatingVoiceButton";
 import NotificationBell from "@/components/NotificationBell";
+import WeeklyReportModal from "@/components/WeeklyReportModal";
 import BottomTabBar from "@/components/mobile/BottomTabBar";
 import OverviewTab from "@/components/dashboard/OverviewTab";
 import IdeasTab from "@/components/dashboard/IdeasTab";
@@ -71,6 +72,7 @@ export default function Dashboard() {
   const [modal, setModal] = useState<ModalData>(null);
   const chatEndRef = useRef<HTMLDivElement>(null);
   const [chatOpen, setChatOpen] = useState(false);
+  const [weeklyReportOpen, setWeeklyReportOpen] = useState(false);
   const [searchOpen, setSearchOpen] = useState(false);
 
   // DB-backed state
@@ -566,6 +568,15 @@ export default function Dashboard() {
               <span className="hidden md:inline">Search</span>
               <kbd className="hidden md:inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded bg-jarvis-border text-[10px] text-jarvis-muted font-mono tap-target-auto">⌘K</kbd>
             </button>
+            {/* Weekly Report */}
+            <button
+              onClick={() => setWeeklyReportOpen(true)}
+              className="hidden md:flex items-center gap-1.5 text-xs text-jarvis-muted hover:text-jarvis-accent transition-colors px-3 py-1.5 rounded-lg hover:bg-jarvis-border/50 border border-jarvis-border/50"
+              title="Generate Weekly Report"
+            >
+              <span>📊</span>
+              <span>Weekly Report</span>
+            </button>
             {/* Notification bell with realtime updates */}
             <NotificationBell />
             {/* Show/Hide chat — desktop only */}
@@ -625,10 +636,29 @@ export default function Dashboard() {
                 )}
                 {chatMessages.map((msg, i) => (
                   <div key={i} className={`flex ${msg.role === "user" ? "justify-end" : "justify-start"} chat-message-in`}>
-                    <div className="max-w-[85%]">
+                    <div className="max-w-[85%] flex flex-col gap-1.5">
                       <div className={`rounded-2xl px-4 py-3 text-[15px] leading-relaxed whitespace-pre-wrap ${msg.role === "user" ? "bg-jarvis-accent text-white rounded-br-md" : "bg-jarvis-border text-jarvis-text rounded-bl-md"}`}>
                         {msg.content}
                       </div>
+                      {msg.role === "assistant" && (
+                        <div className="flex items-center gap-2 pl-1">
+                          <button
+                            onClick={() => handleBookmark(i)}
+                            disabled={savedBookmarks.has(i)}
+                            className={`text-xs px-2.5 py-1 rounded-md border transition-all flex items-center gap-1 ${savedBookmarks.has(i) ? "bg-jarvis-green/10 border-jarvis-green/30 text-jarvis-green" : "bg-jarvis-card border-jarvis-border text-jarvis-muted hover:text-jarvis-accent hover:border-jarvis-accent/40"}`}
+                            title={savedBookmarks.has(i) ? "Saved to memory" : "Save this insight as a memory"}
+                          >
+                            {savedBookmarks.has(i) ? <>✓ Saved to Memory</> : <>🧠 Save to Memory</>}
+                          </button>
+                          <button
+                            onClick={() => { setRememberMessageIdx(i); setShowRememberModal(true); }}
+                            className="text-xs px-2.5 py-1 rounded-md bg-jarvis-card border border-jarvis-border text-jarvis-muted hover:text-jarvis-accent hover:border-jarvis-accent/40 transition-colors"
+                            title="Edit & categorize before saving"
+                          >
+                            ✏️ Edit & Save
+                          </button>
+                        </div>
+                      )}
                     </div>
                   </div>
                 ))}
@@ -988,6 +1018,9 @@ export default function Dashboard() {
       onNavigateTab={(tab) => { setActiveTab(tab as Tab); setSearchOpen(false); }}
       onNavigateMemory={() => { setActiveTab("memory"); setSearchOpen(false); }}
     />
+
+    {/* ─── Weekly Report Modal ─── */}
+    {weeklyReportOpen && <WeeklyReportModal onClose={() => setWeeklyReportOpen(false)} />}
     </>
   );
 }

@@ -51,6 +51,50 @@ async function loadMemories(): Promise<string> {
   }
 }
 
+async function loadTopMemories(limit: number = 10): Promise<string> {
+  const sb = getSupabase();
+  if (!sb) return "";
+  try {
+    const { data } = await sb
+      .from("memories")
+      .select("fact, category")
+      .order("created_at", { ascending: false })
+      .limit(limit);
+    if (!data || data.length === 0) return "(no memories yet)";
+    return data.map((m) => `- [${m.category}] ${m.fact}`).join("\n");
+  } catch {
+    return "";
+  }
+}
+
+async function loadActiveProjects(): Promise<string> {
+  const sb = getSupabase();
+  if (!sb) return "";
+  try {
+    const { data } = await sb
+      .from("projects")
+      .select("title, status, grade")
+      .order("created_at", { ascending: false })
+      .limit(20);
+    if (!data || data.length === 0) return "(no active projects)";
+    return data.map((p) => `- ${p.title} (${p.status}, Grade ${p.grade})`).join("\n");
+  } catch {
+    return "";
+  }
+}
+
+function buildJarvisSystemPrompt(memories: string, projects: string): string {
+  return `You are Jarvis, Dylan Murdock's personal AI Chief of Staff. You are running a PE-style business empire with 21 AI agents.
+
+Current context about Dylan:
+${memories}
+
+Active projects:
+${projects}
+
+Be concise, direct, and focused on business execution. You know Dylan personally.`;
+}
+
 // GET — Load conversations (latest global or by ID)
 export async function GET(request: Request) {
   const sb = getSupabase();
@@ -145,9 +189,9 @@ export async function POST(request: Request) {
   try {
     const { messages, context, conversationId } = await request.json();
 
-    // Load persistent memories and inject into system prompt
-    const memories = await loadMemories();
-    const systemPrompt = BASE_SYSTEM + memories;
+    // Load top 10 memories + active projects, build new Jarvis system prompt
+    const [topMemories, activeProjects] = await Promise.all([loadTopMemories(10), loadActiveProjects()]);
+    const systemPrompt = buildJarvisSystemPrompt(topMemories, activeProjects);
 
     const client = new Anthropic({ apiKey });
     const response = await client.messages.create({
