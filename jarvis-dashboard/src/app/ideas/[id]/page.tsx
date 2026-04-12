@@ -6,6 +6,117 @@ import { api } from "@/lib/api";
 import type { Project, ProjectTask, ProjectNote, ChatMessage } from "@/lib/types";
 import VoiceChatInput from "@/components/VoiceChatInput";
 
+// Escape HTML in user content before injecting into markdown output
+function escapeHtml(s: string): string {
+  return s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;").replace(/'/g, "&#39;");
+}
+
+// Lightweight markdown → HTML renderer for War Room agent reports
+function renderMarkdown(md: string): string {
+  if (!md) return "";
+
+  // Pull out [Agent Name — Action] header tags into a prominent badge
+  let prefix = "";
+  const tagMatch = md.match(/^\[([^\]]+)\]\s*\n+/);
+  if (tagMatch) {
+    prefix = `<div class="inline-block px-3 py-1.5 rounded-lg bg-purple-600/20 border border-purple-500/30 text-purple-300 text-xs font-semibold mb-6">${escapeHtml(tagMatch[1])}</div>\n`;
+    md = md.slice(tagMatch[0].length);
+  }
+
+  const lines = md.split("\n");
+  const out: string[] = [];
+  let inUL = false;
+  let inOL = false;
+  let paraBuffer: string[] = [];
+
+  function flushPara() {
+    if (paraBuffer.length === 0) return;
+    const text = paraBuffer.join(" ").trim();
+    if (text) out.push(`<p class="mb-3 text-gray-300 leading-relaxed">${inline(text)}</p>`);
+    paraBuffer = [];
+  }
+  function closeLists() {
+    if (inUL) { out.push("</ul>"); inUL = false; }
+    if (inOL) { out.push("</ol>"); inOL = false; }
+  }
+  function inline(s: string): string {
+    // Escape first, then apply formatting
+    let r = escapeHtml(s);
+    // Bold: **text**
+    r = r.replace(/\*\*([^*]+)\*\*/g, '<strong class="text-white font-semibold">$1</strong>');
+    // Italic: *text* (avoid matching bullets — already on their own line)
+    r = r.replace(/(^|[^*])\*([^*\n]+)\*/g, '$1<em>$2</em>');
+    // Inline code
+    r = r.replace(/`([^`]+)`/g, '<code class="px-1.5 py-0.5 rounded bg-[#1e1e2e] text-indigo-300 text-[13px] font-mono">$1</code>');
+    return r;
+  }
+
+  for (const raw of lines) {
+    const line = raw.trimEnd();
+
+    // Blank line
+    if (!line.trim()) {
+      flushPara();
+      closeLists();
+      continue;
+    }
+
+    // Headers
+    const h3 = line.match(/^###\s+(.+)$/);
+    if (h3) {
+      flushPara(); closeLists();
+      out.push(`<h3 class="text-base font-semibold text-indigo-400 mt-4 mb-2">${inline(h3[1])}</h3>`);
+      continue;
+    }
+    const h2 = line.match(/^##\s+(.+)$/);
+    if (h2) {
+      flushPara(); closeLists();
+      out.push(`<h2 class="text-lg font-semibold text-white mt-6 mb-2">${inline(h2[1])}</h2>`);
+      continue;
+    }
+    const h1 = line.match(/^#\s+(.+)$/);
+    if (h1) {
+      flushPara(); closeLists();
+      out.push(`<h2 class="text-xl font-bold text-white mt-6 mb-3">${inline(h1[1])}</h2>`);
+      continue;
+    }
+
+    // Bold-only line as a soft heading: **Heading**
+    const boldHeading = line.match(/^\*\*([^*]+)\*\*:?\s*$/);
+    if (boldHeading) {
+      flushPara(); closeLists();
+      out.push(`<h3 class="text-base font-semibold text-indigo-400 mt-4 mb-2">${inline(boldHeading[1])}</h3>`);
+      continue;
+    }
+
+    // Numbered list item
+    const ol = line.match(/^\s*(\d+)\.\s+(.+)$/);
+    if (ol) {
+      flushPara();
+      if (!inOL) { closeLists(); out.push('<ol class="list-decimal ml-6 mb-4 space-y-1">'); inOL = true; }
+      out.push(`<li class="text-gray-300 leading-relaxed pl-1">${inline(ol[2])}</li>`);
+      continue;
+    }
+
+    // Bullet list item
+    const ul = line.match(/^\s*[-*•]\s+(.+)$/);
+    if (ul) {
+      flushPara();
+      if (!inUL) { closeLists(); out.push('<ul class="list-disc ml-6 mb-4 space-y-1">'); inUL = true; }
+      out.push(`<li class="text-gray-300 leading-relaxed pl-1">${inline(ul[1])}</li>`);
+      continue;
+    }
+
+    // Otherwise, accumulate as paragraph
+    if (inUL || inOL) closeLists();
+    paraBuffer.push(line);
+  }
+  flushPara();
+  closeLists();
+
+  return prefix + out.join("\n");
+}
+
 const STATUSES: Project["status"][] = ["Idea", "Planning", "Building", "Launched", "Revenue"];
 const TABS = ["Overview", "Tasks", "Notes", "Chat", "Files", "War Room", "History"] as const;
 type Tab = (typeof TABS)[number];
@@ -2353,53 +2464,54 @@ curl -X POST ${typeof window !== "undefined" ? window.location.origin : ""}/api/
                       </div>
                     </div>
                   ) : selectedAgent ? (
-                    <div>
-                      {/* Agent header */}
-                      <div className="p-8 border-b border-[#1e1e2e] flex items-start justify-between gap-6">
-                        <div className="flex-1 min-w-0">
-                          <h2 className="text-2xl font-bold text-white mb-1">{selectedAgent.name}</h2>
-                          <p className="text-sm text-[#64748b]">{selectedAgent.role}</p>
-                          <p className="text-xs text-[#475569] mt-2">Generated just now</p>
-                        </div>
-                        <div className="flex flex-col gap-2 flex-shrink-0">
-                          <div className="flex gap-2">
-                            <input
-                              type="text"
-                              value={rerunInstructions[selectedAgent.key] || ""}
-                              onChange={(e) => setRerunInstructions((prev) => ({ ...prev, [selectedAgent.key]: e.target.value }))}
-                              placeholder="Add instructions..."
-                              className="w-48 bg-[#0a0a0f] border border-[#1e1e2e] rounded-lg px-3 py-1.5 text-xs text-[#e2e8f0] placeholder-[#64748b] focus:outline-none focus:border-purple-500/50"
-                            />
-                            <button
-                              onClick={() => rerunAgent(selectedAgent.key)}
-                              disabled={warRoomRerunning.has(selectedAgent.key)}
-                              className="px-3 py-1.5 bg-purple-600/20 border border-purple-500/30 text-purple-400 text-xs font-medium rounded-lg hover:bg-purple-600/30 transition-colors whitespace-nowrap disabled:opacity-50"
-                            >
-                              {warRoomRerunning.has(selectedAgent.key) ? "Running..." : "Re-run Agent"}
-                            </button>
+                    <div className="overflow-y-auto">
+                      <div className="max-w-[720px] mx-auto" style={{ padding: "32px" }}>
+                        {/* Report Header Card */}
+                        <div className="pb-6 mb-8 border-b border-[#1e1e2e]">
+                          <div className="flex items-start justify-between gap-6 mb-4">
+                            <div className="flex-1 min-w-0">
+                              <h1 className="font-bold text-white" style={{ fontSize: "24px", lineHeight: "1.2" }}>{selectedAgent.name}</h1>
+                              <p className="text-[#94a3b8] mt-1" style={{ fontSize: "16px" }}>{selectedAgent.role}</p>
+                              <div className="mt-3">
+                                <span className="inline-block px-3 py-1 rounded-lg bg-purple-600/20 border border-purple-500/30 text-purple-300 text-xs font-semibold">
+                                  {AGENT_FIRST_ACTION[selectedAgent.key]?.replace(/_/g, " ").replace(/\b\w/g, (c) => c.toUpperCase()) || "Analysis"}
+                                </span>
+                              </div>
+                            </div>
+                            <div className="flex flex-col gap-2 flex-shrink-0">
+                              <div className="flex gap-2">
+                                <input
+                                  type="text"
+                                  value={rerunInstructions[selectedAgent.key] || ""}
+                                  onChange={(e) => setRerunInstructions((prev) => ({ ...prev, [selectedAgent.key]: e.target.value }))}
+                                  placeholder="Add instructions..."
+                                  className="w-48 bg-[#0a0a0f] border border-[#1e1e2e] rounded-lg px-3 py-1.5 text-xs text-[#e2e8f0] placeholder-[#64748b] focus:outline-none focus:border-purple-500/50"
+                                />
+                                <button
+                                  onClick={() => rerunAgent(selectedAgent.key)}
+                                  disabled={warRoomRerunning.has(selectedAgent.key)}
+                                  className="px-3 py-1.5 bg-purple-600/20 border border-purple-500/30 text-purple-400 text-xs font-medium rounded-lg hover:bg-purple-600/30 transition-colors whitespace-nowrap disabled:opacity-50"
+                                >
+                                  {warRoomRerunning.has(selectedAgent.key) ? "Running..." : "Re-run"}
+                                </button>
+                              </div>
+                              <button
+                                onClick={() => downloadReport(`${selectedAgent.key}-report.txt`, `${selectedAgent.name} — ${selectedAgent.role}\n\n${selectedAgent.result}`)}
+                                className="px-3 py-1.5 bg-[#1e1e2e] hover:bg-[#2a2a3a] text-[#e2e8f0] text-xs font-medium rounded-lg transition-colors flex items-center justify-center gap-2"
+                              >
+                                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4M7 10l5 5 5-5M12 15V3" /></svg>
+                                Download
+                              </button>
+                            </div>
                           </div>
-                          <button
-                            onClick={() => downloadReport(`${selectedAgent.key}-report.txt`, `${selectedAgent.name} — ${selectedAgent.role}\n\n${selectedAgent.result}`)}
-                            className="px-3 py-1.5 bg-[#1e1e2e] hover:bg-[#2a2a3a] text-[#e2e8f0] text-xs font-medium rounded-lg transition-colors flex items-center justify-center gap-2"
-                          >
-                            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4M7 10l5 5 5-5M12 15V3" /></svg>
-                            Download PDF
-                          </button>
                         </div>
-                      </div>
 
-                      {/* Report body */}
-                      <div className="p-8 space-y-6">
-                        {parseSections(selectedAgent.result).map((section, i) => (
-                          <div key={i}>
-                            {section.heading && (
-                              <h3 className="text-base font-bold text-white mb-3 pb-2 border-b border-[#1e1e2e]">
-                                {section.heading.replace(/^\d+\.\s*/, "").replace(/\*\*/g, "")}
-                              </h3>
-                            )}
-                            <div className="text-sm text-[#cbd5e1] whitespace-pre-wrap leading-relaxed">{section.body}</div>
-                          </div>
-                        ))}
+                        {/* Markdown-rendered body */}
+                        <div
+                          className="war-room-report"
+                          style={{ lineHeight: 1.7, fontSize: "15px" }}
+                          dangerouslySetInnerHTML={{ __html: renderMarkdown(selectedAgent.result) }}
+                        />
                       </div>
                     </div>
                   ) : (
