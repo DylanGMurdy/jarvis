@@ -60,10 +60,64 @@ async function buildContext(sb: NonNullable<ReturnType<typeof getSupabase>>, pro
   }
 }
 
-async function callAgent(client: Anthropic, agent: AgentDef, context: string, briefing?: string) {
-  const system = briefing
+// ─── Perplexity research queries per agent role ──────────
+function buildResearchQuery(agentKey: string, projectTitle: string, projectDesc: string): string | null {
+  const desc = projectDesc.slice(0, 200);
+  const queries: Record<string, string> = {
+    cmo: `Market size, target audience, and top 5 competitors for a business like: "${projectTitle}". ${desc}. Include recent market data and growth trends.`,
+    cfo: `Revenue benchmarks, typical unit economics (CAC, LTV, margins), and funding patterns for businesses in this space: "${projectTitle}". ${desc}. Include recent data from 2024-2026.`,
+    cto: `Existing technical solutions, popular tech stacks, and open source tools for building: "${projectTitle}". ${desc}. What are the best current frameworks and services?`,
+    clo: `Legal requirements, regulatory compliance, and common legal risks for businesses like: "${projectTitle}". ${desc}. Include recent regulatory changes.`,
+    coo: `Operational best practices, automation tools, and process frameworks for running: "${projectTitle}". ${desc}. What tools do similar companies use?`,
+    chro: `Hiring trends, salary benchmarks, and org structure patterns for early-stage companies building: "${projectTitle}". ${desc}`,
+    cso: `Sales strategies, pricing models, and go-to-market approaches used by companies similar to: "${projectTitle}". ${desc}. What channels work best?`,
+    vp_product: `Product-market fit signals, feature prioritization frameworks, and competitive product analysis for: "${projectTitle}". ${desc}`,
+    vp_engineering: `Architecture patterns, infrastructure costs, and technical best practices for building: "${projectTitle}". ${desc}`,
+    vp_finance: `Financial modeling benchmarks, SaaS/business metrics, and investor expectations for: "${projectTitle}". ${desc}`,
+    vp_sales: `Sales pipeline benchmarks, conversion rates, and outbound strategies for: "${projectTitle}". ${desc}`,
+    vp_marketing: `Marketing channels, content strategies, and brand positioning for businesses like: "${projectTitle}". ${desc}`,
+    head_of_growth: `Growth strategies, viral loops, and acquisition channel performance for businesses like: "${projectTitle}". ${desc}`,
+    head_of_content: `Content marketing strategies, SEO opportunities, and content formats that work for: "${projectTitle}". ${desc}`,
+    data_analytics: `Key metrics, analytics tools, and measurement frameworks for: "${projectTitle}". ${desc}`,
+  };
+  return queries[agentKey] || null;
+}
+
+async function perplexityResearch(query: string): Promise<string | null> {
+  const apiKey = process.env.PERPLEXITY_API_KEY;
+  if (!apiKey) return null;
+
+  try {
+    const res = await fetch("https://api.perplexity.ai/chat/completions", {
+      method: "POST",
+      headers: { "Authorization": `Bearer ${apiKey}`, "Content-Type": "application/json" },
+      body: JSON.stringify({
+        model: "llama-3.1-sonar-large-128k-online",
+        messages: [
+          { role: "system", content: "You are a research assistant. Provide concise, factual, current data with specific numbers, company names, and sources. Keep your response under 300 words." },
+          { role: "user", content: query },
+        ],
+        max_tokens: 600,
+      }),
+    });
+    if (!res.ok) return null;
+    const data = await res.json();
+    return data.choices?.[0]?.message?.content || null;
+  } catch {
+    return null;
+  }
+}
+
+// ─── Run agent with optional live research ───────────────
+async function callAgent(client: Anthropic, agent: AgentDef, context: string, briefing?: string, research?: string | null) {
+  let system = briefing
     ? `${agent.prompt}\n\nBEFORE YOU BEGIN — here is the briefing from Wave 1 (CFO, CTO, CLO, COO). Use this to ground your recommendations in financial reality, technical constraints, legal requirements, and operational capacity:\n\n${briefing}`
     : agent.prompt;
+
+  if (research) {
+    system += `\n\nLIVE MARKET RESEARCH (from Perplexity, current as of today):\n${research}\n\nUse this real data to ground your analysis. Cite specific numbers and companies where relevant.`;
+  }
+
   const response = await client.messages.create({
     model: "claude-sonnet-4-20250514",
     max_tokens: 1500,
@@ -84,13 +138,37 @@ export async function POST(_request: Request, { params }: { params: Promise<{ id
   const client = new Anthropic({ apiKey });
   const context = await buildContext(sb, projectId);
 
+  // Extract project info for research queries
+  const projectTitle = context.match(/PROJECT: (.+)/)?.[1] || "Unknown Project";
+  const projectDesc = context.match(/DESCRIPTION:\n([\s\S]*?)(?:\nTASKS:|\n\n)/)?.[1] || "";
+
   try {
-    // Wave 1: Foundation (4 concurrent)
-    const wave1Results = await Promise.all(WAVE_1.map((a) => callAgent(client, a, context)));
+    // Research phase: run Perplexity queries for all agents in parallel
+    const allAgents = [...WAVE_1, ...WAVE_2];
+    const researchMap = new Map<string, string | null>();
+
+    if (process.env.PERPLEXITY_API_KEY) {
+      const researchQueries = allAgents
+        .map((a) => ({ key: a.key, query: buildResearchQuery(a.key, projectTitle, projectDesc) }))
+        .filter((r) => r.query !== null);
+
+      const researchResults = await Promise.all(
+        researchQueries.map(async (r) => ({
+          key: r.key,
+          result: await perplexityResearch(r.query!),
+        }))
+      );
+      for (const r of researchResults) {
+        researchMap.set(r.key, r.result);
+      }
+    }
+
+    // Wave 1: Foundation (4 concurrent, with research)
+    const wave1Results = await Promise.all(WAVE_1.map((a) => callAgent(client, a, context, undefined, researchMap.get(a.key))));
     const briefing = wave1Results.map((r) => `## ${r.name} (${r.role})\n${r.result}`).join("\n\n---\n\n");
 
-    // Wave 2: Full org (17 concurrent with briefing)
-    const wave2Results = await Promise.all(WAVE_2.map((a) => callAgent(client, a, context, briefing)));
+    // Wave 2: Full org (concurrent, with briefing + research)
+    const wave2Results = await Promise.all(WAVE_2.map((a) => callAgent(client, a, context, briefing, researchMap.get(a.key))));
     const allResults = [...wave1Results, ...wave2Results];
 
     // Save all to project_notes
@@ -112,7 +190,8 @@ export async function POST(_request: Request, { params }: { params: Promise<{ id
 
     await sb.from("project_notes").insert({ project_id: projectId, content: `[War Room — JARVIS Summary]\n\n${summary}`, source: "war_room_summary" });
 
-    return Response.json({ ok: true, summary, agents: allResults.map((r) => ({ key: r.key, name: r.name, role: r.role, tier: r.tier, result: r.result })) });
+    const researchUsed = researchMap.size > 0 && [...researchMap.values()].some((v) => v !== null);
+    return Response.json({ ok: true, summary, researchUsed, agents: allResults.map((r) => ({ key: r.key, name: r.name, role: r.role, tier: r.tier, result: r.result })) });
   } catch (error: unknown) {
     const msg = error instanceof Error ? error.message : "Unknown error";
     return Response.json({ error: msg }, { status: 500 });

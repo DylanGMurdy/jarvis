@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { rateLimit, getRateLimitIdentifier } from './lib/rateLimit'
 
-const publicRoutes = ['/login', '/api/auth/login', '/api/lindy/update', '/api/build', '/api/build/status']
+const publicRoutes = ['/login', '/landing', '/api/auth/login', '/api/lindy/update', '/api/build', '/api/build/status', '/api/waitlist']
 
 export function middleware(request: NextRequest) {
   const { pathname } = request.nextUrl

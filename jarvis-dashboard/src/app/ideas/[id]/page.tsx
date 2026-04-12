@@ -1015,33 +1015,62 @@ curl -X POST ${typeof window !== "undefined" ? window.location.origin : ""}/api/
 
         {/* ── Pipeline Progress Bar ────────────────────── */}
         {(() => {
-          const PIPELINE = [
-            { label: "Idea", icon: "💡" },
-            { label: "Planning", icon: "📋" },
-            { label: "War Room", icon: "🏛️" },
-            { label: "Building", icon: "🔨" },
-            { label: "Launched", icon: "🚀" },
-            { label: "Revenue", icon: "💰" },
+          const PIPELINE: { label: string; icon: string; tab: Tab | null; status: Project["status"] | null }[] = [
+            { label: "Idea", icon: "💡", tab: "Overview", status: "Idea" },
+            { label: "Planning", icon: "📋", tab: "Tasks", status: "Planning" },
+            { label: "War Room", icon: "🏛️", tab: "War Room", status: null },
+            { label: "Building", icon: "🔨", tab: "Tasks", status: "Building" },
+            { label: "Revenue", icon: "💰", tab: "Overview", status: "Revenue" },
           ];
-          const statusMap: Record<string, number> = { Idea: 0, Planning: 1, Building: 3, Launched: 4, Revenue: 5 };
-          const pipelineIdx = statusMap[project.status] ?? 0;
-          const warRoomComplete = notes.some((n) => n.content.startsWith("[War Room — JARVIS Summary]"));
-          const effectiveIdx = warRoomComplete && pipelineIdx < 3 ? 2 : pipelineIdx;
+          const statusToStage: Record<string, number> = { Idea: 0, Planning: 1, Building: 3, Launched: 3, Revenue: 4 };
+          const currentStage = statusToStage[project.status] ?? 0;
+          const warRoomDone = !!warRoomSummary || notes.some((n) => n.content.includes("[Jarvis War Room Summary]") || n.content.includes("[War Room —"));
+          const effectiveStage = warRoomDone && currentStage < 3 ? 2 : currentStage;
+
+          function handleStageClick(stage: typeof PIPELINE[number], idx: number) {
+            if (stage.tab) setActiveTab(stage.tab);
+            if (stage.status && project && stage.status !== project.status && idx <= effectiveStage + 1) {
+              handleStatusChange(stage.status);
+            }
+          }
+
           return (
-            <div className="mb-8 px-4 hidden sm:block">
-              <div className="flex items-center justify-between relative">
-                <div className="absolute top-5 left-0 right-0 h-0.5 bg-[#1e1e2e]" />
-                <div className="absolute top-5 left-0 h-0.5 bg-gradient-to-r from-purple-500 to-indigo-500 transition-all duration-700" style={{ width: `${(effectiveIdx / (PIPELINE.length - 1)) * 100}%` }} />
+            <div className="mb-8 hidden sm:block">
+              <div className="flex items-center justify-between relative px-6">
+                <div className="absolute top-5 left-6 right-6 h-0.5 bg-[#1e1e2e]" />
+                <div className="absolute top-5 left-6 h-0.5 bg-gradient-to-r from-[#6366f1] to-[#8b5cf6] transition-all duration-700" style={{ width: `${(effectiveStage / (PIPELINE.length - 1)) * 100}%` }} />
                 {PIPELINE.map((stage, i) => {
-                  const isActive = i <= effectiveIdx;
-                  const isCurrent = i === effectiveIdx;
+                  const isCompleted = i < effectiveStage;
+                  const isCurrent = i === effectiveStage;
+                  const isFuture = i > effectiveStage;
                   return (
-                    <div key={stage.label} className="flex flex-col items-center relative z-10 group">
-                      <div className={`w-10 h-10 rounded-full flex items-center justify-center text-sm transition-all duration-300 ${isCurrent ? "bg-purple-600 text-white ring-2 ring-purple-400/50 ring-offset-2 ring-offset-[#0a0a0f] scale-110" : isActive ? "bg-purple-600/80 text-white" : "bg-[#1e1e2e] text-[#64748b]"}`}>
-                        {stage.icon}
+                    <button
+                      key={stage.label}
+                      onClick={() => handleStageClick(stage, i)}
+                      className="flex flex-col items-center relative z-10 group cursor-pointer"
+                    >
+                      <div className={`w-10 h-10 rounded-full flex items-center justify-center text-sm transition-all duration-300 ${
+                        isCurrent
+                          ? "bg-[#6366f1] text-white ring-2 ring-[#6366f1]/50 ring-offset-2 ring-offset-[#0a0a0f] scale-110"
+                          : isCompleted
+                            ? "bg-[#6366f1]/80 text-white"
+                            : "bg-[#1e1e2e] text-[#64748b] group-hover:bg-[#1e1e2e]/80"
+                      }`}>
+                        {isCompleted ? (
+                          <svg width="16" height="16" viewBox="0 0 16 16" fill="none"><path d="M3 8l4 4 6-6" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" /></svg>
+                        ) : (
+                          stage.icon
+                        )}
                       </div>
-                      <span className={`mt-2 text-xs font-medium transition-colors duration-300 ${isCurrent ? "text-purple-400" : isActive ? "text-[#e2e8f0]" : "text-[#64748b]"}`}>{stage.label}</span>
-                    </div>
+                      <span className={`mt-2 text-xs font-medium transition-colors duration-300 ${
+                        isCurrent ? "text-[#6366f1]" : isCompleted ? "text-[#e2e8f0]" : "text-[#64748b]"
+                      }`}>
+                        {stage.label}
+                      </span>
+                      {isFuture && (
+                        <span className="absolute -bottom-4 text-[10px] text-[#64748b] opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap">Click to advance</span>
+                      )}
+                    </button>
                   );
                 })}
               </div>
@@ -1142,6 +1171,20 @@ curl -X POST ${typeof window !== "undefined" ? window.location.origin : ""}/api/
                   <p className="text-xs text-[#64748b] mb-2">Claude Code can report back:</p>
                   <code className="block text-xs text-[#6366f1] bg-[#0a0a0f] rounded p-2 break-all">POST /api/projects/{id}/progress</code>
                 </div>
+                {/* Move to War Room CTA */}
+                <button
+                  onClick={() => setActiveTab("War Room")}
+                  className="w-full bg-gradient-to-r from-[#6366f1]/10 to-[#8b5cf6]/10 border border-[#6366f1]/30 rounded-xl p-4 text-left hover:border-[#6366f1]/60 transition-colors group"
+                >
+                  <div className="flex items-center gap-3">
+                    <div className="w-10 h-10 rounded-full bg-[#6366f1]/20 flex items-center justify-center text-lg group-hover:scale-110 transition-transform">🏛️</div>
+                    <div>
+                      <h3 className="text-sm font-bold text-white">Enter the War Room</h3>
+                      <p className="text-xs text-[#64748b]">Deploy 21 AI agents to analyze this idea</p>
+                    </div>
+                    <svg width="16" height="16" viewBox="0 0 16 16" fill="none" className="ml-auto text-[#6366f1]"><path d="M6 4l4 4-4 4" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" /></svg>
+                  </div>
+                </button>
               </div>
             </div>
           )}

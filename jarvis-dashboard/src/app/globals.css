@@ -70,4 +70,22 @@ body {
 /* Mobile touch targets */
 @media (max-width: 768px) {
   html { -webkit-tap-highlight-color: transparent; }
+  /* Ensure minimum tap targets on interactive elements */
+  button, a, input, textarea, select { min-height: 44px; }
+  /* Exceptions for inline/icon-only elements */
+  .tap-target-auto { min-height: auto; }
 }
+
+/* Keyboard-aware layout: shrink the visible area when the virtual keyboard opens */
+@supports (height: 1dvh) {
+  .keyboard-aware { height: 100dvh; }
+}
+
+/* Floating voice button */
+@keyframes pulse-ring {
+  0% { box-shadow: 0 0 0 0 rgba(99, 102, 241, 0.5); }
+  70% { box-shadow: 0 0 0 12px rgba(99, 102, 241, 0); }
+  100% { box-shadow: 0 0 0 0 rgba(99, 102, 241, 0); }
+}
+.voice-fab { animation: pulse-ring 2.5s ease-out infinite; }
+.voice-fab-listening { animation: pulse-ring 1s ease-out infinite; }

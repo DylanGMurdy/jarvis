@@ -5,6 +5,7 @@ import Link from "next/link";
 import { api } from "@/lib/api";
 import type { Project, Goal, ChatMessage, Memory, MemoryCategory } from "@/lib/types";
 import VoiceChatInput from "@/components/VoiceChatInput";
+import FloatingVoiceButton from "@/components/mobile/FloatingVoiceButton";
 import BottomTabBar from "@/components/mobile/BottomTabBar";
 import OverviewTab from "@/components/dashboard/OverviewTab";
 import IdeasTab from "@/components/dashboard/IdeasTab";
@@ -359,11 +360,25 @@ export default function Dashboard() {
   const [mobileChatActive, setMobileChatActive] = useState(false);
   const [isMobile, setIsMobile] = useState(false);
 
+  const [keyboardHeight, setKeyboardHeight] = useState(0);
+
   useEffect(() => {
     const check = () => setIsMobile(window.innerWidth < 768);
     check();
     window.addEventListener("resize", check);
     return () => window.removeEventListener("resize", check);
+  }, []);
+
+  // Track virtual keyboard height via visualViewport API
+  useEffect(() => {
+    if (typeof window === "undefined" || !window.visualViewport) return;
+    const vv = window.visualViewport;
+    const onResize = () => {
+      const kbH = window.innerHeight - vv.height;
+      setKeyboardHeight(kbH > 50 ? kbH : 0);
+    };
+    vv.addEventListener("resize", onResize);
+    return () => vv.removeEventListener("resize", onResize);
   }, []);
 
   // ── Tab content map ──────────────────────────────────────
@@ -407,7 +422,7 @@ export default function Dashboard() {
 
   return (
     <>
-    <div className="flex h-screen overflow-hidden">
+    <div className="flex h-screen overflow-hidden keyboard-aware">
       {/* Mobile sidebar overlay */}
       {mobileMenuOpen && (
         <div className="fixed inset-0 z-40 md:hidden" onClick={() => setMobileMenuOpen(false)}>
@@ -617,8 +632,11 @@ export default function Dashboard() {
                 </div>
               )}
 
-              {/* Input — large touch targets, safe area padding for bottom bar */}
-              <div className="px-3 pt-2 border-t border-jarvis-border" style={{ paddingBottom: "calc(12px + 60px + env(safe-area-inset-bottom, 0px))" }}>
+              {/* Input — large touch targets, keyboard-aware padding */}
+              <div
+                className="px-3 pt-2 border-t border-jarvis-border transition-[padding] duration-150"
+                style={{ paddingBottom: keyboardHeight > 0 ? `${keyboardHeight + 12}px` : "calc(12px + 60px + env(safe-area-inset-bottom, 0px))" }}
+              >
                 <VoiceChatInput
                   value={chatInput}
                   onChange={setChatInput}
@@ -787,6 +805,11 @@ export default function Dashboard() {
         </div>
       )}
     </div>
+
+    {/* ─── MOBILE: Floating Voice Button (non-chat views) ─── */}
+    {isMobile && !mobileChatActive && (
+      <FloatingVoiceButton onTranscript={handleVoicePipeline} />
+    )}
 
     {/* ─── MOBILE: Bottom Tab Bar ─── */}
     <BottomTabBar activeTab={activeTab} onTabChange={setActiveTab} mobileChatActive={mobileChatActive} onMobileChatToggle={setMobileChatActive} />
