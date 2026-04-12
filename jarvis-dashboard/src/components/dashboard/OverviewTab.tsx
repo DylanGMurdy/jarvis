@@ -208,6 +208,7 @@ export default function OverviewTab({ projects, memories, setActiveTab, setMemor
   const [moodResponse, setMoodResponse] = useState<string | null>(null);
   const [dailyBrief, setDailyBrief] = useState<string | null>(null);
   const [briefLoading, setBriefLoading] = useState(false);
+  const [briefingLoading, setBriefingLoading] = useState(false);
 
   const handleMood = (mood: string) => {
     setSelectedMood(mood);
@@ -240,25 +241,52 @@ export default function OverviewTab({ projects, memories, setActiveTab, setMemor
           <div className="text-sm text-jarvis-text whitespace-pre-wrap leading-relaxed">{dailyBrief}</div>
         </div>
       )}
-      {!dailyBrief && !briefLoading && (
-        <button
-          onClick={async () => {
-            setBriefLoading(true);
-            try {
-              const res = await fetch("/api/brief");
-              const data = await res.json();
-              if (data.brief) setDailyBrief(data.brief);
-            } catch { /* silent */ }
-            setBriefLoading(false);
-          }}
-          className="w-full bg-jarvis-card border border-jarvis-border rounded-xl p-3 text-sm text-jarvis-muted hover:text-jarvis-accent hover:border-jarvis-accent/30 transition-all text-center"
-        >
-          Generate Daily Brief
-        </button>
+      {!dailyBrief && !briefLoading && !briefingLoading && (
+        <div className="flex gap-3">
+          <button
+            onClick={async () => {
+              setBriefLoading(true);
+              try {
+                const res = await fetch("/api/brief");
+                const data = await res.json();
+                if (data.brief) setDailyBrief(data.brief);
+              } catch { /* silent */ }
+              setBriefLoading(false);
+            }}
+            className="flex-1 bg-jarvis-card border border-jarvis-border rounded-xl p-3 text-sm text-jarvis-muted hover:text-jarvis-accent hover:border-jarvis-accent/30 transition-all text-center"
+          >
+            Generate Daily Brief
+          </button>
+          <button
+            onClick={async () => {
+              setBriefingLoading(true);
+              try {
+                const res = await fetch("/api/briefing", { method: "POST" });
+                const data = await res.json();
+                if (data.ok && data.briefing) {
+                  openModal({
+                    title: "Morning Briefing",
+                    body: data.briefing,
+                    actions: [
+                      { label: "Dismiss", onClick: closeModal },
+                      { label: "Show on Dashboard", onClick: () => { setDailyBrief(data.briefing); closeModal(); } },
+                    ],
+                  });
+                }
+              } catch { /* silent */ }
+              setBriefingLoading(false);
+            }}
+            className="flex-1 bg-jarvis-accent/10 border border-jarvis-accent/30 rounded-xl p-3 text-sm text-jarvis-accent hover:bg-jarvis-accent/20 transition-all text-center font-medium"
+          >
+            Send Morning Briefing
+          </button>
+        </div>
       )}
-      {briefLoading && (
+      {(briefLoading || briefingLoading) && (
         <div className="bg-jarvis-card border border-jarvis-border rounded-xl p-4 text-center">
-          <div className="text-sm text-jarvis-muted animate-pulse">JARVIS is preparing your brief...</div>
+          <div className="text-sm text-jarvis-muted animate-pulse">
+            {briefingLoading ? "JARVIS is compiling your morning briefing..." : "JARVIS is preparing your brief..."}
+          </div>
         </div>
       )}
 
