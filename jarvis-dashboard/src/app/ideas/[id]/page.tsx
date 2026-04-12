@@ -979,7 +979,7 @@ curl -X POST ${typeof window !== "undefined" ? window.location.origin : ""}/api/
 
   return (
     <div className="min-h-screen bg-[#0a0a0f] text-[#e2e8f0]">
-      <div className="max-w-[1200px] mx-auto px-4 sm:px-6 py-8">
+      <div className="max-w-[1200px] mx-auto px-4 sm:px-6 py-6 sm:py-8 pb-24 md:pb-8">
         {/* ── Header ─────────────────────────────────────── */}
         <div className="mb-8">
           <Link href="/" className="inline-flex items-center gap-2 text-[#64748b] hover:text-[#e2e8f0] transition-colors text-sm mb-4">
@@ -1079,9 +1079,9 @@ curl -X POST ${typeof window !== "undefined" ? window.location.origin : ""}/api/
         })()}
 
         {/* ── Tabs ───────────────────────────────────────── */}
-        <div className="flex gap-1 mb-6 border-b border-[#1e1e2e] overflow-x-auto">
+        <div className="flex gap-1 mb-6 border-b border-[#1e1e2e] overflow-x-auto no-scrollbar">
           {TABS.map((tab) => (
-            <button key={tab} onClick={() => setActiveTab(tab)} className={`px-4 py-2.5 text-sm font-medium transition-colors rounded-t-lg whitespace-nowrap ${activeTab === tab ? "text-[#6366f1] border-b-2 border-[#6366f1] bg-[#6366f1]/5" : "text-[#64748b] hover:text-[#e2e8f0]"}`}>
+            <button key={tab} onClick={() => setActiveTab(tab)} className={`px-3 sm:px-4 py-3 text-sm font-medium transition-colors rounded-t-lg whitespace-nowrap ${activeTab === tab ? "text-[#6366f1] border-b-2 border-[#6366f1] bg-[#6366f1]/5" : "text-[#64748b] hover:text-[#e2e8f0]"}`}>
               {tab}{tab === "Chat" && chatMessages.length > 0 ? ` (${chatMessages.length})` : ""}
             </button>
           ))}
