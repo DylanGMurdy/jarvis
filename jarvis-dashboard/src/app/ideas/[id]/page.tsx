@@ -61,6 +61,12 @@ export default function ProjectDetailPage({ params }: { params: Promise<{ id: st
   const [ingestLoading, setIngestLoading] = useState(false);
   const [ingestResult, setIngestResult] = useState<{ summary: string; saved: { notes: number; tasks: number; memories: number } } | null>(null);
 
+  // Export modal
+  const [showExportModal, setShowExportModal] = useState(false);
+  const [shareUrl, setShareUrl] = useState<string | null>(null);
+  const [shareLoading, setShareLoading] = useState(false);
+  const [shareCopied, setShareCopied] = useState(false);
+
   // History state
   const [projectHistory, setProjectHistory] = useState<{id: string; title: string; message_count: number; preview: string; messages: ChatMessage[]; created_at: string; updated_at: string}[]>([]);
   const [historyLoading, setHistoryLoading] = useState(false);
@@ -1109,6 +1115,72 @@ curl -X POST ${typeof window !== "undefined" ? window.location.origin : ""}/api/
     setIngestLoading(false);
   }
 
+  // ─── Export Helpers ─────────────────────────────────────
+  function buildMarkdown(): string {
+    if (!project) return "";
+    const date = new Date().toLocaleDateString("en-US", { year: "numeric", month: "long", day: "numeric" });
+    const taskList = tasks.length > 0 ? tasks.map((t) => `- [${t.done ? "x" : " "}] ${t.title}`).join("\n") : "_No tasks_";
+    const noteList = sortedNotes.length > 0
+      ? sortedNotes.map((n) => `### ${new Date(n.created_at).toLocaleDateString()}\n\n${n.content}`).join("\n\n---\n\n")
+      : "_No notes_";
+    const warRoomNotes = sortedNotes.filter((n) => n.content.includes("[War Room") || n.content.includes("[JARVIS"));
+    const warRoomSection = warRoomNotes.length > 0
+      ? `## War Room Analysis\n\n${warRoomNotes.slice(0, 5).map((n) => n.content).join("\n\n---\n\n")}\n\n`
+      : "";
+    return `# ${project.title}\n\n**Category:** ${project.category}\n**Status:** ${project.status}\n**Grade:** ${project.grade}\n**Progress:** ${project.progress}%\n**Revenue Goal:** ${project.revenue_goal}\n**Created:** ${new Date(project.created_at).toLocaleDateString()}\n**Exported:** ${date}\n\n---\n\n## Description\n\n${project.description || "_No description_"}\n\n## Tasks (${tasks.filter((t) => t.done).length}/${tasks.length} complete)\n\n${taskList}\n\n${warRoomSection}## Notes\n\n${noteList}\n\n---\n\n*Exported from JARVIS — your personal AI private equity firm*\n`;
+  }
+
+  function downloadMarkdown() {
+    if (!project) return;
+    const md = buildMarkdown();
+    const blob = new Blob([md], { type: "text/markdown" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `${project.title.replace(/[^a-z0-9]/gi, "_")}.md`;
+    a.click();
+    URL.revokeObjectURL(url);
+  }
+
+  function downloadPdf() {
+    if (!project) return;
+    const md = buildMarkdown();
+    const html = md
+      .replace(/^# (.+)$/gm, '<h1 style="color:#6366f1;border-bottom:2px solid #6366f1;padding-bottom:8px">$1</h1>')
+      .replace(/^## (.+)$/gm, '<h2 style="color:#1a1a2e;margin-top:24px">$1</h2>')
+      .replace(/^### (.+)$/gm, '<h3 style="color:#444">$1</h3>')
+      .replace(/\*\*(.+?)\*\*/g, "<strong>$1</strong>")
+      .replace(/^- \[x\] (.+)$/gm, '<li style="text-decoration:line-through;color:#666">$1</li>')
+      .replace(/^- \[ \] (.+)$/gm, "<li>$1</li>")
+      .replace(/^- (.+)$/gm, "<li>$1</li>")
+      .replace(/^---$/gm, '<hr style="border:none;border-top:1px solid #ddd;margin:20px 0">')
+      .replace(/\n\n/g, "</p><p>")
+      .replace(/\n/g, "<br>");
+    const win = window.open("", "_blank");
+    if (!win) return;
+    win.document.write(`<!DOCTYPE html><html><head><title>${project.title}</title><style>body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;max-width:800px;margin:40px auto;padding:20px;color:#1a1a2e;line-height:1.6}h1{font-size:28px}h2{font-size:20px}h3{font-size:16px}ul{padding-left:20px}li{margin:4px 0}@media print{body{margin:0}}</style></head><body><p>${html}</p><script>setTimeout(()=>window.print(),300);</script></body></html>`);
+    win.document.close();
+  }
+
+  async function generateShareLink() {
+    setShareLoading(true);
+    try {
+      const res = await fetch(`/api/projects/${id}/share`, { method: "POST" });
+      const data = await res.json();
+      if (data.ok && data.token) {
+        setShareUrl(`${window.location.origin}/share/${data.token}`);
+      }
+    } catch { /* silent */ }
+    setShareLoading(false);
+  }
+
+  async function copyShareUrl() {
+    if (!shareUrl) return;
+    await navigator.clipboard.writeText(shareUrl);
+    setShareCopied(true);
+    setTimeout(() => setShareCopied(false), 2000);
+  }
+
   // ─── Derived ─────────────────────────────────────────────
   const doneTasks = tasks.filter((t) => t.done).length;
   const daysSinceCreated = project
@@ -1166,6 +1238,10 @@ curl -X POST ${typeof window !== "undefined" ? window.location.origin : ""}/api/
             <button onClick={() => { setShowIngestModal(true); setIngestResult(null); setIngestText(""); }} className="px-4 py-2 bg-[#1e1e2e] text-[#e2e8f0] rounded-lg text-sm font-medium hover:bg-[#6366f1]/20 transition-colors flex items-center gap-2">
               <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4M17 8l-5-5-5 5M12 3v12" /></svg>
               Sync from Claude.ai
+            </button>
+            <button onClick={() => setShowExportModal(true)} className="px-4 py-2 bg-[#1e1e2e] text-[#e2e8f0] rounded-lg text-sm font-medium hover:bg-emerald-500/20 hover:text-emerald-400 transition-colors flex items-center gap-2">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4M7 10l5 5 5-5M12 15V3" /></svg>
+              Export
             </button>
           </div>
         </div>
