@@ -337,28 +337,138 @@ export default function ProjectDetailPage({ params }: { params: Promise<{ id: st
     }
   }, [warRoomDeploying, warRoomAgents.length, warRoomSummary, selectedAgentKey]);
 
+  // ── Client-side War Room orchestration (avoids Netlify timeout) ──
+  const WAVE_1_AGENTS = ["CFO", "CTO", "CLO", "COO"];
+  const WAVE_2_AGENTS = ["CMO", "CSO", "VP Sales", "VP Product", "VP Engineering", "VP Marketing", "VP Finance", "VP Operations", "Head of Growth", "Head of Content", "Head of Design", "Head of CX", "SDR", "Partnerships", "Customer Success", "Head of PR", "Investor Relations", "Head of Recruiting", "Master Orchestrator"];
+
+  const AGENT_NAME_TO_KEY: Record<string, string> = {
+    CFO: "cfo", CTO: "cto", CLO: "clo", COO: "coo", CMO: "cmo", CSO: "cso", CHRO: "chro",
+    "VP Sales": "vp_sales", "VP Product": "vp_product", "VP Engineering": "vp_engineering",
+    "VP Marketing": "vp_marketing", "VP Finance": "vp_finance", "VP Operations": "vp_operations",
+    "Head of Growth": "head_of_growth", "Head of Content": "head_of_content",
+    "Head of Design": "head_of_design", "Head of CX": "head_cx", SDR: "sdr",
+    Partnerships: "partnerships", "Customer Success": "customer_success",
+    "Head of PR": "head_of_pr", "Investor Relations": "investor_relations",
+    "Head of Recruiting": "head_of_recruiting", "Master Orchestrator": "data_analytics",
+  };
+  function tierForAgent(name: string): "c-suite" | "vp" | "specialist" {
+    if (["CFO", "CTO", "CLO", "COO", "CMO", "CSO", "CHRO"].includes(name)) return "c-suite";
+    if (name.startsWith("VP ")) return "vp";
+    return "specialist";
+  }
+
+  const [currentAgent, setCurrentAgent] = useState<string>("");
+  const [currentWave, setCurrentWave] = useState<1 | 2 | 0>(0);
+  const [progressDone, setProgressDone] = useState(0);
+  const TOTAL_AGENTS = WAVE_1_AGENTS.length + WAVE_2_AGENTS.length;
+
+  async function callOneAgent(agentName: string, projectTitle: string, projectDescription: string, wave1Briefing?: string): Promise<{ result: string; role: string } | null> {
+    try {
+      const res = await fetch(`/api/projects/${id}/war-room/agent`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ agentName, projectTitle, projectDescription, wave1Briefing }),
+      });
+      const data = await res.json();
+      if (data.ok) return { result: data.result, role: data.agentRole };
+      return { result: `[Error] ${data.error || "Agent failed"}`, role: "" };
+    } catch {
+      return { result: "[Connection error]", role: "" };
+    }
+  }
+
   async function deployWarRoom() {
+    if (!project) return;
     setWarRoomDeploying(true);
     setWarRoomDeployError(null);
     setWarRoomSummary(null);
     setWarRoomAgents([]);
     setWarRoomExpanded(new Set());
+    setProgressDone(0);
+    setCurrentAgent("");
+    setCurrentWave(0);
+
+    const projectTitle = project.title;
+    const projectDescription = project.description || "";
+    const collected: Record<string, { result: string; role: string }> = {};
+
     try {
-      const res = await fetch(`/api/projects/${id}/war-room/deploy`, { method: "POST" });
-      const data = await res.json();
-      if (data.ok) {
-        setWarRoomSummary(data.summary);
-        setWarRoomAgents(data.agents);
-        loadData();
-        loadWarRoomSessions();
-      } else {
-        setWarRoomDeployError(data.error || "Deployment failed");
+      // ── WAVE 1 (sequential, builds briefing) ──
+      setCurrentWave(1);
+      for (let i = 0; i < WAVE_1_AGENTS.length; i++) {
+        const agentName = WAVE_1_AGENTS[i];
+        setCurrentAgent(`${agentName} (${i + 1}/${WAVE_1_AGENTS.length})`);
+        const r = await callOneAgent(agentName, projectTitle, projectDescription);
+        if (r) {
+          collected[agentName] = r;
+          setWarRoomAgents((prev) => [
+            ...prev,
+            { key: AGENT_NAME_TO_KEY[agentName] || agentName.toLowerCase(), name: agentName, role: r.role, tier: tierForAgent(agentName), result: r.result },
+          ]);
+        }
+        setProgressDone((p) => p + 1);
+        await new Promise((res) => setTimeout(res, 1000));
       }
-    } catch {
-      setWarRoomDeployError("Connection error");
+
+      // Build briefing from Wave 1
+      const wave1Briefing = WAVE_1_AGENTS
+        .map((n) => `${n}: ${(collected[n]?.result || "").substring(0, 300)}`)
+        .join(" | ");
+
+      // ── WAVE 2 (sequential, with briefing) ──
+      setCurrentWave(2);
+      for (let i = 0; i < WAVE_2_AGENTS.length; i++) {
+        const agentName = WAVE_2_AGENTS[i];
+        setCurrentAgent(`${agentName} (${i + 1}/${WAVE_2_AGENTS.length})`);
+        const r = await callOneAgent(agentName, projectTitle, projectDescription, wave1Briefing);
+        if (r) {
+          collected[agentName] = r;
+          setWarRoomAgents((prev) => [
+            ...prev,
+            { key: AGENT_NAME_TO_KEY[agentName] || agentName.toLowerCase(), name: agentName, role: r.role, tier: tierForAgent(agentName), result: r.result },
+          ]);
+        }
+        setProgressDone((p) => p + 1);
+        await new Promise((res) => setTimeout(res, 1000));
+      }
+
+      // ── Generate JARVIS Summary ──
+      setCurrentAgent("Synthesizing JARVIS Summary...");
+      setCurrentWave(0);
+      const allResults = Object.entries(collected).map(([agentName, v]) => ({ agentName, result: v.result }));
+      const summaryRes = await fetch(`/api/projects/${id}/war-room/summary`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ allResults, projectTitle }),
+      });
+      const summaryData = await summaryRes.json();
+      const summaryText = summaryData.ok
+        ? `**Verdict:** ${summaryData.verdict}\n**Confidence:** ${summaryData.confidence_score}/10\n\n## What the team agreed on\n${(summaryData.consensus || []).map((b: string) => `- ${b}`).join("\n")}\n\n## Key conflicts flagged\n${(summaryData.conflicts || []).map((b: string) => `- ${b}`).join("\n")}\n\n## Recommended next steps\n${(summaryData.recommendations || []).map((b: string, i: number) => `${i + 1}. ${b}`).join("\n")}`
+        : "Summary generation failed.";
+      setWarRoomSummary(summaryText);
+
+      // ── Save to Supabase ──
+      const resultsMap: Record<string, string> = {};
+      for (const [name, v] of Object.entries(collected)) resultsMap[name] = v.result;
+      await fetch(`/api/projects/${id}/war-room/save`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          results: resultsMap,
+          summary: summaryData.ok ? summaryData : { consensus: [], conflicts: [], recommendations: [], confidence_score: 0, verdict: "" },
+          projectTitle,
+        }),
+      });
+
+      loadData();
+      loadWarRoomSessions();
+    } catch (err) {
+      setWarRoomDeployError(err instanceof Error ? err.message : "Deployment failed");
+    } finally {
+      setWarRoomDeploying(false);
+      setCurrentAgent("");
+      setCurrentWave(0);
     }
-    setWarRoomDeploying(false);
-    loadWarRoomSessions();
   }
 
   async function rerunAgent(agentKey: string) {
@@ -2357,12 +2467,25 @@ curl -X POST ${typeof window !== "undefined" ? window.location.origin : ""}/api/
                     <div>
                       <div className="flex justify-between items-center text-[10px] text-[#64748b] mb-1">
                         <span className="font-semibold">Wave 2</span>
-                        <span>{wave2Done}/17</span>
+                        <span>{wave2Done}/19</span>
                       </div>
                       <div className="h-1.5 bg-[#1e1e2e] rounded-full overflow-hidden">
-                        <div className="h-full bg-emerald-500 transition-all duration-500" style={{ width: `${(wave2Done / 17) * 100}%` }} />
+                        <div className="h-full bg-emerald-500 transition-all duration-500" style={{ width: `${(wave2Done / 19) * 100}%` }} />
                       </div>
                     </div>
+                    {warRoomDeploying && (
+                      <div className="mt-2 pt-2 border-t border-[#1e1e2e]">
+                        <div className="flex items-center gap-2 mb-1">
+                          <div className="w-1.5 h-1.5 rounded-full bg-purple-400 animate-pulse" />
+                          <span className="text-[10px] font-semibold text-purple-300 uppercase tracking-wider">{currentWave === 1 ? "Wave 1" : currentWave === 2 ? "Wave 2" : "Synthesizing"}</span>
+                        </div>
+                        <p className="text-[10px] text-[#94a3b8] truncate" title={currentAgent}>{currentAgent || "Starting..."}</p>
+                        <div className="mt-1.5 h-1 bg-[#1e1e2e] rounded-full overflow-hidden">
+                          <div className="h-full bg-gradient-to-r from-purple-500 to-indigo-500 transition-all duration-300" style={{ width: `${(progressDone / TOTAL_AGENTS) * 100}%` }} />
+                        </div>
+                        <p className="text-[9px] text-[#475569] mt-0.5">{progressDone}/{TOTAL_AGENTS} agents complete</p>
+                      </div>
+                    )}
                   </div>
 
                   <div className="flex-1 overflow-y-auto">
@@ -2553,7 +2676,7 @@ curl -X POST ${typeof window !== "undefined" ? window.location.origin : ""}/api/
                   ) : (
                     <div className="flex flex-col items-center justify-center h-full p-8">
                       <div className="text-4xl mb-4">⏳</div>
-                      <p className="text-sm text-[#64748b]">{warRoomDeploying ? "Agents deploying — results will appear here as they complete." : "Select an agent from the sidebar to view their report."}</p>
+                      <p className="text-sm text-[#64748b]">{warRoomDeploying ? `Running ${currentAgent || "agent..."} — ${progressDone}/${TOTAL_AGENTS} complete` : "Select an agent from the sidebar to view their report."}</p>
                     </div>
                   )}
                 </div>
