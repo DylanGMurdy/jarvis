@@ -493,6 +493,10 @@ export default function Dashboard() {
               <span>🧠</span>
               <span>Memory</span>
             </Link>
+            <Link href="/settings" className="flex items-center gap-2 w-full text-left text-xs px-2 py-2 rounded hover:bg-jarvis-accent/20 text-jarvis-text hover:text-jarvis-accent transition-colors">
+              <span>⚙️</span>
+              <span>Settings</span>
+            </Link>
           </div>
         )}
         {!sidebarCollapsed && (
