@@ -8,6 +8,35 @@ import { execSync } from "child_process";
 
 const BUILD_LOG_PATH = join(process.cwd(), ".build-log.json");
 
+// ─── CORS headers (apply to every response from this route) ──
+const CORS_HEADERS = {
+  "Access-Control-Allow-Origin": "*",
+  "Access-Control-Allow-Methods": "POST, OPTIONS",
+  "Access-Control-Allow-Headers": "Content-Type, x-jarvis-secret, x-build-token",
+};
+
+function withCors(res: Response): Response {
+  Object.entries(CORS_HEADERS).forEach(([k, v]) => res.headers.set(k, v));
+  return res;
+}
+
+// ─── Verify env vars at module load (logs first 10 chars only) ──
+{
+  const secret = process.env.JARVIS_API_SECRET;
+  const token = process.env.JARVIS_BUILD_TOKEN;
+  console.log(
+    `[api/build] JARVIS_API_SECRET: ${secret ? secret.slice(0, 10) + "..." : "MISSING"}`
+  );
+  console.log(
+    `[api/build] JARVIS_BUILD_TOKEN: ${token ? token.slice(0, 10) + "..." : "MISSING"}`
+  );
+}
+
+// ─── OPTIONS handler for CORS preflight ──────────────────────
+export async function OPTIONS() {
+  return new Response(null, { status: 200, headers: CORS_HEADERS });
+}
+
 const SYSTEM_PROMPT = `You are Claude Code, an expert software engineer working on the Jarvis dashboard codebase. This is a Next.js 16 app with TypeScript, Tailwind CSS, and Supabase.
 
 When given a build prompt, respond with ONLY a valid JSON object (no markdown fences, no explanation) with this exact structure:
@@ -76,19 +105,21 @@ function addBuildLogEntry(entry: BuildLogEntry) {
 
 export async function POST(request: NextRequest) {
   if (!validateApiSecret(request) || !validateBuildToken(request)) {
-    return unauthorized();
+    return withCors(unauthorized());
   }
 
   const ip = request.headers.get("x-forwarded-for")?.split(",")[0] || "unknown";
   if (isRateLimited(ip)) {
-    return getRateLimitResponse();
+    return withCors(getRateLimitResponse());
   }
 
   const apiKey = process.env.ANTHROPIC_API_KEY;
   if (!apiKey || apiKey === "your-api-key-here") {
-    return NextResponse.json(
-      { ok: false, error: "ANTHROPIC_API_KEY not configured" },
-      { status: 500 }
+    return withCors(
+      NextResponse.json(
+        { ok: false, error: "ANTHROPIC_API_KEY not configured" },
+        { status: 500 }
+      )
     );
   }
 
@@ -101,9 +132,11 @@ export async function POST(request: NextRequest) {
     const context = body.context || "";
 
     if (!prompt || typeof prompt !== "string") {
-      return NextResponse.json(
-        { ok: false, error: "prompt is required" },
-        { status: 400 }
+      return withCors(
+        NextResponse.json(
+          { ok: false, error: "prompt is required" },
+          { status: 400 }
+        )
       );
     }
 
@@ -207,13 +240,15 @@ export async function POST(request: NextRequest) {
       timestamp: new Date().toISOString(),
     });
 
-    return NextResponse.json({
-      ok: true,
-      id: buildId,
-      summary: buildResponse.summary,
-      filesChanged,
-      commitHash,
-    });
+    return withCors(
+      NextResponse.json({
+        ok: true,
+        id: buildId,
+        summary: buildResponse.summary,
+        filesChanged,
+        commitHash,
+      })
+    );
   } catch (error: unknown) {
     const message = error instanceof Error ? error.message : "Unknown error";
 
@@ -228,6 +263,6 @@ export async function POST(request: NextRequest) {
       timestamp: new Date().toISOString(),
     });
 
-    return NextResponse.json({ ok: false, error: message }, { status: 500 });
+    return withCors(NextResponse.json({ ok: false, error: message }, { status: 500 }));
   }
 }
