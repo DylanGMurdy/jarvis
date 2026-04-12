@@ -71,6 +71,8 @@ export default function Dashboard() {
   const [chatConversationId, setChatConversationId] = useState<string | null>(null);
   const [modal, setModal] = useState<ModalData>(null);
   const chatEndRef = useRef<HTMLDivElement>(null);
+  const chatMessagesDesktopRef = useRef<HTMLDivElement>(null);
+  const chatMessagesMobileRef = useRef<HTMLDivElement>(null);
   const [chatOpen, setChatOpen] = useState(false);
   const [weeklyReportOpen, setWeeklyReportOpen] = useState(false);
   const [searchOpen, setSearchOpen] = useState(false);
@@ -157,8 +159,19 @@ export default function Dashboard() {
   }, [fetchMemories]);
 
   useEffect(() => {
-    chatEndRef.current?.scrollIntoView({ behavior: "smooth" });
-  }, [chatMessages]);
+    // Only scroll the messages container itself — never the page.
+    // Using scrollTop avoids the page-shift bug that scrollIntoView causes
+    // when an ancestor isn't a true scroll container.
+    const scrollLast = (el: HTMLDivElement | null) => {
+      if (!el) return;
+      // requestAnimationFrame ensures we run after layout settles
+      requestAnimationFrame(() => {
+        el.scrollTop = el.scrollHeight;
+      });
+    };
+    scrollLast(chatMessagesDesktopRef.current);
+    scrollLast(chatMessagesMobileRef.current);
+  }, [chatMessages, chatLoading]);
 
   const extractMemories = useCallback(async (msgs: ChatMessage[]) => {
     if (msgs.length < 4) return;
@@ -622,7 +635,11 @@ export default function Dashboard() {
               )}
 
               {/* Messages */}
-              <div className="flex-1 overflow-y-auto px-3 py-3 space-y-3">
+              <div
+                ref={chatMessagesMobileRef}
+                className="flex-1 overflow-y-auto overscroll-contain px-3 py-3 space-y-3"
+                style={{ willChange: "transform", WebkitOverflowScrolling: "touch" }}
+              >
                 {chatMessages.length === 0 && (
                   <div className="text-center py-12">
                     <div className="text-4xl mb-3">🤖</div>
@@ -804,7 +821,11 @@ export default function Dashboard() {
                 </div>
               )}
 
-              <div className="flex-1 overflow-y-auto p-3 space-y-3">
+              <div
+                ref={chatMessagesDesktopRef}
+                className="flex-1 overflow-y-auto overscroll-contain p-3 space-y-3"
+                style={{ willChange: "transform" }}
+              >
                 {chatMessages.length === 0 && (
                   <div className="text-center py-8">
                     <div className="text-3xl mb-2">🤖</div>

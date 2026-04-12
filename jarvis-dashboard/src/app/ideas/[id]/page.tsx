@@ -132,6 +132,7 @@ const SUGGESTED_PROMPTS = [
   "What are the risks?",
   "How do I validate this?",
   "What should I build first?",
+  "Draft an outreach message",
 ];
 
 export default function ProjectDetailPage({ params }: { params: Promise<{ id: string }> }) {
@@ -1959,7 +1960,14 @@ curl -X POST ${typeof window !== "undefined" ? window.location.origin : ""}/api/
                 ) : null}
                 {chatMessages.map((msg, i) => (
                   <div key={i} className={`flex ${msg.role === "user" ? "justify-end" : "justify-start"}`}>
-                    <div className={`max-w-[80%] rounded-xl px-4 py-3 text-sm whitespace-pre-wrap ${msg.role === "user" ? "bg-[#6366f1] text-white" : "bg-[#1e1e2e] text-[#e2e8f0]"}`}>{msg.content}</div>
+                    {msg.role === "user" ? (
+                      <div className="max-w-[80%] rounded-xl px-4 py-3 text-sm whitespace-pre-wrap bg-[#6366f1] text-white">{msg.content}</div>
+                    ) : (
+                      <div
+                        className="max-w-[80%] rounded-xl px-4 py-3 text-sm bg-[#1e1e2e] text-[#e2e8f0] chat-markdown"
+                        dangerouslySetInnerHTML={{ __html: renderMarkdown(msg.content) }}
+                      />
+                    )}
                   </div>
                 ))}
                 {chatLoading && (
