@@ -35,3 +35,26 @@ export async function PATCH(request: Request) {
 
   return Response.json({ error: "notificationId or markAllRead required" }, { status: 400 });
 }
+
+export async function DELETE(request: Request) {
+  const sb = getSupabase();
+  if (!sb) return Response.json({ error: "Supabase not configured" }, { status: 500 });
+
+  const url = new URL(request.url);
+  const clearAll = url.searchParams.get("all") === "true";
+  const notificationId = url.searchParams.get("id");
+
+  if (clearAll) {
+    const { error } = await sb.from("notifications").delete().neq("id", "00000000-0000-0000-0000-000000000000");
+    if (error) return Response.json({ error: error.message }, { status: 500 });
+    return Response.json({ success: true });
+  }
+
+  if (notificationId) {
+    const { error } = await sb.from("notifications").delete().eq("id", notificationId);
+    if (error) return Response.json({ error: error.message }, { status: 500 });
+    return Response.json({ success: true });
+  }
+
+  return Response.json({ error: "id or all=true required" }, { status: 400 });
+}

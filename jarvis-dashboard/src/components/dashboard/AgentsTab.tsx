@@ -1,7 +1,26 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect, useCallback } from "react";
 import type { Project } from "@/lib/types";
+
+interface AgentStat {
+  agent: string;
+  totalActions: number;
+  projectsCount: number;
+  mostRecent: string;
+  avgLength: number;
+  actionsThisWeek: number;
+}
+
+function timeAgo(d: string): string {
+  const diff = Date.now() - new Date(d).getTime();
+  const m = Math.floor(diff / 60000);
+  if (m < 1) return "just now";
+  if (m < 60) return `${m}m ago`;
+  const h = Math.floor(m / 60);
+  if (h < 24) return `${h}h ago`;
+  return `${Math.floor(h / 24)}d ago`;
+}
 
 // ─── Agent definitions with API routes and actions ───────
 type AgentAction = { key: string; label: string };
@@ -141,6 +160,25 @@ export default function AgentsTab({ openModal, closeModal, projects }: AgentsTab
   const [runningAction, setRunningAction] = useState<string | null>(null);
   const [lastResult, setLastResult] = useState<{ agent: string; action: string; result: string } | null>(null);
 
+  // Agent performance stats
+  const [agentStats, setAgentStats] = useState<AgentStat[]>([]);
+  const [mvpAgent, setMvpAgent] = useState<AgentStat | null>(null);
+  const [statsLoading, setStatsLoading] = useState(true);
+
+  const fetchStats = useCallback(async () => {
+    try {
+      const res = await fetch("/api/agents/stats");
+      const data = await res.json();
+      setAgentStats(data.data || []);
+      setMvpAgent(data.mvp || null);
+    } catch { /* silent */ }
+    setStatsLoading(false);
+  }, []);
+
+  useEffect(() => { fetchStats(); }, [fetchStats]);
+
+  const maxActions = Math.max(...agentStats.map((s) => s.totalActions), 1);
+
   const selectedProject = projects.find((p) => p.id === selectedProjectId);
 
   async function runAgentAction(agent: AgentDef, actionKey: string) {
@@ -278,6 +316,84 @@ export default function AgentsTab({ openModal, closeModal, projects }: AgentsTab
 
         {/* Specialists */}
         <OrgRow label="Specialists & Leads" agents={SPECIALISTS} onAgentClick={openAgentModal} />
+      </div>
+
+      {/* ── Agent Performance Tracker ─────────────────── */}
+      <div className="mt-8 space-y-4">
+        {/* Most Valuable Agent card */}
+        {mvpAgent && (
+          <div className="bg-gradient-to-r from-yellow-500/10 via-amber-500/10 to-orange-500/10 border border-yellow-500/30 rounded-xl p-4">
+            <div className="flex items-center justify-between flex-wrap gap-3">
+              <div className="flex items-center gap-3">
+                <span className="text-2xl">🏆</span>
+                <div>
+                  <div className="text-[10px] font-semibold text-yellow-400 uppercase tracking-wider">Most Valuable Agent This Week</div>
+                  <div className="text-lg font-bold text-white">{mvpAgent.agent}</div>
+                  <div className="text-xs text-jarvis-muted">
+                    {mvpAgent.actionsThisWeek} actions this week &middot; {mvpAgent.projectsCount} project{mvpAgent.projectsCount !== 1 ? "s" : ""} &middot; avg {mvpAgent.avgLength} chars per output
+                  </div>
+                </div>
+              </div>
+              <div className="text-right">
+                <div className="text-2xl font-bold text-yellow-400">{mvpAgent.actionsThisWeek}</div>
+                <div className="text-[10px] text-jarvis-muted uppercase">This Week</div>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Stats list */}
+        <div className="bg-jarvis-card border border-jarvis-border rounded-xl p-4">
+          <div className="flex items-center justify-between mb-4">
+            <div>
+              <h3 className="text-sm font-bold text-white">Agent Performance</h3>
+              <p className="text-[11px] text-jarvis-muted">{agentStats.length} agent{agentStats.length !== 1 ? "s" : ""} have logged activity &middot; sorted by most active</p>
+            </div>
+            <button onClick={fetchStats} className="text-[10px] text-jarvis-muted hover:text-jarvis-accent" title="Refresh">↻ Refresh</button>
+          </div>
+
+          {statsLoading ? (
+            <div className="text-center py-6 text-sm text-jarvis-muted animate-pulse">Loading agent stats...</div>
+          ) : agentStats.length === 0 ? (
+            <div className="text-center py-6 text-sm text-jarvis-muted">No agent activity yet. Run an agent to see stats here.</div>
+          ) : (
+            <div className="space-y-2">
+              {agentStats.map((s, i) => {
+                const barWidth = (s.totalActions / maxActions) * 100;
+                const isMvp = mvpAgent?.agent === s.agent;
+                return (
+                  <div key={s.agent} className={`flex items-center gap-3 p-2 rounded-lg ${isMvp ? "bg-yellow-500/5 border border-yellow-500/20" : "hover:bg-jarvis-border/30"} transition-colors`}>
+                    <div className="w-6 text-right text-[10px] text-jarvis-muted font-mono">#{i + 1}</div>
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center gap-2 mb-1">
+                        <span className="text-sm font-semibold text-white truncate">{s.agent}</span>
+                        {isMvp && <span className="text-[9px]">🏆</span>}
+                        {s.actionsThisWeek > 0 && (
+                          <span className="text-[9px] px-1.5 py-0.5 rounded-full bg-jarvis-green/20 text-jarvis-green">+{s.actionsThisWeek} this wk</span>
+                        )}
+                      </div>
+                      {/* Mini activity bar */}
+                      <div className="w-full bg-jarvis-bg/60 rounded-full h-1.5 overflow-hidden">
+                        <div
+                          className={`h-full rounded-full transition-all ${isMvp ? "bg-yellow-400" : "bg-jarvis-accent"}`}
+                          style={{ width: `${barWidth}%` }}
+                        />
+                      </div>
+                    </div>
+                    <div className="flex-shrink-0 text-right">
+                      <div className="text-sm font-bold text-white">{s.totalActions}</div>
+                      <div className="text-[10px] text-jarvis-muted">total</div>
+                    </div>
+                    <div className="flex-shrink-0 text-right hidden sm:block w-20">
+                      <div className="text-[11px] text-jarvis-muted">{s.projectsCount} proj</div>
+                      <div className="text-[10px] text-jarvis-muted">{timeAgo(s.mostRecent)}</div>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          )}
+        </div>
       </div>
     </div>
   );
