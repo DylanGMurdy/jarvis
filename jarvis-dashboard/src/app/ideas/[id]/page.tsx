@@ -307,8 +307,8 @@ export default function ProjectDetailPage({ params }: { params: Promise<{ id: st
     } catch { /* silent */ }
   }
 
-  function downloadReport(filename: string, content: string) {
-    const blob = new Blob([content], { type: "text/plain;charset=utf-8" });
+  function downloadReport(filename: string, content: string, mime: string = "text/plain;charset=utf-8") {
+    const blob = new Blob([content], { type: mime });
     const url = URL.createObjectURL(blob);
     const a = document.createElement("a");
     a.href = url;
@@ -317,25 +317,148 @@ export default function ProjectDetailPage({ params }: { params: Promise<{ id: st
     URL.revokeObjectURL(url);
   }
 
-  function downloadAllReports() {
-    if (!project) return;
-    const all = [
-      `# War Room Report — ${project.title}\nGenerated: ${new Date().toLocaleString()}\n\n`,
-      warRoomSummary ? `## JARVIS Summary\n\n${warRoomSummary}\n\n---\n\n` : "",
-      ...warRoomAgents.map((a) => `## ${a.name} — ${a.role}\n\n${a.result}\n\n---\n\n`),
-    ].join("");
-    downloadReport(`war-room-${project.title.toLowerCase().replace(/\s+/g, "-")}.txt`, all);
+  // ── Markdown → HTML (lightweight, safe-ish) ──────────────
+  function escapeHtml(s: string): string {
+    return s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;").replace(/'/g, "&#39;");
   }
 
-  // Auto-select first completed agent during loading
+  function markdownToHtml(md: string): string {
+    if (!md) return "";
+    const lines = md.split("\n");
+    const out: string[] = [];
+    let inUl = false;
+    let inOl = false;
+    const closeLists = () => {
+      if (inUl) { out.push("</ul>"); inUl = false; }
+      if (inOl) { out.push("</ol>"); inOl = false; }
+    };
+    const inline = (s: string): string => {
+      let r = escapeHtml(s);
+      // bold **text**
+      r = r.replace(/\*\*([^*]+)\*\*/g, "<strong>$1</strong>");
+      // italic *text* (avoid catching list bullets — already past line-level)
+      r = r.replace(/(^|[^*])\*([^*\n]+)\*/g, "$1<em>$2</em>");
+      // inline code `code`
+      r = r.replace(/`([^`]+)`/g, "<code>$1</code>");
+      return r;
+    };
+    for (const raw of lines) {
+      const line = raw.trimEnd();
+      if (!line.trim()) { closeLists(); out.push(""); continue; }
+      // Headings
+      const h = line.match(/^(#{1,4})\s+(.+)$/);
+      if (h) {
+        closeLists();
+        const lvl = Math.min(h[1].length + 1, 4); // shift down a level so doc h1 stays on top
+        out.push(`<h${lvl}>${inline(h[2])}</h${lvl}>`);
+        continue;
+      }
+      // Unordered list
+      if (/^[-*•]\s+/.test(line)) {
+        if (!inUl) { closeLists(); out.push("<ul>"); inUl = true; }
+        out.push(`<li>${inline(line.replace(/^[-*•]\s+/, ""))}</li>`);
+        continue;
+      }
+      // Ordered list
+      if (/^\d+\.\s+/.test(line)) {
+        if (!inOl) { closeLists(); out.push("<ol>"); inOl = true; }
+        out.push(`<li>${inline(line.replace(/^\d+\.\s+/, ""))}</li>`);
+        continue;
+      }
+      // Paragraph
+      closeLists();
+      out.push(`<p>${inline(line)}</p>`);
+    }
+    closeLists();
+    return out.join("\n");
+  }
+
+  function downloadAllReports() {
+    if (!project) return;
+    const generatedAt = new Date().toLocaleString();
+    const sections: string[] = [];
+
+    if (warRoomSummary) {
+      sections.push(`
+        <section class="agent-section">
+          <div class="agent-header">
+            <h2 style="margin:0;">JARVIS Summary</h2>
+            <p style="margin:4px 0 0;color:#666;font-style:italic;">Synthesized from all ${warRoomAgents.length} agent analyses</p>
+          </div>
+          ${markdownToHtml(warRoomSummary)}
+        </section>
+      `);
+    }
+
+    for (const a of warRoomAgents) {
+      sections.push(`
+        <section class="agent-section">
+          <div class="agent-header">
+            <h2 style="margin:0;">${escapeHtml(a.name)}</h2>
+            <p style="margin:4px 0 0;color:#666;font-style:italic;">${escapeHtml(a.role)}</p>
+          </div>
+          ${markdownToHtml(a.result)}
+        </section>
+      `);
+    }
+
+    const html = `<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Jarvis War Room Report — ${escapeHtml(project.title)}</title>
+<style>
+  body {font-family: Georgia, serif; max-width: 800px; margin: 0 auto; padding: 40px; color: #1a1a1a; line-height: 1.7;}
+  h1 {color: #4f46e5; border-bottom: 3px solid #4f46e5; padding-bottom: 10px;}
+  h2 {color: #1a1a1a; margin-top: 30px;}
+  h3 {color: #4f46e5;}
+  h4 {color: #4f46e5; margin-top: 20px;}
+  .agent-section {margin-bottom: 60px; page-break-after: always;}
+  .agent-header {background: #f8f7ff; padding: 20px; border-left: 4px solid #4f46e5; margin-bottom: 20px;}
+  ul, ol {margin: 12px 0; padding-left: 28px;}
+  li {margin-bottom: 6px;}
+  p {margin: 10px 0;}
+  code {background: #f3f4f6; padding: 2px 6px; border-radius: 4px; font-family: 'Courier New', monospace; font-size: 0.95em;}
+  strong {color: #1a1a1a;}
+  .meta {color: #666; font-size: 14px; margin-top: -8px;}
+  @media print {
+    body {padding: 20px;}
+    .agent-section {page-break-after: always;}
+  }
+</style>
+</head>
+<body>
+  <h1>Jarvis War Room Report</h1>
+  <p class="meta"><strong>Project:</strong> ${escapeHtml(project.title)}</p>
+  <p class="meta"><strong>Generated:</strong> ${escapeHtml(generatedAt)}</p>
+  <p class="meta"><strong>Agents:</strong> ${warRoomAgents.length}</p>
+  ${sections.join("\n")}
+</body>
+</html>`;
+
+    downloadReport("Jarvis-War-Room-Report.html", html, "text/html;charset=utf-8");
+  }
+
+  // Auto-select latest completed agent during deployment ONLY.
+  // After deployment finishes, do NOT force the selection back to "summary" —
+  // the user must remain free to click any sidebar item.
   useEffect(() => {
     if (warRoomDeploying && warRoomAgents.length > 0 && selectedAgentKey === "summary") {
       setSelectedAgentKey(warRoomAgents[warRoomAgents.length - 1].key);
     }
-    if (!warRoomDeploying && warRoomSummary && warRoomAgents.length > 0) {
+    // Note: removed the "snap back to summary" branch that broke navigation.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [warRoomDeploying, warRoomAgents.length]);
+
+  // When a brand-new summary first appears (transition from null to set), default to it once.
+  const summaryDefaultedRef = useRef(false);
+  useEffect(() => {
+    if (warRoomSummary && !summaryDefaultedRef.current && !warRoomDeploying) {
+      summaryDefaultedRef.current = true;
       setSelectedAgentKey("summary");
     }
-  }, [warRoomDeploying, warRoomAgents.length, warRoomSummary, selectedAgentKey]);
+    if (!warRoomSummary) summaryDefaultedRef.current = false;
+  }, [warRoomSummary, warRoomDeploying]);
 
   // ── Client-side War Room orchestration (avoids Netlify timeout) ──
   const WAVE_1_AGENTS = ["CFO", "CTO", "CLO", "COO"];
