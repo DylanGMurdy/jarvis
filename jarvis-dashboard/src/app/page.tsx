@@ -17,6 +17,7 @@ import ChatHistoryTab from "@/components/dashboard/ChatHistoryTab";
 import ApprovalsTab from "@/components/dashboard/ApprovalsTab";
 import RevenueTab from "@/components/dashboard/RevenueTab";
 import CommandPalette from "@/components/CommandPalette";
+import LiveClock from "@/components/LiveClock";
 
 // ─── Types ────────────────────────────────────────────────
 type Tab = "overview" | "ideas" | "agents" | "goals" | "memory" | "history" | "approvals" | "revenue";
@@ -551,6 +552,7 @@ export default function Dashboard() {
             </div>
           </div>
           <div className="flex items-center gap-2">
+            <LiveClock />
             {/* Search trigger */}
             <button
               onClick={() => setSearchOpen(true)}
