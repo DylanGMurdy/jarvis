@@ -61,27 +61,30 @@ export async function POST(request: Request) {
   }
 }
 
-export async function GET() {
+export async function GET(request: Request) {
   const sb = getSupabase();
+  const { searchParams } = new URL(request.url);
+  const limit = Math.min(parseInt(searchParams.get("limit") || "1", 10) || 1, 50);
 
   if (sb) {
     const { data, error } = await sb
       .from("lindy_updates")
       .select("*")
       .order("created_at", { ascending: false })
-      .limit(1);
+      .limit(limit);
 
     const { count } = await sb
       .from("lindy_updates")
       .select("*", { count: "exact", head: true });
 
-    if (error) return Response.json({ latest: null, total: 0 });
+    if (error) return Response.json({ latest: null, total: 0, updates: [] });
 
     return Response.json({
       latest: data && data.length > 0 ? data[0] : null,
+      updates: data || [],
       total: count || 0,
     });
   }
 
-  return Response.json({ latest: null, total: 0 });
+  return Response.json({ latest: null, total: 0, updates: [] });
 }

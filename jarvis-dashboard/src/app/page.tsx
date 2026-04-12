@@ -16,6 +16,7 @@ import MemoryTab from "@/components/dashboard/MemoryTab";
 import ChatHistoryTab from "@/components/dashboard/ChatHistoryTab";
 import ApprovalsTab from "@/components/dashboard/ApprovalsTab";
 import RevenueTab from "@/components/dashboard/RevenueTab";
+import LindyWebhookCard from "@/components/dashboard/LindyWebhookCard";
 import CommandPalette from "@/components/CommandPalette";
 import LiveClock from "@/components/LiveClock";
 
@@ -742,6 +743,11 @@ export default function Dashboard() {
                 </div>
               </div>
             )}
+            {activeTab === "overview" && (
+              <div className="mb-6">
+                <LindyWebhookCard />
+              </div>
+            )}
             {tabContent[activeTab]()}
           </main>
           )}
@@ -777,28 +783,29 @@ export default function Dashboard() {
                 )}
                 {chatMessages.map((msg, i) => (
                   <div key={i} className={`flex ${msg.role === "user" ? "justify-end" : "justify-start"} group/msg`}>
-                    <div className="relative max-w-[85%]">
+                    <div className="relative max-w-[85%] flex flex-col gap-1">
                       <div className={`rounded-xl px-3 py-2 text-sm whitespace-pre-wrap ${msg.role === "user" ? "bg-jarvis-accent text-white" : "bg-jarvis-border text-jarvis-text"}`}>
                         {msg.content}
                       </div>
-                      <div className="absolute -bottom-1 right-1 opacity-0 group-hover/msg:opacity-100 transition-opacity flex gap-1">
-                        {msg.role === "assistant" && (
+                      {msg.role === "assistant" && (
+                        <div className="flex items-center gap-1.5 pl-1">
                           <button
                             onClick={() => handleBookmark(i)}
-                            className={`text-xs px-1.5 py-0.5 rounded border transition-colors ${savedBookmarks.has(i) ? "bg-jarvis-accent/20 border-jarvis-accent/50 text-jarvis-accent" : "bg-jarvis-card border-jarvis-border text-jarvis-muted hover:text-jarvis-accent"}`}
-                            title={savedBookmarks.has(i) ? "Saved" : "Save highlight"}
+                            disabled={savedBookmarks.has(i)}
+                            className={`text-[10px] px-2 py-1 rounded-md border transition-all flex items-center gap-1 ${savedBookmarks.has(i) ? "bg-jarvis-green/10 border-jarvis-green/30 text-jarvis-green" : "bg-jarvis-card border-jarvis-border text-jarvis-muted hover:text-jarvis-accent hover:border-jarvis-accent/40"}`}
+                            title={savedBookmarks.has(i) ? "Saved to memory" : "Save this insight as a memory"}
                           >
-                            {savedBookmarks.has(i) ? "🔖" : "🔖"}
+                            {savedBookmarks.has(i) ? <>✓ Saved to Memory</> : <>🧠 Save to Memory</>}
                           </button>
-                        )}
-                        <button
-                          onClick={() => { setRememberMessageIdx(i); setShowRememberModal(true); }}
-                          className="text-xs px-1.5 py-0.5 rounded bg-jarvis-card border border-jarvis-border text-jarvis-muted hover:text-jarvis-accent"
-                          title="Remember this"
-                        >
-                          🧠
-                        </button>
-                      </div>
+                          <button
+                            onClick={() => { setRememberMessageIdx(i); setShowRememberModal(true); }}
+                            className="text-[10px] px-2 py-1 rounded-md bg-jarvis-card border border-jarvis-border text-jarvis-muted hover:text-jarvis-accent hover:border-jarvis-accent/40 transition-colors"
+                            title="Edit & categorize before saving"
+                          >
+                            ✏️ Edit & Save
+                          </button>
+                        </div>
+                      )}
                     </div>
                   </div>
                 ))}
