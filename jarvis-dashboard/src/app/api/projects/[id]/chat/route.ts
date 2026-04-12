@@ -59,6 +59,15 @@ Grade: ${project.grade}
 Progress: ${project.progress}%
 Revenue Goal: ${project.revenue_goal || "Not set"}
 Description: ${project.description || "No description"}`;
+
+      // Pull War Room summary from project record (preferred) or notes
+      if (project.war_room_summary && typeof project.war_room_summary === "object") {
+        const wr = project.war_room_summary as { confidence_score?: number; top_recommendation?: string; completed_at?: string };
+        projectContext += `\n\nWAR ROOM ANALYSIS:`;
+        if (wr.confidence_score) projectContext += `\nConfidence: ${wr.confidence_score}/10`;
+        if (wr.top_recommendation) projectContext += `\nTop Recommendation: ${wr.top_recommendation}`;
+        if (wr.completed_at) projectContext += `\nCompleted: ${new Date(wr.completed_at).toLocaleDateString()}`;
+      }
     }
 
     if (tasks && tasks.length > 0) {
@@ -68,9 +77,19 @@ Description: ${project.description || "No description"}`;
       }
     }
 
+    // War Room summary fallback — find it in notes if not on project record
+    if (notes && notes.length > 0 && !projectContext.includes("WAR ROOM ANALYSIS")) {
+      const wrNote = notes.find((n: { content: string }) => n.content.includes("[War Room — JARVIS Summary]") || n.content.includes("[Jarvis War Room Summary]"));
+      if (wrNote) {
+        projectContext += `\n\nWAR ROOM SUMMARY:\n${(wrNote.content as string).slice(0, 1500)}`;
+      }
+    }
+
+    // Last 5 notes only (per spec)
     if (notes && notes.length > 0) {
-      projectContext += `\n\nNOTES (${notes.length}):`;
-      for (const n of notes) {
+      const recent = notes.slice(0, 5);
+      projectContext += `\n\nRECENT NOTES (last ${recent.length}):`;
+      for (const n of recent) {
         const date = new Date(n.created_at).toLocaleDateString();
         projectContext += `\n[${date}] ${(n.content as string).slice(0, 200)}`;
       }

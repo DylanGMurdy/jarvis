@@ -128,11 +128,10 @@ const GRADE_COLORS: Record<Project["grade"], string> = {
 };
 
 const SUGGESTED_PROMPTS = [
-  "What should I focus on next?",
-  "Help me define the MVP",
-  "Draft a sales pitch for this",
+  "Analyze this idea",
   "What are the risks?",
-  "Write me a 2-week sprint plan",
+  "How do I validate this?",
+  "What should I build first?",
 ];
 
 export default function ProjectDetailPage({ params }: { params: Promise<{ id: string }> }) {
@@ -259,6 +258,9 @@ export default function ProjectDetailPage({ params }: { params: Promise<{ id: st
   interface WarRoomSession { id: string; session_date: string; confidence_score: number; agents_run: number; summary_text: string; status: string }
   const [warRoomSessions, setWarRoomSessions] = useState<WarRoomSession[]>([]);
   const [selectedSessionId, setSelectedSessionId] = useState<string>("current");
+  const [showCompareModal, setShowCompareModal] = useState(false);
+  const [compareSessionA, setCompareSessionA] = useState<string>("");
+  const [compareSessionB, setCompareSessionB] = useState<string>("");
 
   const loadWarRoomSessions = useCallback(async () => {
     try {
@@ -1966,6 +1968,19 @@ curl -X POST ${typeof window !== "undefined" ? window.location.origin : ""}/api/
                 <div ref={chatEndRef} />
               </div>
               <div className="pt-4 border-t border-[#1e1e2e]">
+                {/* Quick action prompts — pre-fill the input */}
+                <div className="flex flex-wrap gap-2 mb-3">
+                  {SUGGESTED_PROMPTS.map((prompt) => (
+                    <button
+                      key={prompt}
+                      onClick={() => setChatInput(prompt)}
+                      disabled={chatLoading}
+                      className="px-3 py-1.5 text-xs bg-[#12121a] border border-[#1e1e2e] rounded-full text-[#94a3b8] hover:border-[#6366f1]/50 hover:text-[#6366f1] hover:bg-[#6366f1]/5 transition-colors disabled:opacity-50"
+                    >
+                      {prompt}
+                    </button>
+                  ))}
+                </div>
                 <VoiceChatInput
                   value={chatInput}
                   onChange={setChatInput}
@@ -2305,6 +2320,19 @@ curl -X POST ${typeof window !== "undefined" ? window.location.origin : ""}/api/
                         })}
                       </select>
                       <p className="text-[9px] text-[#475569] mt-1">{warRoomSessions.length} past run{warRoomSessions.length !== 1 ? "s" : ""}</p>
+                      {warRoomSessions.length >= 2 && (
+                        <button
+                          onClick={() => {
+                            // Pre-select most recent two sessions
+                            setCompareSessionA(warRoomSessions[1]?.id || "");
+                            setCompareSessionB(warRoomSessions[0]?.id || "");
+                            setShowCompareModal(true);
+                          }}
+                          className="mt-2 w-full px-2 py-1.5 bg-purple-600/20 border border-purple-500/30 text-purple-400 text-[11px] font-medium rounded-md hover:bg-purple-600/30 transition-colors flex items-center justify-center gap-1"
+                        >
+                          ⇄ Compare Sessions
+                        </button>
+                      )}
                     </div>
                   )}
                   {/* Progress bar */}
