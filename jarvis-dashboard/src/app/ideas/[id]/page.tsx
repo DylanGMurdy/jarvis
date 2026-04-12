@@ -1427,22 +1427,96 @@ curl -X POST ${typeof window !== "undefined" ? window.location.origin : ""}/api/
           )}
 
           {/* ── Notes ────────────────────────────────────── */}
-          {activeTab === "Notes" && (
-            <div className="space-y-4">
+          {activeTab === "Notes" && (() => {
+            const SOURCE_BADGES: Record<string, { label: string; color: string }> = {
+              manual: { label: "Manual", color: "bg-[#64748b]/20 text-[#94a3b8]" },
+              chat: { label: "Chat", color: "bg-blue-500/20 text-blue-400" },
+              daily_agent: { label: "Daily Agent", color: "bg-green-500/20 text-green-400" },
+              war_room_summary: { label: "War Room", color: "bg-purple-500/20 text-purple-400" },
+              cfo_agent: { label: "CFO", color: "bg-emerald-500/20 text-emerald-400" },
+              cto_agent: { label: "CTO", color: "bg-cyan-500/20 text-cyan-400" },
+              cmo_agent: { label: "CMO", color: "bg-pink-500/20 text-pink-400" },
+              coo_agent: { label: "COO", color: "bg-sky-500/20 text-sky-400" },
+              clo_agent: { label: "CLO", color: "bg-amber-500/20 text-amber-400" },
+              chro_agent: { label: "CHRO", color: "bg-rose-500/20 text-rose-400" },
+              cso_agent: { label: "CSO", color: "bg-violet-500/20 text-violet-400" },
+            };
+            function getBadge(source?: string) {
+              if (!source) return SOURCE_BADGES.manual;
+              if (source.startsWith("war_room_")) return { label: source.replace("war_room_", "").replace(/_/g, " ").replace(/\b\w/g, (c: string) => c.toUpperCase()), color: "bg-purple-500/20 text-purple-400" };
+              return SOURCE_BADGES[source] || { label: source.replace(/_/g, " ").replace(/\b\w/g, (c: string) => c.toUpperCase()), color: "bg-[#6366f1]/20 text-[#818cf8]" };
+            }
+            return (
+            <div className="space-y-6">
+              {/* Add Note */}
               <div className="bg-[#12121a] rounded-xl border border-[#1e1e2e] p-4">
                 <textarea value={newNoteContent} onChange={(e) => setNewNoteContent(e.target.value)} placeholder="Write a note..." rows={3} className="w-full bg-[#0a0a0f] border border-[#1e1e2e] rounded-lg p-3 text-sm text-[#e2e8f0] placeholder-[#64748b] resize-none focus:outline-none focus:border-[#6366f1] mb-3" />
-                <button onClick={handleSaveNote} className="px-4 py-2 bg-[#6366f1] hover:bg-[#5558e6] text-white text-sm font-medium rounded-lg">Save Note</button>
+                <button onClick={handleSaveNote} disabled={!newNoteContent.trim()} className="px-4 py-2 bg-[#6366f1] hover:bg-[#5558e6] text-white text-sm font-medium rounded-lg disabled:opacity-50 transition-colors">Save Note</button>
               </div>
-              {sortedNotes.length === 0 ? (
-                <p className="text-[#64748b] text-sm text-center py-8">No notes yet.</p>
-              ) : sortedNotes.map((note) => (
-                <div key={note.id} className="bg-[#12121a] rounded-xl border border-[#1e1e2e] p-4">
-                  <p className="text-sm text-[#e2e8f0] whitespace-pre-wrap">{note.content}</p>
-                  <p className="text-xs text-[#64748b] mt-3">{new Date(note.created_at).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric", hour: "numeric", minute: "2-digit" })}</p>
+
+              {/* Notes List */}
+              <div>
+                <h3 className="text-sm font-semibold text-[#e2e8f0] mb-3">Notes ({sortedNotes.length})</h3>
+                {sortedNotes.length === 0 ? (
+                  <p className="text-[#64748b] text-sm text-center py-8">No notes yet.</p>
+                ) : (
+                  <div className="space-y-3">
+                    {sortedNotes.map((note) => {
+                      const badge = getBadge(note.source);
+                      return (
+                        <div key={note.id} className="bg-[#12121a] rounded-xl border border-[#1e1e2e] p-4 group">
+                          <div className="flex items-start justify-between gap-3 mb-2">
+                            <div className="flex items-center gap-2 flex-wrap">
+                              <span className={`text-[10px] font-medium px-2 py-0.5 rounded-full ${badge.color}`}>{badge.label}</span>
+                              <span className="text-[10px] text-[#64748b]">{new Date(note.created_at).toLocaleDateString("en-US", { month: "short", day: "numeric", hour: "numeric", minute: "2-digit" })}</span>
+                            </div>
+                            <button onClick={() => { if (confirm("Delete this note?")) handleDeleteNote(note.id); }} className="text-[#64748b]/0 group-hover:text-[#64748b] hover:!text-red-400 transition-all p-1" title="Delete note">
+                              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><polyline points="3 6 5 6 21 6" /><path d="M19 6l-1 14H6L5 6" /><path d="M10 11v6" /><path d="M14 11v6" /><path d="M9 6V4h6v2" /></svg>
+                            </button>
+                          </div>
+                          <p className="text-sm text-[#e2e8f0] whitespace-pre-wrap leading-relaxed">{note.content}</p>
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
+              </div>
+
+              {/* Key Decisions */}
+              <div>
+                <div className="flex items-center gap-2 mb-3">
+                  <div className="h-px flex-1 bg-gradient-to-r from-yellow-500/30 to-transparent" />
+                  <span className="text-xs font-bold text-yellow-400 uppercase tracking-wider">Key Decisions</span>
+                  <div className="h-px flex-1 bg-gradient-to-l from-yellow-500/30 to-transparent" />
                 </div>
-              ))}
+                <div className="bg-[#12121a] rounded-xl border border-yellow-500/20 p-4 mb-3">
+                  <div className="flex gap-2">
+                    <input type="text" value={newDecision} onChange={(e) => setNewDecision(e.target.value)} onKeyDown={(e) => e.key === "Enter" && handleAddDecision()} placeholder="Record a key decision..." className="flex-1 bg-[#0a0a0f] border border-[#1e1e2e] rounded-lg px-3 py-2 text-sm text-[#e2e8f0] placeholder-[#64748b] focus:outline-none focus:border-yellow-500/50" />
+                    <button onClick={handleAddDecision} disabled={!newDecision.trim()} className="px-4 py-2 bg-yellow-600/20 border border-yellow-500/30 text-yellow-400 text-sm font-medium rounded-lg hover:bg-yellow-600/30 disabled:opacity-50 transition-colors">Add</button>
+                  </div>
+                </div>
+                {decisions.length === 0 ? (
+                  <p className="text-[#64748b] text-sm text-center py-4">No decisions recorded yet.</p>
+                ) : (
+                  <div className="space-y-2">
+                    {decisions.map((d) => (
+                      <div key={d.id} className="flex items-start gap-3 bg-[#12121a] rounded-lg border border-[#1e1e2e] px-4 py-3 group">
+                        <span className="text-yellow-400 mt-0.5 text-sm">&#9889;</span>
+                        <div className="flex-1 min-w-0">
+                          <p className="text-sm text-[#e2e8f0]">{d.decision}</p>
+                          <p className="text-[10px] text-[#64748b] mt-1">{new Date(d.created_at).toLocaleDateString("en-US", { month: "short", day: "numeric", hour: "numeric", minute: "2-digit" })}</p>
+                        </div>
+                        <button onClick={() => { if (confirm("Delete this decision?")) handleDeleteDecision(d.id); }} className="text-[#64748b]/0 group-hover:text-[#64748b] hover:!text-red-400 transition-all p-1 flex-shrink-0" title="Delete">
+                          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><polyline points="3 6 5 6 21 6" /><path d="M19 6l-1 14H6L5 6" /><path d="M10 11v6" /><path d="M14 11v6" /><path d="M9 6V4h6v2" /></svg>
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
             </div>
-          )}
+            );
+          })()}
 
           {/* ── Chat (persisted) ─────────────────────────── */}
           {activeTab === "Chat" && (
