@@ -6,7 +6,7 @@ export async function GET(_req: Request, { params }: { params: Promise<{ id: str
   if (!sb) return Response.json({ data: [] });
 
   const { data, error } = await sb
-    .from("project_notes")
+    .from("project_decisions")
     .select("*")
     .eq("project_id", id)
     .order("created_at", { ascending: false });
@@ -21,11 +21,9 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
   if (!sb) return Response.json({ error: "Supabase not configured" }, { status: 500 });
 
   const body = await request.json();
-  const noteId = crypto.randomUUID();
-
   const { data, error } = await sb
-    .from("project_notes")
-    .insert({ id: noteId, project_id: id, content: body.content, created_at: new Date().toISOString() })
+    .from("project_decisions")
+    .insert({ project_id: id, decision: body.decision })
     .select()
     .single();
 
@@ -39,10 +37,7 @@ export async function DELETE(request: Request, { params }: { params: Promise<{ i
   if (!sb) return Response.json({ error: "Supabase not configured" }, { status: 500 });
 
   const body = await request.json();
-  const noteId = body.noteId;
-  if (!noteId) return Response.json({ error: "noteId is required" }, { status: 400 });
-
-  const { error } = await sb.from("project_notes").delete().eq("id", noteId).eq("project_id", id);
+  const { error } = await sb.from("project_decisions").delete().eq("id", body.decisionId).eq("project_id", id);
   if (error) return Response.json({ error: error.message }, { status: 500 });
   return Response.json({ success: true });
 }

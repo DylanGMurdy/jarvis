@@ -15,6 +15,7 @@ import MemoryTab from "@/components/dashboard/MemoryTab";
 import ChatHistoryTab from "@/components/dashboard/ChatHistoryTab";
 import ApprovalsTab from "@/components/dashboard/ApprovalsTab";
 import RevenueTab from "@/components/dashboard/RevenueTab";
+import CommandPalette from "@/components/CommandPalette";
 
 // ─── Types ────────────────────────────────────────────────
 type Tab = "overview" | "ideas" | "agents" | "goals" | "memory" | "history" | "approvals" | "revenue";
@@ -67,6 +68,7 @@ export default function Dashboard() {
   const [modal, setModal] = useState<ModalData>(null);
   const chatEndRef = useRef<HTMLDivElement>(null);
   const [chatOpen, setChatOpen] = useState(false);
+  const [searchOpen, setSearchOpen] = useState(false);
 
   // DB-backed state
   const [projects, setProjects] = useState<Project[]>([]);
@@ -526,10 +528,24 @@ export default function Dashboard() {
               ))}
             </div>
           </div>
-          {/* Show/Hide chat — desktop only */}
-          <button onClick={() => setChatOpen(!chatOpen)} className="hidden md:block text-sm text-jarvis-muted hover:text-jarvis-accent transition-colors px-3 py-1 rounded-lg hover:bg-jarvis-border/50">
-            {chatOpen ? "Hide Chat" : "Show Chat"}
-          </button>
+          <div className="flex items-center gap-2">
+            {/* Search trigger */}
+            <button
+              onClick={() => setSearchOpen(true)}
+              className="flex items-center gap-2 text-sm text-jarvis-muted hover:text-jarvis-accent transition-colors px-3 py-1.5 rounded-lg hover:bg-jarvis-border/50 border border-jarvis-border/50"
+            >
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <circle cx="11" cy="11" r="8" />
+                <path d="M21 21l-4.35-4.35" />
+              </svg>
+              <span className="hidden md:inline">Search</span>
+              <kbd className="hidden md:inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded bg-jarvis-border text-[10px] text-jarvis-muted font-mono tap-target-auto">⌘K</kbd>
+            </button>
+            {/* Show/Hide chat — desktop only */}
+            <button onClick={() => setChatOpen(!chatOpen)} className="hidden md:block text-sm text-jarvis-muted hover:text-jarvis-accent transition-colors px-3 py-1 rounded-lg hover:bg-jarvis-border/50">
+              {chatOpen ? "Hide Chat" : "Show Chat"}
+            </button>
+          </div>
         </nav>
 
         <div className="flex-1 flex overflow-hidden">
@@ -931,6 +947,14 @@ export default function Dashboard() {
         </div>
       </div>
     )}
+
+    {/* ─── Command Palette (Cmd+K) ─── */}
+    <CommandPalette
+      externalOpen={searchOpen}
+      onClose={() => setSearchOpen(false)}
+      onNavigateTab={(tab) => { setActiveTab(tab as Tab); setSearchOpen(false); }}
+      onNavigateMemory={() => { setActiveTab("memory"); setSearchOpen(false); }}
+    />
     </>
   );
 }

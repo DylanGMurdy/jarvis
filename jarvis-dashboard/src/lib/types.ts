@@ -31,6 +31,7 @@ export interface ProjectNote {
   id: string;
   project_id: string;
   content: string;
+  source?: string;
   created_at: string;
 }
 

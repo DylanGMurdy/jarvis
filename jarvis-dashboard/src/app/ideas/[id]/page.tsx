@@ -39,6 +39,10 @@ export default function ProjectDetailPage({ params }: { params: Promise<{ id: st
   const [editingProgress, setEditingProgress] = useState(false);
   const [progressInput, setProgressInput] = useState("");
 
+  // Decisions state
+  const [decisions, setDecisions] = useState<{ id: string; decision: string; created_at: string }[]>([]);
+  const [newDecision, setNewDecision] = useState("");
+
   // Chat state — persisted to Supabase
   const [chatMessages, setChatMessages] = useState<ChatMessage[]>([]);
   const [chatInput, setChatInput] = useState("");
@@ -61,6 +65,12 @@ export default function ProjectDetailPage({ params }: { params: Promise<{ id: st
   const [projectHistory, setProjectHistory] = useState<{id: string; title: string; message_count: number; preview: string; messages: ChatMessage[]; created_at: string; updated_at: string}[]>([]);
   const [historyLoading, setHistoryLoading] = useState(false);
   const [expandedHistoryId, setExpandedHistoryId] = useState<string | null>(null);
+
+  // Milestones state
+  interface Milestone { id: string; project_id: string; title: string; target_date: string | null; completed: boolean; created_at: string }
+  const [milestones, setMilestones] = useState<Milestone[]>([]);
+  const [newMilestoneTitle, setNewMilestoneTitle] = useState("");
+  const [newMilestoneDate, setNewMilestoneDate] = useState("");
 
   // Drive / Files state
   const [driveConnected, setDriveConnected] = useState(false);
@@ -762,8 +772,51 @@ export default function ProjectDetailPage({ params }: { params: Promise<{ id: st
     } else {
       setProject(null);
     }
+    // Load milestones
+    try {
+      const mRes = await fetch(`/api/projects/${id}/milestones`);
+      const mData = await mRes.json();
+      setMilestones(mData.data || []);
+    } catch { /* silent */ }
     setLoading(false);
   }, [id]);
+
+  async function addMilestone() {
+    if (!newMilestoneTitle.trim()) return;
+    try {
+      const res = await fetch(`/api/projects/${id}/milestones`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ title: newMilestoneTitle, target_date: newMilestoneDate || null }),
+      });
+      const data = await res.json();
+      if (data.data) setMilestones((prev) => [...prev, data.data]);
+      setNewMilestoneTitle("");
+      setNewMilestoneDate("");
+    } catch { /* silent */ }
+  }
+
+  async function toggleMilestone(ms: Milestone) {
+    try {
+      await fetch(`/api/projects/${id}/milestones`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ milestoneId: ms.id, completed: !ms.completed }),
+      });
+      setMilestones((prev) => prev.map((m) => m.id === ms.id ? { ...m, completed: !m.completed } : m));
+    } catch { /* silent */ }
+  }
+
+  async function deleteMilestone(msId: string) {
+    try {
+      await fetch(`/api/projects/${id}/milestones`, {
+        method: "DELETE",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ milestoneId: msId }),
+      });
+      setMilestones((prev) => prev.filter((m) => m.id !== msId));
+    } catch { /* silent */ }
+  }
 
   // Load chat history from Supabase
   const loadChatHistory = useCallback(async () => {
@@ -791,6 +844,7 @@ export default function ProjectDetailPage({ params }: { params: Promise<{ id: st
   useEffect(() => {
     loadData();
     loadChatHistory();
+    loadDecisions();
   }, [loadData, loadChatHistory]);
 
   // Load history when History tab is selected
@@ -850,6 +904,51 @@ export default function ProjectDetailPage({ params }: { params: Promise<{ id: st
     await api.projectNotes.create(id, content);
     setNewNoteContent("");
     loadData();
+  }
+
+  async function handleDeleteNote(noteId: string) {
+    try {
+      await fetch(`/api/projects/${id}/notes`, {
+        method: "DELETE",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ noteId }),
+      });
+      setNotes((prev) => prev.filter((n) => n.id !== noteId));
+    } catch { /* silent */ }
+  }
+
+  async function loadDecisions() {
+    try {
+      const res = await fetch(`/api/projects/${id}/decisions`);
+      const data = await res.json();
+      setDecisions(data.data || []);
+    } catch { /* silent */ }
+  }
+
+  async function handleAddDecision() {
+    const text = newDecision.trim();
+    if (!text) return;
+    try {
+      const res = await fetch(`/api/projects/${id}/decisions`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ decision: text }),
+      });
+      const data = await res.json();
+      if (data.data) setDecisions((prev) => [data.data, ...prev]);
+      setNewDecision("");
+    } catch { /* silent */ }
+  }
+
+  async function handleDeleteDecision(decisionId: string) {
+    try {
+      await fetch(`/api/projects/${id}/decisions`, {
+        method: "DELETE",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ decisionId }),
+      });
+      setDecisions((prev) => prev.filter((d) => d.id !== decisionId));
+    } catch { /* silent */ }
   }
 
   // ─── Project Chat (persisted to Supabase) ────────────────
@@ -1132,6 +1231,119 @@ curl -X POST ${typeof window !== "undefined" ? window.location.origin : ""}/api/
                     </ul>
                   )}
                 </div>
+
+                {/* ── Milestones ────────────────────────── */}
+                <div className="bg-[#12121a] rounded-xl border border-[#1e1e2e] p-6">
+                  <h3 className="text-sm font-medium text-[#64748b] mb-3">Milestones</h3>
+                  <div className="flex gap-2 mb-4">
+                    <input
+                      type="text"
+                      value={newMilestoneTitle}
+                      onChange={(e) => setNewMilestoneTitle(e.target.value)}
+                      onKeyDown={(e) => e.key === "Enter" && addMilestone()}
+                      placeholder="Add a milestone..."
+                      className="flex-1 bg-[#0a0a0f] border border-[#1e1e2e] rounded-lg px-3 py-2 text-sm text-[#e2e8f0] placeholder-[#64748b] focus:outline-none focus:border-[#6366f1]"
+                    />
+                    <input
+                      type="date"
+                      value={newMilestoneDate}
+                      onChange={(e) => setNewMilestoneDate(e.target.value)}
+                      className="bg-[#0a0a0f] border border-[#1e1e2e] rounded-lg px-3 py-2 text-sm text-[#e2e8f0] focus:outline-none focus:border-[#6366f1] w-36"
+                    />
+                    <button onClick={addMilestone} className="px-3 py-2 bg-[#6366f1] hover:bg-[#5558e6] text-white text-xs font-medium rounded-lg">Add</button>
+                  </div>
+                  {milestones.length === 0 ? (
+                    <p className="text-[#64748b] text-sm text-center py-4">No milestones yet.</p>
+                  ) : (
+                    <div className="space-y-2">
+                      {milestones.map((ms) => {
+                        const isOverdue = ms.target_date && !ms.completed && new Date(ms.target_date) < new Date();
+                        return (
+                          <div key={ms.id} className="flex items-center gap-3 group">
+                            <button onClick={() => toggleMilestone(ms)} className={`w-5 h-5 rounded border-2 flex items-center justify-center flex-shrink-0 transition-colors ${ms.completed ? "bg-[#22c55e] border-[#22c55e]" : "border-[#64748b] hover:border-[#6366f1]"}`}>
+                              {ms.completed && <svg width="12" height="12" viewBox="0 0 12 12" fill="none"><path d="M2 6l3 3 5-5" stroke="white" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" /></svg>}
+                            </button>
+                            <div className="flex-1 min-w-0">
+                              <span className={`text-sm ${ms.completed ? "line-through text-[#64748b]" : "text-[#e2e8f0]"}`}>{ms.title}</span>
+                              {ms.target_date && (
+                                <span className={`ml-2 text-[10px] ${isOverdue ? "text-red-400" : ms.completed ? "text-[#64748b]" : "text-[#6366f1]"}`}>
+                                  {isOverdue ? "Overdue: " : ""}{new Date(ms.target_date).toLocaleDateString("en-US", { month: "short", day: "numeric" })}
+                                </span>
+                              )}
+                            </div>
+                            <button onClick={() => deleteMilestone(ms.id)} className="text-[#64748b] hover:text-red-400 opacity-0 group-hover:opacity-100 transition-all text-xs">
+                              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M18 6L6 18M6 6l12 12" /></svg>
+                            </button>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  )}
+                  {milestones.length > 0 && (
+                    <div className="mt-3 pt-3 border-t border-[#1e1e2e]">
+                      <div className="flex items-center justify-between text-xs text-[#64748b]">
+                        <span>{milestones.filter((m) => m.completed).length} / {milestones.length} complete</span>
+                        <div className="w-24 h-1.5 bg-[#1e1e2e] rounded-full overflow-hidden">
+                          <div className="h-full bg-[#22c55e] rounded-full transition-all" style={{ width: `${(milestones.filter((m) => m.completed).length / milestones.length) * 100}%` }} />
+                        </div>
+                      </div>
+                    </div>
+                  )}
+                </div>
+
+                {/* ── Timeline ──────────────────────────── */}
+                <div className="bg-[#12121a] rounded-xl border border-[#1e1e2e] p-6">
+                  <h3 className="text-sm font-medium text-[#64748b] mb-4">Project Timeline</h3>
+                  <div className="relative">
+                    <div className="absolute left-[9px] top-2 bottom-2 w-px bg-[#1e1e2e]" />
+                    <div className="space-y-4">
+                      {(() => {
+                        const events: { date: string; icon: string; label: string }[] = [];
+                        if (project.created_at) {
+                          events.push({ date: project.created_at, icon: "🚀", label: "Project created" });
+                        }
+                        const agentNotes = new Map<string, { date: string; count: number }>();
+                        for (const n of notes) {
+                          const match = n.content.match(/^\[(.+?)(?:\s*—|\])/);
+                          const key = match ? match[1] : "Note";
+                          const existing = agentNotes.get(key);
+                          if (!existing || new Date(n.created_at) > new Date(existing.date)) {
+                            agentNotes.set(key, { date: n.created_at, count: (existing?.count || 0) + 1 });
+                          }
+                        }
+                        for (const [agent, info] of agentNotes) {
+                          if (agent.includes("War Room")) {
+                            events.push({ date: info.date, icon: "🏛️", label: `War Room: ${agent}` });
+                          } else if (agent === "Note") {
+                            events.push({ date: info.date, icon: "📝", label: `${info.count} note${info.count > 1 ? "s" : ""} added` });
+                          } else {
+                            events.push({ date: info.date, icon: "🤖", label: `${agent} analyzed (${info.count}x)` });
+                          }
+                        }
+                        for (const ms of milestones.filter((m) => m.completed)) {
+                          events.push({ date: ms.created_at, icon: "✅", label: `Milestone: ${ms.title}` });
+                        }
+                        if (project.war_room_completed_at) {
+                          events.push({ date: project.war_room_completed_at, icon: "🏗️", label: "Moved to Build stage" });
+                        }
+                        events.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
+                        if (events.length === 0) return <p className="text-[#64748b] text-sm text-center py-4 ml-6">No activity yet.</p>;
+                        return events.slice(0, 15).map((ev, i) => (
+                          <div key={i} className="flex items-start gap-3 relative">
+                            <div className="w-5 h-5 rounded-full bg-[#0a0a0f] border-2 border-[#1e1e2e] flex items-center justify-center text-[10px] z-10 flex-shrink-0">{ev.icon}</div>
+                            <div className="flex-1 min-w-0 -mt-0.5">
+                              <p className="text-sm text-[#e2e8f0] leading-tight">{ev.label}</p>
+                              <p className="text-[10px] text-[#64748b] mt-0.5">
+                                {new Date(ev.date).toLocaleDateString("en-US", { month: "short", day: "numeric" })} at {new Date(ev.date).toLocaleTimeString("en-US", { hour: "2-digit", minute: "2-digit" })}
+                              </p>
+                            </div>
+                          </div>
+                        ));
+                      })()}
+                    </div>
+                  </div>
+                </div>
+
                 {/* ── Deploy War Room CTA ───────────────── */}
                 {(project.status === "Idea" || project.status === "Planning") && (
                   <div className="bg-gradient-to-r from-purple-900/30 to-indigo-900/30 rounded-xl border border-purple-500/30 p-6">

@@ -36,6 +36,18 @@ async function migrate() {
       console.log('Added war_room_completed_at column to projects');
 
       await supabase.rpc('exec_sql', {
+        sql: `CREATE TABLE IF NOT EXISTS project_milestones (
+          id text primary key,
+          project_id text references projects(id) on delete cascade,
+          title text not null,
+          target_date date,
+          completed boolean default false,
+          created_at timestamptz default now()
+        )`
+      });
+      console.log('Created project_milestones table');
+
+      await supabase.rpc('exec_sql', {
         sql: `CREATE TABLE IF NOT EXISTS lindy_clients (
           id uuid default gen_random_uuid() primary key,
           name text not null,
@@ -96,7 +108,15 @@ async function migrate() {
       console.log('   );');
       console.log('\n2. ALTER TABLE projects ADD COLUMN IF NOT EXISTS drive_folder_id text;');
       console.log('\n3. ALTER TABLE projects ADD COLUMN IF NOT EXISTS war_room_completed_at timestamptz;');
-      console.log('\n3. CREATE TABLE IF NOT EXISTS lindy_clients (');
+      console.log('\n4. CREATE TABLE IF NOT EXISTS project_milestones (');
+      console.log('     id text primary key,');
+      console.log('     project_id text references projects(id) on delete cascade,');
+      console.log('     title text not null,');
+      console.log('     target_date date,');
+      console.log('     completed boolean default false,');
+      console.log('     created_at timestamptz default now()');
+      console.log('   );');
+      console.log('\n5. CREATE TABLE IF NOT EXISTS lindy_clients (');
       console.log('     id uuid default gen_random_uuid() primary key,');
       console.log('     name text not null,');
       console.log('     setup_paid boolean default false,');
