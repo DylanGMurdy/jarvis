@@ -100,6 +100,19 @@ export default function Dashboard() {
     } catch { /* Supabase may not be configured yet */ }
   }, []);
 
+  // Redirect new users to onboarding
+  useEffect(() => {
+    (async () => {
+      try {
+        const res = await fetch("/api/settings");
+        const data = await res.json();
+        if (data.data?.onboarding_complete !== "true") {
+          window.location.replace("/onboarding");
+        }
+      } catch { /* silent */ }
+    })();
+  }, []);
+
   useEffect(() => {
     async function loadData() {
       const [projectsData, goalsData] = await Promise.all([

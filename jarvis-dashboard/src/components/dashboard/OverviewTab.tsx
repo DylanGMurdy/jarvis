@@ -206,6 +206,29 @@ export default function OverviewTab({ projects, memories, setActiveTab, setMemor
   const [activity, setActivity] = useState<ActivityItem[]>([]);
   const [activityLoading, setActivityLoading] = useState(true);
 
+  // Insights engine
+  interface Insights {
+    stats?: { totalProjects: number; totalActionsThisWeek: number; warRoomRunsThisWeek: number };
+    mostActiveProject?: { id: string; title: string; noteCount: number; lastActivity: string } | null;
+    agentOfWeek?: { name: string; count: number } | null;
+    topAgents?: { name: string; count: number }[];
+    insights?: { topInsights: { title: string; body: string }[]; commonRisks: string[]; commonOpportunities: string[]; weeklySummary: string };
+  }
+  const [insights, setInsights] = useState<Insights | null>(null);
+  const [insightsLoading, setInsightsLoading] = useState(true);
+
+  const fetchInsights = useCallback(async () => {
+    setInsightsLoading(true);
+    try {
+      const res = await fetch("/api/insights");
+      const data = await res.json();
+      if (data.ok) setInsights(data);
+    } catch { /* silent */ }
+    setInsightsLoading(false);
+  }, []);
+
+  useEffect(() => { fetchInsights(); }, [fetchInsights]);
+
   const fetchActivity = useCallback(async () => {
     try {
       const res = await fetch("/api/agents/activity");
@@ -419,6 +442,93 @@ export default function OverviewTab({ projects, memories, setActiveTab, setMemor
             ))}
           </div>
         </div>
+      </div>
+
+      {/* ── Jarvis Insights ──────────────────────────── */}
+      <div className="bg-gradient-to-r from-jarvis-accent/10 via-purple-500/10 to-jarvis-accent/10 border border-jarvis-accent/30 rounded-xl p-4">
+        <div className="flex items-center justify-between mb-4 flex-wrap gap-2">
+          <div className="flex items-center gap-2">
+            <span className="text-lg">🧠</span>
+            <h3 className="text-sm font-bold text-white">Jarvis Insights</h3>
+            {insights?.stats && (
+              <span className="text-[10px] px-2 py-0.5 rounded-full bg-jarvis-accent/20 text-jarvis-accent border border-jarvis-accent/30 font-semibold">
+                {insights.stats.totalActionsThisWeek} actions this week
+              </span>
+            )}
+          </div>
+          <div className="flex items-center gap-2">
+            <button onClick={fetchInsights} className="text-[10px] text-jarvis-muted hover:text-jarvis-accent" title="Refresh">↻</button>
+            <button
+              onClick={() => {
+                if (!insights) return;
+                const fullReport = `# Weekly Summary\n${insights.insights?.weeklySummary || "N/A"}\n\n# Top Insights\n${(insights.insights?.topInsights || []).map((i) => `**${i.title}**\n${i.body}`).join("\n\n")}\n\n# Common Risks Across Portfolio\n${(insights.insights?.commonRisks || []).map((r) => `• ${r}`).join("\n")}\n\n# Common Opportunities\n${(insights.insights?.commonOpportunities || []).map((o) => `• ${o}`).join("\n")}\n\n# Most Active Project\n${insights.mostActiveProject ? `${insights.mostActiveProject.title} — ${insights.mostActiveProject.noteCount} agent actions this week` : "No activity yet"}\n\n# Top Agents This Week\n${(insights.topAgents || []).map((a) => `• ${a.name}: ${a.count} actions`).join("\n")}\n\n# Stats\nProjects: ${insights.stats?.totalProjects}\nWar Room runs this week: ${insights.stats?.warRoomRunsThisWeek}`;
+                openModal({
+                  title: "Jarvis Full Insights Report",
+                  body: fullReport,
+                  actions: [{ label: "Close", onClick: closeModal }],
+                });
+              }}
+              className="text-xs px-3 py-1 bg-jarvis-accent text-white rounded-lg hover:bg-jarvis-accent-hover transition-colors"
+            >
+              View Full Report →
+            </button>
+          </div>
+        </div>
+
+        {insightsLoading ? (
+          <div className="text-center py-6 text-sm text-jarvis-muted animate-pulse">Analyzing your portfolio...</div>
+        ) : !insights ? (
+          <div className="text-center py-6 text-sm text-jarvis-muted">No insights available.</div>
+        ) : (
+          <>
+            {/* Top 3 Insights */}
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-3 mb-4">
+              {(insights.insights?.topInsights || []).slice(0, 3).map((ins, i) => (
+                <div key={i} className="bg-jarvis-card border border-jarvis-border rounded-lg p-3">
+                  <div className="flex items-center gap-2 mb-2">
+                    <span className="w-5 h-5 rounded-full bg-jarvis-accent/20 text-jarvis-accent flex items-center justify-center text-xs font-bold">{i + 1}</span>
+                    <h4 className="text-xs font-semibold text-white truncate">{ins.title}</h4>
+                  </div>
+                  <p className="text-xs text-jarvis-muted leading-relaxed line-clamp-3">{ins.body}</p>
+                </div>
+              ))}
+              {(insights.insights?.topInsights || []).length === 0 && (
+                <div className="md:col-span-3 text-center py-4 text-xs text-jarvis-muted">
+                  Run War Rooms or agent actions to generate insights.
+                </div>
+              )}
+            </div>
+
+            {/* Most Active Project + Agent of Week */}
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+              <div className="bg-jarvis-card border border-jarvis-border rounded-lg p-3">
+                <div className="text-[10px] font-semibold text-jarvis-muted uppercase tracking-wider mb-1">Most Momentum</div>
+                {insights.mostActiveProject ? (
+                  <Link
+                    href={`/ideas/${insights.mostActiveProject.id}`}
+                    className="block hover:opacity-80 transition-opacity"
+                  >
+                    <div className="text-sm font-semibold text-white truncate">{insights.mostActiveProject.title}</div>
+                    <div className="text-[11px] text-jarvis-accent">{insights.mostActiveProject.noteCount} agent actions this week</div>
+                  </Link>
+                ) : (
+                  <div className="text-sm text-jarvis-muted">No project activity this week</div>
+                )}
+              </div>
+              <div className="bg-jarvis-card border border-jarvis-border rounded-lg p-3">
+                <div className="text-[10px] font-semibold text-jarvis-muted uppercase tracking-wider mb-1">Agent of the Week</div>
+                {insights.agentOfWeek ? (
+                  <>
+                    <div className="text-sm font-semibold text-white truncate">{insights.agentOfWeek.name}</div>
+                    <div className="text-[11px] text-jarvis-green">{insights.agentOfWeek.count} actions delivered</div>
+                  </>
+                ) : (
+                  <div className="text-sm text-jarvis-muted">No agent activity yet</div>
+                )}
+              </div>
+            </div>
+          </>
+        )}
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">

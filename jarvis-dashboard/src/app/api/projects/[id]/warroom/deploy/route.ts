@@ -139,6 +139,16 @@ Return ONLY valid JSON, no markdown fences.`,
         top_recommendation: typeof topRec === "string" ? topRec : String(topRec),
       },
     }).eq("id", id);
+
+    // Save a session record to war_room_sessions for history tracking
+    const summaryText = `Verdict: ${summary?.verdict || "N/A"}\n\nConsensus:\n${(summary?.consensus || []).map((c: string) => `• ${c}`).join("\n")}\n\nConflicts:\n${(summary?.conflicts || []).map((c: string) => `• ${c}`).join("\n")}\n\nRecommendations:\n${(summary?.recommendations || []).map((r: string, i: number) => `${i + 1}. ${r}`).join("\n")}`;
+    await sb.from("war_room_sessions").insert({
+      project_id: id,
+      confidence_score: summary?.confidence_score || 0,
+      agents_run: allResults.filter((r) => r.ok).length,
+      summary_text: summaryText,
+      status: "complete",
+    });
   } catch {
     // Summary generation failed but agent results are still valid
   }

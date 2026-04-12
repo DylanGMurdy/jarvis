@@ -123,6 +123,40 @@ export default function ProjectDetailPage({ params }: { params: Promise<{ id: st
     customer_success: "🌟",
   };
 
+  // ── War Room viewer state ────────────────────────────────
+  const [selectedAgentKey, setSelectedAgentKey] = useState<string>("summary");
+  const [rerunInstructions, setRerunInstructions] = useState<Record<string, string>>({});
+
+  function downloadReport(filename: string, content: string) {
+    const blob = new Blob([content], { type: "text/plain;charset=utf-8" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = filename;
+    a.click();
+    URL.revokeObjectURL(url);
+  }
+
+  function downloadAllReports() {
+    if (!project) return;
+    const all = [
+      `# War Room Report — ${project.title}\nGenerated: ${new Date().toLocaleString()}\n\n`,
+      warRoomSummary ? `## JARVIS Summary\n\n${warRoomSummary}\n\n---\n\n` : "",
+      ...warRoomAgents.map((a) => `## ${a.name} — ${a.role}\n\n${a.result}\n\n---\n\n`),
+    ].join("");
+    downloadReport(`war-room-${project.title.toLowerCase().replace(/\s+/g, "-")}.txt`, all);
+  }
+
+  // Auto-select first completed agent during loading
+  useEffect(() => {
+    if (warRoomDeploying && warRoomAgents.length > 0 && selectedAgentKey === "summary") {
+      setSelectedAgentKey(warRoomAgents[warRoomAgents.length - 1].key);
+    }
+    if (!warRoomDeploying && warRoomSummary && warRoomAgents.length > 0) {
+      setSelectedAgentKey("summary");
+    }
+  }, [warRoomDeploying, warRoomAgents.length, warRoomSummary, selectedAgentKey]);
+
   async function deployWarRoom() {
     setWarRoomDeploying(true);
     setWarRoomDeployError(null);
