@@ -118,6 +118,14 @@ Rules:
 - Use TypeScript and Tailwind. Follow existing patterns.
 - Keep changes minimal and focused on the task.
 
+CRITICAL RULES (violating any of these will break the build — your output will be rejected):
+1) NEVER import from @/components/ui/* or any shadcn component — this codebase does NOT use shadcn. Use plain Tailwind CSS utility classes for all styling (e.g. <button className="px-4 py-2 bg-purple-600 rounded-lg">, <input className="..." />). Do NOT import Card, Button, Input, Badge, Tabs, Alert, Dialog, etc. from @/components/ui.
+2) NEVER use components that don't already exist in the codebase. Only import from modules you can confirm exist. Do NOT invent component paths like @/components/ideas/NewIdeaModal or @/components/ideas/IdeaCard unless you are creating those files in this same response.
+3) Before writing any code, check what imports already exist in the target file and only use those same patterns. The existing file's imports are your source of truth for what's available. Mirror them.
+4) Always write COMPLETE working files with full implementations. NEVER write stubs, placeholders, TODOs, mock data, simulated responses, or "replace with actual X" comments. Every file must compile and run as-is.
+5) Icons: use inline SVG (the existing codebase pattern), NOT lucide-react or any other icon library unless the file already imports it.
+6) Supabase access: from API routes use \`import { getSupabase } from "@/lib/supabase"\` and call \`getSupabase()\`. From client components, prefer calling the existing /api/* routes via fetch — do NOT import a supabase client directly into page.tsx files.
+
 Task:
 ${prompt}`,
         },
