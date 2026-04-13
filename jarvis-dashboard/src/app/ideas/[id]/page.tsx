@@ -212,6 +212,7 @@ export default function ProjectDetailPage({ params }: { params: Promise<{ id: st
 
   // War Room session history (legacy state kept for compatibility)
   const [showSessionHistory, setShowSessionHistory] = useState(false);
+  const [warRoomLoadedFromPersistence, setWarRoomLoadedFromPersistence] = useState(false);
 
   function loadSession(session: WarRoomSession) {
     setWarRoomSummary(session.summary_text);
@@ -507,6 +508,7 @@ export default function ProjectDetailPage({ params }: { params: Promise<{ id: st
     setWarRoomSummary(null);
     setWarRoomAgents([]);
     setWarRoomExpanded(new Set());
+    setWarRoomLoadedFromPersistence(false);
     setProgressDone(0);
     setCurrentAgent("");
     setCurrentWave(0);
@@ -1283,6 +1285,7 @@ export default function ProjectDetailPage({ params }: { params: Promise<{ id: st
         }
         if (agents.length > 0) setWarRoomAgents(agents);
         if (savedSummary) setWarRoomSummary(savedSummary);
+        if (agents.length > 0 || savedSummary) setWarRoomLoadedFromPersistence(true);
       }
     } catch { /* silent */ }
 
@@ -2483,6 +2486,13 @@ curl -X POST ${typeof window !== "undefined" ? window.location.origin : ""}/api/
             }
 
             // History dropdown — shown above all states if sessions exist
+            const persistenceBanner = warRoomLoadedFromPersistence && !warRoomDeploying && (warRoomAgents.length > 0 || warRoomSummary) ? (
+              <div className="mb-3 flex items-center gap-2 text-xs text-emerald-400">
+                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M20 6L9 17l-5-5"/></svg>
+                <span>Results loaded from previous session</span>
+              </div>
+            ) : null;
+
             const historyDropdown = warRoomSessions.length > 0 ? (
               <div className="mb-4 relative">
                 <button
@@ -2536,6 +2546,7 @@ curl -X POST ${typeof window !== "undefined" ? window.location.origin : ""}/api/
             if (!warRoomDeploying && warRoomAgents.length === 0 && !warRoomSummary) {
               return (
                 <div>
+                  {persistenceBanner}
                   {historyDropdown}
                 <div className="flex flex-col items-center justify-center py-24 px-4">
                   <div className="text-6xl mb-6">🏛️</div>
@@ -2599,6 +2610,7 @@ curl -X POST ${typeof window !== "undefined" ? window.location.origin : ""}/api/
 
             return (
               <div>
+              {persistenceBanner}
               {historyDropdown}
               <div className="flex gap-0 h-[calc(100vh-280px)] min-h-[600px] bg-[#0a0a0f] rounded-xl border border-[#1e1e2e] overflow-hidden">
                 {/* ── LEFT SIDEBAR ──────────────────────── */}
