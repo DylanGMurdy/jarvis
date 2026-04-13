@@ -77,6 +77,9 @@ export default function IdeasPage() {
   const [showModal, setShowModal] = useState(false);
   const [newTitle, setNewTitle] = useState("");
   const [newDescription, setNewDescription] = useState("");
+  const [newStatus, setNewStatus] = useState<Project["status"]>("Idea");
+  const [newGrade, setNewGrade] = useState<Project["grade"]>("B");
+  const [creating, setCreating] = useState(false);
 
   const [lastActivity, setLastActivity] = useState<Record<string, string>>({});
 
@@ -162,12 +165,20 @@ export default function IdeasPage() {
   }, [projects, search, statusFilter, gradeFilter, sortBy]);
 
   const handleCreateProject = async () => {
-    if (!newTitle.trim()) return;
+    if (!newTitle.trim() || creating) return;
+    setCreating(true);
     try {
       const response = await fetch("/api/projects", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ title: newTitle, description: newDescription }),
+        body: JSON.stringify({
+          title: newTitle.trim(),
+          description: newDescription.trim(),
+          status: newStatus,
+          grade: newGrade,
+          category: "AI Business",
+          progress: 0,
+        }),
       });
       if (response.ok) {
         const newProject = await response.json();
@@ -175,19 +186,33 @@ export default function IdeasPage() {
         setShowModal(false);
         setNewTitle("");
         setNewDescription("");
+        setNewStatus("Idea");
+        setNewGrade("B");
+      } else {
+        const err = await response.json().catch(() => ({}));
+        alert(`Failed to create: ${err.error || response.statusText}`);
       }
     } catch (error) {
       console.error("Error creating project:", error);
+      alert("Connection error creating project.");
+    } finally {
+      setCreating(false);
     }
   };
 
   const handleDeleteProject = async (id: string, title: string) => {
-    if (!window.confirm(`Are you sure you want to delete "${title}"?`)) return;
+    if (!window.confirm(`Delete "${title}"? This is permanent and cannot be undone.`)) return;
     try {
       const response = await fetch(`/api/projects/${id}`, { method: "DELETE" });
-      if (response.ok) setProjects(projects.filter((p) => p.id !== id));
+      if (response.ok) {
+        setProjects((prev) => prev.filter((p) => p.id !== id));
+      } else {
+        const err = await response.json().catch(() => ({}));
+        alert(`Failed to delete: ${err.error || response.statusText}`);
+      }
     } catch (error) {
       console.error("Error deleting project:", error);
+      alert("Connection error deleting project.");
     }
   };
 
@@ -394,14 +419,19 @@ export default function IdeasPage() {
                   <span className="text-[10px] text-[#6366f1] group-hover:translate-x-1 transition-transform">Open &rarr;</span>
                 </div>
 
-                {/* Delete button */}
+                {/* Delete button — always visible, red, bottom-right */}
                 <button
                   onClick={(e) => { e.preventDefault(); e.stopPropagation(); handleDeleteProject(project.id, project.title); }}
-                  className="absolute top-3 right-3 p-1.5 text-[#64748b] hover:text-red-400 transition-colors opacity-0 group-hover:opacity-100"
-                  title="Delete project"
+                  className="absolute bottom-3 right-3 p-1.5 rounded-md bg-red-500/10 text-red-400 hover:bg-red-500 hover:text-white border border-red-500/30 hover:border-red-500 transition-colors"
+                  title={`Delete "${project.title}"`}
+                  aria-label="Delete project"
                 >
-                  <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                    <path d="M3 6h18M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2" />
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                    <polyline points="3 6 5 6 21 6" />
+                    <path d="M19 6l-1 14H6L5 6" />
+                    <path d="M10 11v6" />
+                    <path d="M14 11v6" />
+                    <path d="M9 6V4h6v2" />
                   </svg>
                 </button>
               </Link>
@@ -425,7 +455,7 @@ export default function IdeasPage() {
                   autoFocus
                 />
               </div>
-              <div className="mb-6">
+              <div className="mb-4">
                 <label className="block text-xs font-medium text-[#64748b] mb-1">Description</label>
                 <textarea
                   value={newDescription}
@@ -435,19 +465,47 @@ export default function IdeasPage() {
                   rows={3}
                 />
               </div>
+              <div className="mb-6 grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-xs font-medium text-[#64748b] mb-1">Status</label>
+                  <select
+                    value={newStatus}
+                    onChange={(e) => setNewStatus(e.target.value as Project["status"])}
+                    className="w-full px-3 py-2 bg-[#0a0a0f] border border-[#1e1e2e] rounded-lg text-sm text-[#e2e8f0] focus:outline-none focus:border-[#6366f1]"
+                  >
+                    <option value="Idea">Idea</option>
+                    <option value="Planning">Planning</option>
+                    <option value="Building">Building</option>
+                    <option value="Launched">Launched</option>
+                    <option value="Revenue">Revenue</option>
+                  </select>
+                </div>
+                <div>
+                  <label className="block text-xs font-medium text-[#64748b] mb-1">Grade</label>
+                  <select
+                    value={newGrade}
+                    onChange={(e) => setNewGrade(e.target.value as Project["grade"])}
+                    className="w-full px-3 py-2 bg-[#0a0a0f] border border-[#1e1e2e] rounded-lg text-sm text-[#e2e8f0] focus:outline-none focus:border-[#6366f1]"
+                  >
+                    <option value="A">A — High confidence</option>
+                    <option value="B">B — Promising</option>
+                    <option value="C">C — Exploratory</option>
+                  </select>
+                </div>
+              </div>
               <div className="flex justify-end gap-3">
                 <button
-                  onClick={() => { setShowModal(false); setNewTitle(""); setNewDescription(""); }}
+                  onClick={() => { setShowModal(false); setNewTitle(""); setNewDescription(""); setNewStatus("Idea"); setNewGrade("B"); }}
                   className="px-4 py-2 text-sm text-[#64748b] border border-[#1e1e2e] rounded-lg hover:text-white transition-colors"
                 >
                   Cancel
                 </button>
                 <button
                   onClick={handleCreateProject}
-                  disabled={!newTitle.trim()}
+                  disabled={!newTitle.trim() || creating}
                   className="px-4 py-2 bg-[#6366f1] text-white rounded-lg text-sm font-medium hover:bg-[#5558e6] disabled:opacity-50 transition-colors"
                 >
-                  Create
+                  {creating ? "Creating..." : "Create"}
                 </button>
               </div>
             </div>
