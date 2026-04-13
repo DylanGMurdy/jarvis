@@ -7,31 +7,58 @@ import path from 'path'
 
 const execAsync = promisify(exec)
 
+// ─── CORS headers (apply to every response) ──
+const CORS_HEADERS = {
+  'Access-Control-Allow-Origin': '*',
+  'Access-Control-Allow-Methods': 'POST, OPTIONS',
+  'Access-Control-Allow-Headers': 'Content-Type, x-jarvis-secret, x-build-token',
+}
+
+function withCors<T extends Response>(res: T): T {
+  Object.entries(CORS_HEADERS).forEach(([k, v]) => res.headers.set(k, v))
+  return res
+}
+
+// ─── Auth: require matching x-jarvis-secret header ──
+function isAuthorized(request: NextRequest): boolean {
+  const secret = request.headers.get('x-jarvis-secret')
+  return !!secret && secret === process.env.JARVIS_API_SECRET
+}
+
+// ─── OPTIONS handler for CORS preflight ──
+export async function OPTIONS() {
+  return new Response(null, { status: 200, headers: CORS_HEADERS })
+}
+
 export async function POST(request: NextRequest) {
+  // Auth gate
+  if (!isAuthorized(request)) {
+    return withCors(NextResponse.json({ error: 'Unauthorized' }, { status: 401 }))
+  }
+
   try {
     const { prompt } = await request.json()
-    
+
     if (!prompt) {
-      return NextResponse.json({ error: 'Prompt is required' }, { status: 400 })
+      return withCors(NextResponse.json({ error: 'Prompt is required' }, { status: 400 }))
     }
 
     // Get current codebase context
     const projectRoot = process.cwd()
-    const srcPath = path.join(projectRoot, 'src')
-    
+
     // Read key files for context
     const contextFiles = [
       'src/app/layout.tsx',
       'src/app/page.tsx',
       'package.json'
     ]
-    
+
     let context = 'Current codebase structure:\n\n'
     for (const file of contextFiles) {
       try {
         const content = await fs.readFile(path.join(projectRoot, file), 'utf-8')
         context += `${file}:\n${content}\n\n`
-      } catch (error) {
+      } catch {
         // File doesn't exist, skip
       }
     }
@@ -45,7 +72,7 @@ export async function POST(request: NextRequest) {
         'anthropic-version': '2023-06-01'
       },
       body: JSON.stringify({
-        model: 'claude-3-5-sonnet-20241022',
+        model: 'claude-sonnet-4-20250514',
         max_tokens: 4000,
         messages: [{
           role: 'user',
@@ -85,17 +112,17 @@ Context:\n${context}\n\nTask:\n${prompt}`
     const buildPlan = JSON.parse(claudeData.content[0].text)
 
     // Execute the build plan
-    const results = []
+    const results: { path: string; action: string; status: string }[] = []
     for (const file of buildPlan.files) {
       const filePath = path.join(projectRoot, file.path)
       const dir = path.dirname(filePath)
-      
+
       // Ensure directory exists
       await fs.mkdir(dir, { recursive: true })
-      
+
       // Write file
       await fs.writeFile(filePath, file.content, 'utf-8')
-      
+
       results.push({
         path: file.path,
         action: file.action,
@@ -108,25 +135,27 @@ Context:\n${context}\n\nTask:\n${prompt}`
       const { stdout, stderr } = await execAsync('npm run build')
       console.log('Build output:', stdout)
       if (stderr) console.log('Build stderr:', stderr)
-    } catch (buildError: any) {
-      return NextResponse.json({ 
-        error: 'Build failed', 
-        details: buildError.message,
+    } catch (buildError: unknown) {
+      const msg = buildError instanceof Error ? buildError.message : 'Unknown build error'
+      return withCors(NextResponse.json({
+        error: 'Build failed',
+        details: msg,
         files: results
-      }, { status: 500 })
+      }, { status: 500 }))
     }
 
-    return NextResponse.json({
+    return withCors(NextResponse.json({
       success: true,
       summary: buildPlan.summary,
       files: results
-    })
+    }))
 
-  } catch (error: any) {
-    console.error('Build API error:', error)
-    return NextResponse.json({ 
-      error: 'Internal server error', 
-      details: error.message 
-    }, { status: 500 })
+  } catch (error: unknown) {
+    const msg = error instanceof Error ? error.message : 'Unknown error'
+    console.error('Build API error:', msg)
+    return withCors(NextResponse.json({
+      error: 'Internal server error',
+      details: msg
+    }, { status: 500 }))
   }
 }
