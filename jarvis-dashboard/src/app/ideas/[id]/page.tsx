@@ -268,11 +268,57 @@ export default function ProjectDetailPage({ params }: { params: Promise<{ id: st
     try {
       const res = await fetch(`/api/projects/${id}/war-room/sessions`);
       const data = await res.json();
-      setWarRoomSessions(data.data || []);
-    } catch { /* silent */ }
+      const sessions = data.data || [];
+      setWarRoomSessions(sessions);
+      return sessions;
+    } catch { return []; }
   }, [id]);
 
-  useEffect(() => { loadWarRoomSessions(); }, [loadWarRoomSessions]);
+  // Auto-load the most recent war room session's agent reports on page mount
+  const autoLoadLatestWarRoom = useCallback(async () => {
+    try {
+      const sessionsRes = await fetch(`/api/projects/${id}/war-room/sessions`);
+      const sessionsData = await sessionsRes.json();
+      const sessions = sessionsData.data || [];
+      if (sessions.length === 0) return;
+      setWarRoomSessions(sessions);
+
+      // Most recent session is first (sessions ordered DESC)
+      const latest = sessions[0];
+      const sessionTime = new Date(latest.session_date).getTime();
+
+      // Fetch notes and filter to this session's agent reports
+      const notesRes = await fetch(`/api/projects/${id}/notes`);
+      const notesData = await notesRes.json();
+      const notes = notesData.data || [];
+      const sessionNotes = notes.filter((n: { created_at: string; source?: string }) => {
+        const t = new Date(n.created_at).getTime();
+        return n.source?.startsWith("war_room_") && Math.abs(t - sessionTime) < 5 * 60 * 1000;
+      });
+
+      const agents = sessionNotes
+        .filter((n: { source?: string }) => n.source !== "war_room_summary" && n.source !== "war_room_jarvis_summary")
+        .map((n: { content: string; source?: string }) => {
+          const key = (n.source || "").replace("war_room_", "");
+          const match = n.content.match(/^\[War Room — (.+?)\]\n\n([\s\S]*)$/);
+          return {
+            key,
+            name: match?.[1] || key,
+            role: key,
+            tier: ["cfo", "cto", "clo", "coo", "cmo", "chro", "cso"].includes(key) ? "c-suite" : key.startsWith("vp_") ? "vp" : "specialist",
+            result: match?.[2] || n.content,
+          };
+        });
+
+      if (agents.length > 0) {
+        setWarRoomAgents(agents);
+        setWarRoomSummary(latest.summary_text);
+        setWarRoomLoadedFromPersistence(true);
+      }
+    } catch { /* silent — fall back to Deploy button */ }
+  }, [id]);
+
+  useEffect(() => { autoLoadLatestWarRoom(); }, [autoLoadLatestWarRoom]);
 
   async function loadSessionResults(sessionId: string) {
     setSelectedSessionId(sessionId);
