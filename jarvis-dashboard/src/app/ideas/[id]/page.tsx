@@ -589,106 +589,124 @@ export default function ProjectDetailPage({ params }: { params: Promise<{ id: st
     setWarRoomExpanded(new Set());
     setWarRoomLoadedFromPersistence(false);
     setProgressDone(0);
-    setCurrentAgent("");
+    setCurrentAgent("Starting War Room...");
     setCurrentWave(0);
 
-    const projectTitle = project.title;
-    const projectDescription = project.description || "";
-    const collected: Record<string, { result: string; role: string }> = {};
+    // Poll for progress while the backend runs the 6-phase deploy
+    // The new /war-room/deploy endpoint returns when the whole thing is done (8-12 min)
+    // We poll war_room_sessions every 4 seconds for the latest session's debate_status
+    let pollTimer: ReturnType<typeof setInterval> | null = null;
+    let deployResolved = false;
+
+    const phaseLabels: Record<string, { label: string; wave: 0 | 1 | 2; done: number }> = {
+      not_started: { label: "Starting...", wave: 0, done: 0 },
+      wave_1_running: { label: "Wave 1: C-Suite analysis (CFO, CTO, CLO, COO)", wave: 1, done: 2 },
+      wave_2_running: { label: "Wave 2: VPs & specialists analyzing (briefed by Wave 1)", wave: 2, done: 8 },
+      detecting_conflicts: { label: "JARVIS: Identifying team conflicts...", wave: 0, done: 17 },
+      round_1_debating: { label: "Round 1: Team debating tactical conflicts...", wave: 0, done: 19 },
+      round_2_debating: { label: "Round 2: Resolving remaining disputes...", wave: 0, done: 20 },
+      reconciling: { label: "Reconciling final positions, flagging decisions for you...", wave: 0, done: 21 },
+      complete: { label: "Complete", wave: 0, done: 21 },
+      awaiting_dylan_decision: { label: "Complete — Decisions need your call", wave: 0, done: 21 },
+    };
+
+    const pollProgress = async () => {
+      try {
+        const sessionsRes = await fetch(`/api/projects/${id}/war-room/sessions`);
+        const sessionsData = await sessionsRes.json();
+        const latest = (sessionsData.data || [])[0];
+        if (!latest) return;
+
+        const status = latest.debate_status || "not_started";
+        const phase = phaseLabels[status] || phaseLabels.not_started;
+        setCurrentAgent(phase.label);
+        setCurrentWave(phase.wave);
+        setProgressDone(phase.done);
+
+        // Live-load agent positions as they come in
+        if (status === "wave_2_running" || status === "detecting_conflicts" || status === "round_1_debating" || status === "round_2_debating" || status === "reconciling") {
+          try {
+            const detailRes = await fetch(`/api/projects/${id}/war-room/sessions/${latest.id}`);
+            if (detailRes.ok) {
+              const detail = await detailRes.json();
+              const positions = (detail.positions || []) as { agent_key: string; agent_name: string; agent_tier: string; round: number; position_text: string }[];
+              const latestPerAgent = new Map<string, { agent_key: string; agent_name: string; agent_tier: string; round: number; position_text: string }>();
+              for (const p of positions) {
+                const existing = latestPerAgent.get(p.agent_key);
+                if (!existing || p.round > existing.round) latestPerAgent.set(p.agent_key, p);
+              }
+              const agents = Array.from(latestPerAgent.values()).map((p) => ({
+                key: p.agent_key,
+                name: p.agent_name,
+                role: p.agent_name,
+                tier: p.agent_tier,
+                result: p.position_text,
+              }));
+              if (agents.length > 0) setWarRoomAgents(agents);
+            }
+          } catch { /* ignore polling errors */ }
+        }
+      } catch { /* ignore polling errors */ }
+    };
 
     try {
-      // ── WAVE 1 (sequential, builds briefing) ──
-      setCurrentWave(1);
-      for (let i = 0; i < WAVE_1_AGENTS.length; i++) {
-        const agentName = WAVE_1_AGENTS[i];
-        setCurrentAgent(`${agentName} (${i + 1}/${WAVE_1_AGENTS.length})`);
-        const r = await callOneAgent(agentName, projectTitle, projectDescription);
-        if (r) {
-          collected[agentName] = r;
-          setWarRoomAgents((prev) => [
-            ...prev,
-            { key: AGENT_NAME_TO_KEY[agentName] || agentName.toLowerCase(), name: agentName, role: r.role, tier: tierForAgent(agentName), result: r.result },
-          ]);
-          // Persist this agent's result immediately so it survives page refresh
-          fetch(`/api/projects/${id}/war-room/save-agent`, {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ projectId: id, agentName, agentRole: r.role, result: r.result }),
-          }).catch(() => {});
-        }
-        setProgressDone((p) => p + 1);
-        await new Promise((res) => setTimeout(res, 1000));
+      // Start polling every 4 seconds
+      pollTimer = setInterval(pollProgress, 4000);
+      // Kick off one immediate poll so the UI updates fast
+      setTimeout(pollProgress, 500);
+
+      // Kick off the actual deploy (this will take 8-12 minutes)
+      const deployRes = await fetch(`/api/projects/${id}/war-room/deploy`, { method: "POST" });
+      const deployData = await deployRes.json();
+      deployResolved = true;
+
+      if (!deployData.ok) {
+        throw new Error(deployData.error || "War Room deployment failed");
       }
 
-      // Build briefing from Wave 1
-      const wave1Briefing = WAVE_1_AGENTS
-        .map((n) => `${n}: ${(collected[n]?.result || "").substring(0, 300)}`)
-        .join(" | ");
-
-      // ── WAVE 2 (sequential, with briefing) ──
-      setCurrentWave(2);
-      for (let i = 0; i < WAVE_2_AGENTS.length; i++) {
-        const agentName = WAVE_2_AGENTS[i];
-        setCurrentAgent(`${agentName} (${i + 1}/${WAVE_2_AGENTS.length})`);
-        const r = await callOneAgent(agentName, projectTitle, projectDescription, wave1Briefing);
-        if (r) {
-          collected[agentName] = r;
-          setWarRoomAgents((prev) => [
-            ...prev,
-            { key: AGENT_NAME_TO_KEY[agentName] || agentName.toLowerCase(), name: agentName, role: r.role, tier: tierForAgent(agentName), result: r.result },
-          ]);
-          fetch(`/api/projects/${id}/war-room/save-agent`, {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ projectId: id, agentName, agentRole: r.role, result: r.result }),
-          }).catch(() => {});
+      // Load final state from the completed session
+      const sessionId = deployData.session_id;
+      if (sessionId) {
+        const detailRes = await fetch(`/api/projects/${id}/war-room/sessions/${sessionId}`);
+        if (detailRes.ok) {
+          const detail = await detailRes.json();
+          const positions = (detail.positions || []) as { agent_key: string; agent_name: string; agent_tier: string; round: number; position_text: string }[];
+          const latestPerAgent = new Map<string, { agent_key: string; agent_name: string; agent_tier: string; round: number; position_text: string }>();
+          for (const p of positions) {
+            const existing = latestPerAgent.get(p.agent_key);
+            if (!existing || p.round > existing.round) latestPerAgent.set(p.agent_key, p);
+          }
+          const agents = Array.from(latestPerAgent.values()).map((p) => ({
+            key: p.agent_key,
+            name: p.agent_name,
+            role: p.agent_name,
+            tier: p.agent_tier,
+            result: p.position_text,
+          }));
+          setWarRoomAgents(agents);
         }
-        setProgressDone((p) => p + 1);
-        await new Promise((res) => setTimeout(res, 1000));
       }
 
-      // ── Generate JARVIS Summary ──
-      setCurrentAgent("Synthesizing JARVIS Summary...");
-      setCurrentWave(0);
-      const allResults = Object.entries(collected).map(([agentName, v]) => ({ agentName, result: v.result }));
-      const summaryRes = await fetch(`/api/projects/${id}/war-room/summary`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ allResults, projectTitle }),
-      });
-      const summaryData = await summaryRes.json();
-      const summaryText = summaryData.ok
-        ? `**Verdict:** ${summaryData.verdict}\n**Confidence:** ${summaryData.confidence_score}/10\n\n## What the team agreed on\n${(summaryData.consensus || []).map((b: string) => `- ${b}`).join("\n")}\n\n## Key conflicts flagged\n${(summaryData.conflicts || []).map((b: string) => `- ${b}`).join("\n")}\n\n## Recommended next steps\n${(summaryData.recommendations || []).map((b: string, i: number) => `${i + 1}. ${b}`).join("\n")}`
-        : "Summary generation failed.";
-      setWarRoomSummary(summaryText);
+      // Display the synthesis
+      setWarRoomSummary(deployData.summary || "");
 
-      // Persist Jarvis Summary as its own war_room_jarvis_summary note
-      fetch(`/api/projects/${id}/war-room/save-agent`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ projectId: id, agentName: "Jarvis Summary", agentRole: "AI Chief of Staff", result: summaryText }),
-      }).catch(() => {});
-
-      // ── Save to Supabase (full session record + notification) ──
-      const resultsMap: Record<string, string> = {};
-      for (const [name, v] of Object.entries(collected)) resultsMap[name] = v.result;
-      await fetch(`/api/projects/${id}/war-room/save`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          results: resultsMap,
-          summary: summaryData.ok ? summaryData : { consensus: [], conflicts: [], recommendations: [], confidence_score: 0, verdict: "" },
-          projectTitle,
-        }),
-      });
-
+      // Refresh project + sessions
       loadData();
       loadWarRoomSessions();
+
+      // Success: status line shows escalations if any
+      if (deployData.escalations_to_dylan > 0) {
+        setCurrentAgent(`Complete — ${deployData.escalations_to_dylan} strategic decision${deployData.escalations_to_dylan > 1 ? "s" : ""} need your call`);
+      } else {
+        setCurrentAgent("Complete — team resolved all conflicts");
+      }
     } catch (err) {
-      setWarRoomDeployError(err instanceof Error ? err.message : "Deployment failed");
+      if (!deployResolved) {
+        setWarRoomDeployError(err instanceof Error ? err.message : "Deployment failed");
+      }
     } finally {
+      if (pollTimer) clearInterval(pollTimer);
       setWarRoomDeploying(false);
-      setCurrentAgent("");
       setCurrentWave(0);
     }
   }
