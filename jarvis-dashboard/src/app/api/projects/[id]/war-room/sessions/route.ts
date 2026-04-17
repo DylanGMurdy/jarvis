@@ -7,7 +7,7 @@ export async function GET(_req: Request, { params }: { params: Promise<{ id: str
 
   const { data, error } = await sb
     .from("war_room_sessions")
-    .select("id, project_id, session_date, confidence_score, agents_run, summary_text, status")
+    .select("id, project_id, session_date, confidence_score, agents_run, summary_text, status, debate_status, conflict_count, escalation_count, total_rounds_completed, constraints_snapshot")
     .eq("project_id", id)
     .order("session_date", { ascending: false });
 

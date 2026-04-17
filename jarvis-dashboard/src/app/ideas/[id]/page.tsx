@@ -257,7 +257,7 @@ export default function ProjectDetailPage({ params }: { params: Promise<{ id: st
   const [rerunInstructions, setRerunInstructions] = useState<Record<string, string>>({});
 
   // ── War Room session history ────────────────────────────
-  interface WarRoomSession { id: string; session_date: string; confidence_score: number; agents_run: number; summary_text: string; status: string }
+  interface WarRoomSession { id: string; session_date: string; confidence_score: number; agents_run: number; summary_text: string; status: string; debate_status?: string; conflict_count?: number; escalation_count?: number }
   const [warRoomSessions, setWarRoomSessions] = useState<WarRoomSession[]>([]);
   const [selectedSessionId, setSelectedSessionId] = useState<string>("current");
   const [showCompareModal, setShowCompareModal] = useState(false);
@@ -274,7 +274,9 @@ export default function ProjectDetailPage({ params }: { params: Promise<{ id: st
     } catch { return []; }
   }, [id]);
 
-  // Auto-load the most recent war room session's agent reports on page mount
+  // Auto-load the most recent war room session's agent reports on page mount.
+  // Tries the new session-detail endpoint first (returns final positions directly),
+  // falls back to notes-matching for older sessions.
   const autoLoadLatestWarRoom = useCallback(async () => {
     try {
       const sessionsRes = await fetch(`/api/projects/${id}/war-room/sessions`);
@@ -283,17 +285,48 @@ export default function ProjectDetailPage({ params }: { params: Promise<{ id: st
       if (sessions.length === 0) return;
       setWarRoomSessions(sessions);
 
-      // Most recent session is first (sessions ordered DESC)
       const latest = sessions[0];
-      const sessionTime = new Date(latest.session_date).getTime();
 
-      // Fetch notes and filter to this session's agent reports
+      // Try new endpoint: returns positions + conflicts + debate log
+      try {
+        const detailRes = await fetch(`/api/projects/${id}/war-room/sessions/${latest.id}`);
+        if (detailRes.ok) {
+          const detail = await detailRes.json();
+          const positions = detail.positions || [];
+          if (positions.length > 0) {
+            // Take final round per agent (highest round number wins)
+            const latestPerAgent = new Map<string, { agent_key: string; agent_name: string; agent_tier: string; position_text: string; round: number }>();
+            for (const p of positions) {
+              const existing = latestPerAgent.get(p.agent_key);
+              if (!existing || p.round > existing.round) {
+                latestPerAgent.set(p.agent_key, p);
+              }
+            }
+            const agents = Array.from(latestPerAgent.values()).map((p) => ({
+              key: p.agent_key,
+              name: p.agent_name,
+              role: p.agent_name,
+              tier: p.agent_tier,
+              result: p.position_text,
+            }));
+            setWarRoomAgents(agents);
+            setWarRoomSummary(latest.summary_text);
+            setWarRoomLoadedFromPersistence(true);
+            return;
+          }
+        }
+      } catch { /* fall through to notes-based loading */ }
+
+      // Fallback: old-style loading by matching project_notes timestamps
+      const sessionTime = new Date(latest.session_date).getTime();
       const notesRes = await fetch(`/api/projects/${id}/notes`);
       const notesData = await notesRes.json();
       const notes = notesData.data || [];
-      const sessionNotes = notes.filter((n: { created_at: string; source?: string }) => {
+      const sessionNotes = notes.filter((n: { created_at: string; source?: string; session_id?: string }) => {
+        // Prefer session_id match (new sessions), fall back to time window (old sessions)
+        if (n.session_id === latest.id) return true;
         const t = new Date(n.created_at).getTime();
-        return n.source?.startsWith("war_room_") && Math.abs(t - sessionTime) < 5 * 60 * 1000;
+        return n.source?.startsWith("war_room_") && Math.abs(t - sessionTime) < 10 * 60 * 1000;
       });
 
       const agents = sessionNotes
